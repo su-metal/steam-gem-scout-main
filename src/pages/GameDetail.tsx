@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { SimilarGemsSection } from "@/components/SimilarGemsSection";
+import { supabase } from "@/integrations/supabase/client";
 
 // Returns the tags that should be displayed on the detail page.
 // Priority: analysis.labels (AI labels) -> fallback to raw tags.
@@ -123,9 +124,15 @@ type GameData = NonNullable<GameDetailState["gameData"]>;
 export default function GameDetail() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Steam 側の最新情報で上書きするための state
+  const [liveGameData, setLiveGameData] = useState<GameData | null>(null);
+  const [isLoadingSteam, setIsLoadingSteam] = useState(false);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
   const game = location.state as GameDetailState;
 
   const handleBack = () => {
@@ -167,11 +174,15 @@ export default function GameDetail() {
       analysis: game.analysisData as GameData["analysis"],
     } as GameData);
 
+  // Steam から取得した最新情報があれば優先する
+  const baseGame = liveGameData ?? gameData;
+
   const analysisData: AnalysisData =
     game.analysisData ||
     gameData.analysis ||
     {
-      hiddenGemVerdict: game.hiddenGemVerdict as AnalysisData["hiddenGemVerdict"],
+      hiddenGemVerdict:
+        game.hiddenGemVerdict as AnalysisData["hiddenGemVerdict"],
       summary: game.summary,
       labels: game.labels,
       pros: game.pros,
@@ -187,13 +198,64 @@ export default function GameDetail() {
       hasImprovedSinceLaunch: game.hasImprovedSinceLaunch,
     };
 
+  // Steam キャッシュ Edge Function から最新メタ情報を取得
+  useEffect(() => {
+    const fetchSteamData = async () => {
+      const effectiveAppId = baseGame.appId || game.appId || 0;
+      if (!effectiveAppId) return;
+
+      try {
+        setIsLoadingSteam(true);
+
+        const { data, error } = await supabase.functions.invoke(
+          "get-or-create-steam-game",
+          {
+            body: { appId: effectiveAppId },
+          }
+        );
+
+        if (error) {
+          console.error("get-or-create-steam-game error", error);
+          return;
+        }
+
+        if (data) {
+          setLiveGameData((prev) => ({
+            ...(prev ?? gameData),
+            appId: data.app_id ?? effectiveAppId,
+            title: data.title ?? gameData.title ?? "Unknown Game",
+            positiveRatio: data.positive_ratio ?? gameData.positiveRatio,
+            totalReviews: data.total_reviews ?? gameData.totalReviews,
+            estimatedOwners:
+              data.estimated_owners ?? gameData.estimatedOwners,
+            price: data.price ?? gameData.price,
+            averagePlaytime:
+              data.average_playtime ?? gameData.averagePlaytime,
+            tags: data.tags ?? gameData.tags,
+            steamUrl: data.steam_url ?? gameData.steamUrl,
+            reviewScoreDesc:
+              data.review_score_desc ?? gameData.reviewScoreDesc,
+            gemLabel: gameData.gemLabel,
+            analysis: gameData.analysis,
+          }));
+        }
+      } catch (e) {
+        console.error("get-or-create-steam-game exception", e);
+      } finally {
+        setIsLoadingSteam(false);
+      }
+    };
+
+    fetchSteamData();
+  }, [baseGame.appId, game.appId]);
+
   // Safe fallback arrays for fields that may be undefined
   const pros = Array.isArray(analysisData.pros) ? analysisData.pros : [];
   const cons = Array.isArray(analysisData.cons) ? analysisData.cons : [];
   const labels = Array.isArray(analysisData.labels) ? analysisData.labels : [];
 
   // Safe values with defaults
-  const title = gameData.title || "Unknown Game";
+  const title = baseGame.title || "Unknown Game";
   const summary =
     analysisData.summary ||
     "レビューが少ないか、まだ十分な情報がないため、AIによる要約は生成されていません。";
@@ -213,7 +275,9 @@ export default function GameDetail() {
       : null;
 
   const riskScore =
-    typeof analysisData.riskScore === "number" ? analysisData.riskScore : null;
+    typeof analysisData.riskScore === "number"
+      ? analysisData.riskScore
+      : null;
 
   const bugRisk =
     typeof analysisData.bugRisk === "number" ? analysisData.bugRisk : null;
@@ -223,14 +287,14 @@ export default function GameDetail() {
       ? analysisData.refundMentions
       : null;
 
-  const positiveRatio = gameData.positiveRatio || 0;
-  const totalReviews = gameData.totalReviews || 0;
-  const estimatedOwners = gameData.estimatedOwners || 0;
-  const price = gameData.price || 0;
-  const averagePlaytime = gameData.averagePlaytime || 0;
-  const tags = gameData.tags || [];
-  const steamUrl = gameData.steamUrl;
-  const reviewScoreDesc = gameData.reviewScoreDesc;
+  const positiveRatio = baseGame.positiveRatio || 0;
+  const totalReviews = baseGame.totalReviews || 0;
+  const estimatedOwners = baseGame.estimatedOwners || 0;
+  const price = baseGame.price || 0;
+  const averagePlaytime = baseGame.averagePlaytime || 0;
+  const tags = baseGame.tags || [];
+  const steamUrl = baseGame.steamUrl;
+  const reviewScoreDesc = baseGame.reviewScoreDesc;
 
   const isFree = price === 0;
   const normalizedPrice =
@@ -239,12 +303,12 @@ export default function GameDetail() {
     normalizedPrice === 0 ? "Free" : `$${normalizedPrice.toFixed(2)}`;
   const positiveRatioDisplay = Math.round(positiveRatio);
 
-  const effectiveAppId = gameData.appId || game.appId || 0;
+  const effectiveAppId = baseGame.appId || game.appId || 0;
   const appIdStr = String(effectiveAppId);
   const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
 
   const gemLabel: GemLabel | undefined =
-    gameData.gemLabel ||
+    baseGame.gemLabel ||
     game.gemLabel ||
     (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
 
@@ -295,8 +359,7 @@ export default function GameDetail() {
         label: "最近悪化中",
         description:
           "直近レビューで評価が下がり気味なので、アップデート動向を要チェックです。",
-        className:
-          "bg-amber-500/10 text-amber-600 border-amber-500/40",
+        className: "bg-amber-500/10 text-amber-600 border-amber-500/40",
       };
     }
 
@@ -314,6 +377,11 @@ export default function GameDetail() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
+          {isLoadingSteam && (
+            <span className="text-xs text-muted-foreground">
+              Steam から最新のメタ情報を取得中…
+            </span>
+          )}
         </div>
 
         {/* Steam Header Image */}
@@ -682,7 +750,7 @@ export default function GameDetail() {
             {
               // pass enough data so SimilarGemsSection can use tags / analysis if it wants
               appId: effectiveAppId,
-              tags: gameData.tags ?? [],
+              tags: baseGame.tags ?? [],
               analysis: analysisData,
             } as any
           }

@@ -297,7 +297,6 @@ ${reviewsSection}
           content: prompt,
         },
       ],
-      temperature: 0.3,
     }),
   });
 
