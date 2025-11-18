@@ -1,0 +1,16 @@
+project_id = "xxfusqvbdgvaiopmdpbo"
+
+[functions.analyze-hidden-gem]
+verify_jwt = false
+
+[functions.fetch-steam-game]
+verify_jwt = false
+
+[functions.get-rankings]
+verify_jwt = false
+
+[functions.get-similar-gems]
+verify_jwt = false
+
+[functions.search-hidden-gems]
+verify_jwt = false

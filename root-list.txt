@@ -1,0 +1,38 @@
+
+    Directory: F:\App_dev\steam-gem-scout-main
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-r--          2025/11/17    13:07                node_modules
+d-r--          2025/11/17    12:29                public
+d-r--          2025/11/17    14:17                src
+d-r--          2025/11/17    13:16                supabase
+-a---          2025/11/17    13:26            351 .env
+-a---          2025/11/17    12:29            253 .gitignore
+-a---          2025/11/17    12:29         201126 bun.lockb
+-a---          2025/11/17    12:29            414 components.js
+                                                  on
+-a---          2025/11/17    12:29            765 eslint.config
+                                                  .js
+-a---          2025/11/17    12:29            898 index.html
+-a---          2025/11/17    13:07         245486 package-lock.
+                                                  json
+-a---          2025/11/17    12:29           2756 package.json
+-a---          2025/11/17    12:29             81 postcss.confi
+                                                  g.js
+-a---          2025/11/17    14:31          44977 project-tree.
+                                                  txt
+-a---          2025/11/17    12:29           2141 README.md
+-a---          2025/11/17    14:32              0 root-list.txt
+-a---          2025/11/17    14:28             35 root-tree.txt
+-a---          2025/11/17    14:28            232 src-tree.txt
+-a---          2025/11/17    12:29           2345 tailwind.conf
+                                                  ig.ts
+-a---          2025/11/17    12:29            652 tsconfig.app.
+                                                  json
+-a---          2025/11/17    12:29            369 tsconfig.json
+-a---          2025/11/17    12:29            481 tsconfig.node
+                                                  .json
+-a---          2025/11/17    12:29            454 vite.config.t
+                                                  s
+
