@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Heart } from "lucide-react";
+import { ArrowRight, Heart, Sparkles, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useWishlist } from "@/hooks/useWishlist";
 
@@ -17,6 +17,14 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 
   return baseTags.slice(0, limit);
 };
+
+// gemLabel のバリエーション
+type GemLabel =
+  | "Hidden Gem"
+  | "Improved Hidden Gem"
+  | "Emerging Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
 
 interface GameCardProps {
   title: string;
@@ -47,6 +55,9 @@ interface GameCardProps {
   steamUrl?: string;
   // Use a different name to avoid conflicts with existing reviewScoreDesc
   reviewScoreDescText?: string;
+
+  // 追加: 明示的に gemLabel を渡す場合用（オプショナル）
+  gemLabel?: GemLabel;
 }
 
 export const GameCard = ({
@@ -72,13 +83,86 @@ export const GameCard = ({
   tags,
   steamUrl,
   variant = "default",
+  gemLabel,
 }: GameCardProps) => {
   const navigate = useNavigate();
   const isFeatured = variant === "featured";
-  
+
   const appIdStr = String(appId);
   const { isWished, toggle } = useWishlist();
   const isInWishlist = isWished(appIdStr);
+
+  // Steam header image URL (using appId)
+  const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+
+  const safeSummary =
+    summary || "AI could not generate a summary for this title, but it looks like a promising hidden gem.";
+
+  // Unify which tags are displayed on the card:
+  // - Prefer full gameData if provided (it usually contains analysis + tags)
+  // - Otherwise reconstruct a minimal object from labels / tags props
+  const tagSource = gameData ?? {
+    analysis: analysisData ?? (labels && labels.length > 0 ? { labels } : undefined),
+    tags,
+  };
+
+  const displayTags = getDisplayTags(tagSource);
+
+  const isFree = price === 0;
+  const priceDisplay = isFree ? "Free" : `$${(price / 100).toFixed(2)}`;
+
+  // --- AI / gemLabel 情報を抽出 ---
+  const ai = analysisData || gameData?.analysis || {};
+
+  const derivedGemLabel: GemLabel | undefined =
+    gemLabel ??
+    (gameData?.gemLabel as GemLabel | undefined) ??
+    (analysisData?.gemLabel as GemLabel | undefined) ??
+    (ai.gemLabel as GemLabel | undefined) ??
+    (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
+
+  // gemLabel バッジの見た目設定
+  let gemBadgeText: string | null = null;
+  let gemBadgeClass =
+    "bg-muted text-muted-foreground border border-border/40";
+  let GemIcon: any = null;
+
+  if (derivedGemLabel) {
+    switch (derivedGemLabel) {
+      case "Hidden Gem":
+        gemBadgeText = "Hidden Gem";
+        gemBadgeClass =
+          "bg-primary/10 text-primary border border-primary/40";
+        GemIcon = Sparkles;
+        break;
+      case "Improved Hidden Gem":
+        gemBadgeText = "復活した Hidden Gem";
+        gemBadgeClass =
+          "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40";
+        GemIcon = TrendingUp;
+        break;
+      case "Emerging Gem":
+        gemBadgeText = "Emerging Gem";
+        gemBadgeClass =
+          "bg-indigo-500/15 text-indigo-200 border border-indigo-500/40";
+        GemIcon = Sparkles;
+        break;
+      case "Highly rated but not hidden":
+        gemBadgeText = "Highly rated";
+        gemBadgeClass =
+          "bg-slate-500/15 text-slate-200 border border-slate-500/40";
+        GemIcon = null;
+        break;
+      case "Not a hidden gem":
+        gemBadgeText = "Not a hidden gem";
+        gemBadgeClass =
+          "bg-muted text-muted-foreground border border-border/60";
+        GemIcon = null;
+        break;
+      default:
+        break;
+    }
+  }
 
   const handleViewDetails = () => {
     navigate(`/game/${appId}`, {
@@ -92,6 +176,7 @@ export const GameCard = ({
               appId,
               title,
               hiddenGemVerdict,
+              gemLabel: derivedGemLabel,
               summary,
               labels,
               pros,
@@ -110,25 +195,6 @@ export const GameCard = ({
             },
     });
   };
-
-  // Steam header image URL (using appId)
-  const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
-
-  const safeSummary =
-    summary || "AI could not generate a summary for this title, but it looks like a promising hidden gem.";
-
-  // Unify which tags are displayed on the card:
-  // - Prefer full gameData if provided (it usually contains analysis + tags)
-  // - Otherwise reconstruct a minimal object from labels / tags props
-  const tagSource = gameData ?? {
-    analysis: analysisData ?? (labels && labels.length > 0 ? { labels } : undefined),
-    tags,
-  };
-
-  const displayTags = getDisplayTags(tagSource);
-  
-  const isFree = price === 0;
-  const priceDisplay = isFree ? "Free" : `$${(price / 100).toFixed(2)}`;
 
   return (
     <Card className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 overflow-hidden rounded-xl shadow-sm hover:shadow-md">
@@ -158,10 +224,31 @@ export const GameCard = ({
         {/* Title + Gem Score badge */}
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
           <div className="space-y-1">
-            <h3 className={`font-semibold line-clamp-2 ${isFeatured ? "text-lg md:text-xl" : "text-base md:text-lg"}`}>
-              {title}
-            </h3>
-            <p className={`text-xs text-muted-foreground line-clamp-2 ${isFeatured ? "md:line-clamp-3" : ""}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3
+                className={`font-semibold line-clamp-2 ${
+                  isFeatured ? "text-lg md:text-xl" : "text-base md:text-lg"
+                }`}
+              >
+                {title}
+              </h3>
+
+              {/* gemLabel バッジ */}
+              {gemBadgeText && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${gemBadgeClass}`}
+                >
+                  {GemIcon && <GemIcon className="w-3 h-3" />}
+                  <span className="leading-none">{gemBadgeText}</span>
+                </span>
+              )}
+            </div>
+
+            <p
+              className={`text-xs text-muted-foreground line-clamp-2 ${
+                isFeatured ? "md:line-clamp-3" : ""
+              }`}
+            >
               {safeSummary}
             </p>
           </div>
@@ -170,7 +257,9 @@ export const GameCard = ({
             <div className="rounded-full bg-primary text-primary-foreground w-14 h-14 flex items-center justify-center text-xl font-bold shadow-lg border border-primary/70">
               {hiddenGemScore}
             </div>
-            <span className="text-[10px] mt-1 text-primary-foreground/90 drop-shadow">Gem Score</span>
+            <span className="text-[10px] mt-1 text-primary-foreground/90 drop-shadow">
+              Gem Score
+            </span>
           </div>
         </div>
       </div>

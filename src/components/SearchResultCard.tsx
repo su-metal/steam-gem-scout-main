@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { Heart } from "lucide-react";
+import { Heart, Sparkles, TrendingUp } from "lucide-react";
 import { useWishlist } from "@/hooks/useWishlist";
 
 // Returns the tags that should be displayed on the card
@@ -15,6 +15,14 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 
   return baseTags.slice(0, limit);
 };
+
+// gemLabel のバリエーション
+type GemLabel =
+  | "Hidden Gem"
+  | "Improved Hidden Gem"
+  | "Emerging Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
 
 interface SearchResultCardProps {
   title: string;
@@ -94,6 +102,55 @@ export const SearchResultCard = ({
           ? "Medium"
           : "High";
 
+  // --- gemLabel 抽出 ---
+  const gemLabel: GemLabel | undefined =
+    (gameData?.gemLabel as GemLabel | undefined) ??
+    (analysisData?.gemLabel as GemLabel | undefined) ??
+    (ai.gemLabel as GemLabel | undefined) ??
+    undefined;
+
+  // 表示用の gem バッジ設定
+  let gemBadgeText: string | null = null;
+  let gemBadgeClass =
+    "bg-muted text-muted-foreground border border-border/40";
+  let GemIcon: React.ComponentType<{ className?: string }> | null = null;
+
+  if (gemLabel) {
+    switch (gemLabel) {
+      case "Hidden Gem":
+        gemBadgeText = "Hidden Gem";
+        gemBadgeClass =
+          "bg-primary/10 text-primary border border-primary/40";
+        GemIcon = Sparkles;
+        break;
+      case "Improved Hidden Gem":
+        gemBadgeText = "復活した Hidden Gem";
+        gemBadgeClass =
+          "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40";
+        GemIcon = TrendingUp;
+        break;
+      case "Emerging Gem":
+        gemBadgeText = "Emerging Gem";
+        gemBadgeClass =
+          "bg-indigo-500/15 text-indigo-200 border border-indigo-500/40";
+        GemIcon = Sparkles;
+        break;
+      case "Highly rated but not hidden":
+        gemBadgeText = "Highly rated";
+        gemBadgeClass =
+          "bg-slate-500/15 text-slate-200 border border-slate-500/40";
+        GemIcon = null;
+        break;
+      case "Not a hidden gem":
+        gemBadgeText = "Not a hidden gem";
+        gemBadgeClass =
+          "bg-muted text-muted-foreground border border-border/60";
+        GemIcon = null;
+        break;
+      default:
+        break;
+    }
+  }
 
   // --- AI gem score & verdict line ---
   const gemScore: number | null =
@@ -118,6 +175,7 @@ export const SearchResultCard = ({
         : verdict === "No"
           ? "AI does not recommend this title."
           : null;
+
   // メタスコア表示用（"Metacritic: 94" から 94 を抜き出す）
   const reviewScoreDesc: string | undefined =
     gameData?.reviewScoreDesc ?? analysisData?.reviewScoreDesc ?? undefined;
@@ -152,7 +210,6 @@ export const SearchResultCard = ({
     ? "Free"
     : `$${normalizedPrice.toFixed(2)}`;
 
-
   return (
     <Card
       className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md"
@@ -169,10 +226,11 @@ export const SearchResultCard = ({
         aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
       >
         <Heart
-          className={`w-4 h-4 ${isInWishlist
-            ? "fill-red-500 text-red-500"
-            : "text-muted-foreground"
-            }`}
+          className={`w-4 h-4 ${
+            isInWishlist
+              ? "fill-red-500 text-red-500"
+              : "text-muted-foreground"
+          }`}
         />
       </button>
 
@@ -189,9 +247,20 @@ export const SearchResultCard = ({
 
         {/* Middle: Title, Metascore, Summary, Tags */}
         <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold text-lg line-clamp-1">{title}</h3>
 
+            {/* gemLabel バッジ */}
+            {gemBadgeText && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${gemBadgeClass}`}
+              >
+                {GemIcon && <GemIcon className="w-3 h-3" />}
+                <span className="leading-none">{gemBadgeText}</span>
+              </span>
+            )}
+
+            {/* メタスコアバッジ */}
             {reviewScoreDesc && (
               <div
                 className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
@@ -223,17 +292,19 @@ export const SearchResultCard = ({
               ))}
             </div>
           )}
+
           {/* AI Verdict & Risk badges */}
           <div className="flex flex-wrap gap-1 mt-1">
             {/* Verdict Badge */}
             <Badge
               variant="outline"
-              className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
-                ? "border-green-500 text-green-400"
-                : verdict === "Unknown"
-                  ? "border-yellow-500 text-yellow-400"
-                  : "border-red-500 text-red-400"
-                }`}
+              className={`text-[10px] px-2 py-0.5 rounded-full ${
+                verdict === "Yes"
+                  ? "border-green-500 text-green-400"
+                  : verdict === "Unknown"
+                    ? "border-yellow-500 text-yellow-400"
+                    : "border-red-500 text-red-400"
+              }`}
             >
               AI: {verdict}
             </Badge>
@@ -242,18 +313,18 @@ export const SearchResultCard = ({
             {riskLevel && (
               <Badge
                 variant="outline"
-                className={`text-[10px] px-2 py-0.5 rounded-full ${riskLevel === "Low"
-                  ? "border-green-500 text-green-400"
-                  : riskLevel === "Medium"
-                    ? "border-yellow-500 text-yellow-400"
-                    : "border-red-500 text-red-400"
-                  }`}
+                className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  riskLevel === "Low"
+                    ? "border-green-500 text-green-400"
+                    : riskLevel === "Medium"
+                      ? "border-yellow-500 text-yellow-400"
+                      : "border-red-500 text-red-400"
+                }`}
               >
                 Risk: {riskLevel}
               </Badge>
             )}
           </div>
-
         </div>
 
         {/* Right: Gem Score + Stats */}
@@ -269,7 +340,6 @@ export const SearchResultCard = ({
                 AI Gem Score
               </span>
             </div>
-
           </div>
 
           {aiRecommendsLabel && (
@@ -277,7 +347,6 @@ export const SearchResultCard = ({
               {aiRecommendsLabel}
             </p>
           )}
-
 
           <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 text-xs text-right">
             <div>

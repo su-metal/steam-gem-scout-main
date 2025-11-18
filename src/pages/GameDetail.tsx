@@ -4,14 +4,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, ExternalLink, ThumbsUp, ThumbsDown, CheckCircle2, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  ExternalLink,
+  ThumbsUp,
+  ThumbsDown,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { SimilarGemsSection } from "@/components/SimilarGemsSection";
 
 // Returns the tags that should be displayed on the detail page.
 // Priority: analysis.labels (AI labels) -> fallback to raw tags.
-const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
+const getDisplayTags = (
+  game: { analysis?: { labels?: string[] }; tags?: string[] },
+  limit?: number
+): string[] => {
   const baseTags =
-    (game.analysis?.labels && game.analysis.labels.length > 0 ? game.analysis.labels : (game.tags ?? [])) || [];
+    (game.analysis?.labels && game.analysis.labels.length > 0
+      ? game.analysis.labels
+      : game.tags ?? []) || [];
 
   if (!limit || baseTags.length <= limit) {
     return baseTags;
@@ -19,6 +31,14 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 
   return baseTags.slice(0, limit);
 };
+
+// gemLabel のバリエーション（将来の拡張も考えて一元管理）
+type GemLabel =
+  | "Hidden Gem"
+  | "Improved Hidden Gem"
+  | "Emerging Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
 
 interface GameAnalysis {
   hiddenGemVerdict?: "Yes" | "No" | "Unknown";
@@ -30,9 +50,12 @@ interface GameAnalysis {
   bugRisk?: number;
   refundMentions?: number;
   reviewQualityScore?: number; // 1〜10
+  // 追加: 「今と昔」系の情報
+  currentStateSummary?: string;
+  historicalIssuesSummary?: string;
+  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
+  hasImprovedSinceLaunch?: boolean;
 }
-
-type GemLabel = "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
 
 interface AnalysisData {
   hiddenGemVerdict?: "Yes" | "No" | "Unknown";
@@ -44,6 +67,11 @@ interface AnalysisData {
   bugRisk?: number;
   refundMentions?: number;
   reviewQualityScore?: number;
+  // 追加: 「今と昔」系の情報
+  currentStateSummary?: string;
+  historicalIssuesSummary?: string;
+  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
+  hasImprovedSinceLaunch?: boolean;
 }
 
 interface GameDetailState {
@@ -60,12 +88,12 @@ interface GameDetailState {
     tags?: string[];
     steamUrl?: string;
     reviewScoreDesc?: string;
-    gemLabel?: "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
+    gemLabel?: GemLabel;
     analysis?: AnalysisData;
   };
   analysisData?: AnalysisData;
   // Legacy props for backward compatibility
-  gemLabel?: "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
+  gemLabel?: GemLabel;
   hiddenGemVerdict?: string;
   summary?: string;
   labels?: string[];
@@ -83,10 +111,14 @@ interface GameDetailState {
   tags?: string[];
   steamUrl?: string;
   reviewScoreDesc?: string;
+  // 追加: レガシー経由でも拾えるようにしておく
+  currentStateSummary?: string;
+  historicalIssuesSummary?: string;
+  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
+  hasImprovedSinceLaunch?: boolean;
 }
 
 type GameData = NonNullable<GameDetailState["gameData"]>;
-
 
 export default function GameDetail() {
   const location = useLocation();
@@ -117,7 +149,6 @@ export default function GameDetail() {
   }
 
   // Extract data from new structure or fall back to legacy structure
-  // Extract data from new structure or fall back to legacy structure
   const gameData: GameData =
     game.gameData ??
     ({
@@ -136,7 +167,6 @@ export default function GameDetail() {
       analysis: game.analysisData as GameData["analysis"],
     } as GameData);
 
-
   const analysisData: AnalysisData =
     game.analysisData ||
     gameData.analysis ||
@@ -150,6 +180,11 @@ export default function GameDetail() {
       bugRisk: game.bugRisk,
       refundMentions: game.refundMentions,
       reviewQualityScore: game.reviewQualityScore,
+      // レガシーからも「今と昔」の情報を引き継げるように
+      currentStateSummary: game.currentStateSummary,
+      historicalIssuesSummary: game.historicalIssuesSummary,
+      stabilityTrend: game.stabilityTrend as AnalysisData["stabilityTrend"],
+      hasImprovedSinceLaunch: game.hasImprovedSinceLaunch,
     };
 
   // Safe fallback arrays for fields that may be undefined
@@ -164,6 +199,12 @@ export default function GameDetail() {
     "レビューが少ないか、まだ十分な情報がないため、AIによる要約は生成されていません。";
 
   const hiddenGemVerdict = analysisData.hiddenGemVerdict ?? "Unknown";
+
+  // 「今と昔」のテキスト
+  const currentStateSummary = analysisData.currentStateSummary;
+  const historicalIssuesSummary = analysisData.historicalIssuesSummary;
+  const stabilityTrend = analysisData.stabilityTrend;
+  const hasImprovedSinceLaunch = analysisData.hasImprovedSinceLaunch;
 
   // 数値スコアは「number なら採用、それ以外は null（N/A）」にする
   const reviewQualityScore =
@@ -191,7 +232,6 @@ export default function GameDetail() {
   const steamUrl = gameData.steamUrl;
   const reviewScoreDesc = gameData.reviewScoreDesc;
 
-
   const isFree = price === 0;
   const normalizedPrice =
     typeof price === "number" && Number.isFinite(price) ? price : 0;
@@ -203,14 +243,13 @@ export default function GameDetail() {
   const appIdStr = String(effectiveAppId);
   const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
 
-  const gemLabel =
+  const gemLabel: GemLabel | undefined =
     gameData.gemLabel ||
     game.gemLabel ||
     (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
 
   // Tags to display under the title (same logic as GameCard / Home)
   const displayTags = getDisplayTags({ analysis: analysisData, tags });
-
 
   const getScoreColor = (score: number | null) => {
     const value = score ?? 0;
@@ -226,6 +265,45 @@ export default function GameDetail() {
     return "text-destructive";
   };
 
+  // タイトル付近に出す「安定度バッジ」の内容を決める
+  const getStabilityBadge = () => {
+    const isImproving =
+      stabilityTrend === "Improving" || hasImprovedSinceLaunch === true;
+    const isStable = stabilityTrend === "Stable";
+    const isDeteriorating = stabilityTrend === "Deteriorating";
+
+    if (isImproving) {
+      return {
+        label: hasImprovedSinceLaunch ? "復活したタイトル" : "改善中",
+        description:
+          "リリース初期よりも最近のレビュー評価が明らかに良くなってきています。",
+        className:
+          "bg-emerald-500/10 text-emerald-500 border-emerald-500/40",
+      };
+    }
+
+    if (isStable) {
+      return {
+        label: "安定した評価",
+        description: "長期的に見てもレビュー傾向が安定しているタイトルです。",
+        className: "bg-blue-500/10 text-blue-500 border-blue-500/40",
+      };
+    }
+
+    if (isDeteriorating) {
+      return {
+        label: "最近悪化中",
+        description:
+          "直近レビューで評価が下がり気味なので、アップデート動向を要チェックです。",
+        className:
+          "bg-amber-500/10 text-amber-600 border-amber-500/40",
+      };
+    }
+
+    return null;
+  };
+
+  const stabilityBadge = getStabilityBadge();
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -258,7 +336,27 @@ export default function GameDetail() {
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
               <div className="flex-1 space-y-2">
                 <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
-                {reviewScoreDesc && <p className="text-muted-foreground">{reviewScoreDesc}</p>}
+
+                {/* 安定度ステータスバッジ（今と昔） */}
+                {stabilityBadge && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <Badge
+                      variant="outline"
+                      className={`text-xs font-semibold border ${stabilityBadge.className}`}
+                    >
+                      {stabilityBadge.label}
+                    </Badge>
+                    {stabilityBadge.description && (
+                      <span className="text-xs text-muted-foreground">
+                        {stabilityBadge.description}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {reviewScoreDesc && (
+                  <p className="text-muted-foreground">{reviewScoreDesc}</p>
+                )}
 
                 {displayTags.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-2">
@@ -272,7 +370,9 @@ export default function GameDetail() {
               </div>
 
               <div className="text-center bg-background/50 p-6 rounded-lg border border-primary/30">
-                <div className="text-sm text-muted-foreground mb-2">AI Gem Score</div>
+                <div className="text-sm text-muted-foreground mb-2">
+                  AI Gem Score
+                </div>
                 <div className="flex items-baseline justify-center gap-1 mb-2">
                   <span className="text-5xl font-bold text-primary">
                     {reviewQualityScore !== null
@@ -281,7 +381,6 @@ export default function GameDetail() {
                   </span>
                   <span className="text-2xl text-muted-foreground">/10</span>
                 </div>
-
 
                 {/* バックエンドで判定した gemLabel を表示 */}
                 {gemLabel && (
@@ -310,7 +409,6 @@ export default function GameDetail() {
                     "AIの判定情報はまだ十分ではありません。"}
                 </p>
               </div>
-
             </div>
           </CardHeader>
         </Card>
@@ -327,6 +425,38 @@ export default function GameDetail() {
           </CardContent>
         </Card>
 
+        {/* 「今」と「昔」を分けて表示 */}
+        {(currentStateSummary || historicalIssuesSummary) && (
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  現在の状態（Current state）
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {currentStateSummary ||
+                    "最近のレビュー傾向についての詳細な分析はまだ十分ではありません。"}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  過去の問題・初期評価（Historical issues）
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                  {historicalIssuesSummary ||
+                    "リリース初期の問題点や評価の推移についての情報はまだ十分ではありません。"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Key Insights */}
         <Card>
@@ -379,7 +509,6 @@ export default function GameDetail() {
                 </p>
               )}
             </CardContent>
-
           </Card>
 
           <Card className="border-destructive/20">
@@ -405,7 +534,6 @@ export default function GameDetail() {
                 </p>
               )}
             </CardContent>
-
           </Card>
         </div>
 
@@ -414,14 +542,18 @@ export default function GameDetail() {
           {/* Quality & Risk Scores */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl">Quality & Risk Assessment</CardTitle>
+              <CardTitle className="text-xl">
+                Quality & Risk Assessment
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Review Quality</span>
                   <span
-                    className={`font-semibold ${getQualityColor(reviewQualityScore)}`}
+                    className={`font-semibold ${getQualityColor(
+                      reviewQualityScore
+                    )}`}
                   >
                     {reviewQualityScore !== null
                       ? `${reviewQualityScore}/10`
@@ -434,7 +566,6 @@ export default function GameDetail() {
                 />
               </div>
 
-
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Bug Risk</span>
@@ -445,19 +576,22 @@ export default function GameDetail() {
                 <Progress value={(bugRisk ?? 0) * 10} className="h-2.5" />
               </div>
 
-
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Refund Mentions</span>
                   <span
-                    className={`font-semibold ${getScoreColor(refundMentions)}`}
+                    className={`font-semibold ${getScoreColor(
+                      refundMentions
+                    )}`}
                   >
                     {refundMentions !== null ? `${refundMentions}/10` : "N/A"}
                   </span>
                 </div>
-                <Progress value={(refundMentions ?? 0) * 10} className="h-2.5" />
+                <Progress
+                  value={(refundMentions ?? 0) * 10}
+                  className="h-2.5"
+                />
               </div>
-
 
               <div>
                 <div className="flex justify-between text-sm mb-2">
@@ -468,7 +602,6 @@ export default function GameDetail() {
                 </div>
                 <Progress value={(riskScore ?? 0) * 10} className="h-2.5" />
               </div>
-
             </CardContent>
           </Card>
 
@@ -480,26 +613,46 @@ export default function GameDetail() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Positive Reviews</div>
-                  <div className="text-2xl font-bold text-primary">{positiveRatioDisplay}%</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Positive Reviews
+                  </div>
+                  <div className="text-2xl font-bold text-primary">
+                    {positiveRatioDisplay}%
+                  </div>
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Total Reviews</div>
-                  <div className="text-2xl font-bold">{totalReviews.toLocaleString()}</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Total Reviews
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {totalReviews.toLocaleString()}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Price</div>
-                  <div className="text-2xl font-bold text-success">{priceDisplay}</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Price
+                  </div>
+                  <div className="text-2xl font-bold text-success">
+                    {priceDisplay}
+                  </div>
                 </div>
 
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Avg Playtime</div>
-                  <div className="text-2xl font-bold">{averagePlaytime}h</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    Avg Playtime
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {averagePlaytime}h
+                  </div>
                 </div>
               </div>
               <div className="pt-2">
-                <div className="text-sm text-muted-foreground mb-1">Estimated Owners</div>
-                <div className="text-xl font-semibold">{estimatedOwners.toLocaleString()}</div>
+                <div className="text-sm text-muted-foreground mb-1">
+                  Estimated Owners
+                </div>
+                <div className="text-xl font-semibold">
+                  {estimatedOwners.toLocaleString()}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -509,7 +662,11 @@ export default function GameDetail() {
         {steamUrl && (
           <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30">
             <CardContent className="py-8 text-center">
-              <Button asChild size="lg" className="bg-primary hover:bg-primary/90">
+              <Button
+                asChild
+                size="lg"
+                className="bg-primary hover:bg-primary/90"
+              >
                 <a href={steamUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-5 h-5 mr-2" />
                   Open on Steam

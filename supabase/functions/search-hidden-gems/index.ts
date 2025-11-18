@@ -208,6 +208,7 @@ async function analyzeGameWithAI(params: {
   totalReviews: number;
   price: number;
   sampleReviews: string[];
+  contextNotes?: string[];
 }): Promise<GameAnalysis> {
   const {
     appId,
@@ -217,6 +218,7 @@ async function analyzeGameWithAI(params: {
     totalReviews,
     price,
     sampleReviews,
+    contextNotes = [],
   } = params;
 
   // デフォルト値（エラーやAPI失敗時の保険）
@@ -230,6 +232,8 @@ async function analyzeGameWithAI(params: {
     bugRisk: 5,
     refundMentions: 0,
     reviewQualityScore: 5,
+    hasImprovedSinceLaunch: false,
+    stabilityTrend: "Stable",
   };
 
   const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -282,7 +286,7 @@ ${reviewsSection}
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "o3-mini",
+      model: "gpt-4.1-mini",
       messages: [
         {
           role: "system",
@@ -306,13 +310,60 @@ ${reviewsSection}
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content ?? "{}";
 
-  try {
-    const parsed = JSON.parse(content) as GameAnalysis;
-    return parsed;
-  } catch (_e) {
-    console.error("Failed to parse AI analysis JSON", content);
-    return defaultAnalysis;
-  }
+  const parsed = attemptParseAIResponse(content);
+
+  const normalizedLabels = normalizeStringArray(parsed?.labels);
+  const normalizedPros = normalizeStringArray(parsed?.pros);
+  const normalizedCons = normalizeStringArray(parsed?.cons);
+
+  const fallbackSummary = buildFallbackSummary({
+    title,
+    positiveRatio,
+    totalReviews,
+    price,
+    hasReviews: sampleReviews.length > 0 || contextNotes.length > 0,
+  });
+
+  const finalAnalysis: GameAnalysis = {
+    hiddenGemVerdict:
+      parsed?.hiddenGemVerdict ?? defaultAnalysis.hiddenGemVerdict,
+    summary: parsed?.summary?.trim() || fallbackSummary,
+    labels:
+      normalizedLabels.length > 0
+        ? normalizedLabels
+        : buildFallbackLabels(tags, totalReviews),
+    pros:
+      normalizedPros.length > 0
+        ? normalizedPros
+        : buildFallbackPros(positiveRatio, totalReviews),
+    cons:
+      normalizedCons.length > 0
+        ? normalizedCons
+        : buildFallbackCons(totalReviews, sampleReviews.length),
+    riskScore: clampInt(
+      parsed?.riskScore ?? defaultAnalysis.riskScore,
+      1,
+      10
+    ),
+    bugRisk: clampInt(parsed?.bugRisk ?? defaultAnalysis.bugRisk, 1, 10),
+    refundMentions: clampInt(
+      parsed?.refundMentions ?? defaultAnalysis.refundMentions,
+      0,
+      20
+    ),
+    reviewQualityScore: clampInt(
+      parsed?.reviewQualityScore ?? defaultAnalysis.reviewQualityScore,
+      1,
+      10
+    ),
+    currentStateSummary: parsed?.currentStateSummary?.trim(),
+    historicalIssuesSummary: parsed?.historicalIssuesSummary?.trim(),
+    hasImprovedSinceLaunch:
+      parsed?.hasImprovedSinceLaunch ?? defaultAnalysis.hasImprovedSinceLaunch,
+    stabilityTrend: parsed?.stabilityTrend ?? "Stable",
+  };
+
+  return finalAnalysis;
 }
 
 
@@ -367,49 +418,105 @@ async function fetchAndBuildRankingGame(
     }
   }
 
-    // 2) レビュー API から本物の高評価率を取る ＋ レビュー本文サンプル取得
-  // ※ 古いタイトルでもレビューがちゃんと取れるように filter=all に変更し、件数も増やす
-  const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=all&purchase_type=all&filter=all&num_per_page=100`;
+  const descriptionSources = [
+    data.short_description,
+    data.about_the_game,
+    data.detailed_description,
+  ].filter((text) => typeof text === "string" && text.trim().length > 0);
 
+  const descriptionSnippets = splitIntoParagraphs(descriptionSources);
+  const contextNotes = descriptionSnippets.slice(0, 5);
 
-  let sampleReviews: string[] = []; // ★ 後で AI 解析に使うレビュー本文
+  const maxSampleReviews = 20;
+  const sampleReviewPool: string[] = [];
+  const seenReviews = new Set<string>();
+  const reviewFetchConfigs = [
+    { filter: "all", language: "all", numPerPage: 100 },
+    { filter: "recent", language: "english", numPerPage: 80 },
+  ];
+
+  // 2) レビュー API から本物の高評価率を取る ＋ レビュー本文サンプル取得
+  let sampleReviews: string[] = [];
   let totalReviews = 0;
-  let positiveRatio = 0; // ★ 後で整数パーセントを入れる
+  let positiveRatio = 0;
   let steamReviewDesc = "";
+  let summaryCaptured = false;
 
-  try {
-    const reviewsRes = await fetch(reviewsUrl);
+  // REVIEW FETCH：複数パターンの filter で試す
+  for (const config of reviewFetchConfigs) {
+    const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${config.language}&purchase_type=all&filter=${config.filter}&num_per_page=${config.numPerPage}`;
 
-    if (reviewsRes.ok) {
-      const reviewsJson = (await reviewsRes.json()) as any;
-      const qs = reviewsJson.query_summary ?? {};
+    try {
+      const reviewsRes = await fetch(reviewsUrl);
 
-      const totalPositive = Number(qs.total_positive ?? 0);
-      const totalNegative = Number(qs.total_negative ?? 0);
-      const sum = totalPositive + totalNegative;
-
-      totalReviews = Number(qs.total_reviews ?? sum ?? 0);
-      steamReviewDesc =
-        qs.review_score_desc ?? reviewsJson.review_score_desc ?? "";
-
-      if (sum > 0) {
-        // 🔹 ここで整数に丸めて保存する（小数を残さない）
-        positiveRatio = Math.round((totalPositive / sum) * 100);
+      if (!reviewsRes.ok) {
+        console.warn(
+          "Review fetch failed",
+          appId,
+          config.filter,
+          config.language,
+          reviewsRes.status
+        );
+        continue;
       }
-      // ★ レビュー本文サンプルを最大20件取得
-      const rawReviews = Array.isArray(reviewsJson.reviews)
+
+      const reviewsJson = (await reviewsRes.json()) as any;
+      if (reviewsJson && !summaryCaptured) {
+        const qs = reviewsJson.query_summary ?? {};
+        const totalPositive = Number(qs.total_positive ?? 0);
+        const totalNegative = Number(qs.total_negative ?? 0);
+        const sum = totalPositive + totalNegative;
+        totalReviews = Number(qs.total_reviews ?? sum ?? 0);
+        steamReviewDesc =
+          qs.review_score_desc ?? reviewsJson.review_score_desc ?? "";
+
+        if (sum > 0) {
+          positiveRatio = Math.round((totalPositive / sum) * 100);
+        }
+
+        summaryCaptured = true;
+      }
+
+      const rawReviews = Array.isArray(reviewsJson?.reviews)
         ? reviewsJson.reviews
         : [];
 
-      sampleReviews = rawReviews
-        .map((r: any) => (typeof r.review === "string" ? r.review.trim() : ""))
-        .filter((t: string) => t.length > 0)
-        .slice(0, 20);
-    } else {
-      console.error("Failed to fetch appreviews", appId, reviewsRes.status);
+      for (const reviewItem of rawReviews) {
+        if (sampleReviewPool.length >= maxSampleReviews) {
+          break;
+        }
+
+        const rawText =
+          typeof reviewItem.review === "string"
+            ? reviewItem.review.trim()
+            : "";
+        if (!rawText) continue;
+
+        const normalized = rawText.replace(/\s+/g, " ").trim();
+        if (!normalized || seenReviews.has(normalized)) continue;
+
+        seenReviews.add(normalized);
+        sampleReviewPool.push(normalized);
+      }
+
+      if (sampleReviewPool.length >= maxSampleReviews) {
+        break;
+      }
+    } catch (e) {
+      console.error("Error while fetching appreviews", appId, config, e);
     }
-  } catch (e) {
-    console.error("Error while fetching appreviews", appId, e);
+  }
+
+  sampleReviews = sampleReviewPool.slice(0, maxSampleReviews);
+
+  if (sampleReviews.length === 0 && contextNotes.length > 0) {
+    const fallbackSamples = contextNotes.slice(0, Math.min(5, contextNotes.length));
+    sampleReviews = fallbackSamples;
+    console.log(
+      "Using description fallback as sample reviews",
+      appId,
+      sampleReviews.length
+    );
   }
 
   // 3) メタスコアもあれば補足情報として使う
@@ -451,6 +558,7 @@ async function fetchAndBuildRankingGame(
     totalReviews,
     price,
     sampleReviews,
+    contextNotes,
   });
 
   console.log("AI analysis finished", appId, {
@@ -554,4 +662,165 @@ function parseReleaseYear(releaseDate: string): number {
   const match = releaseDate.match(/\d{4}/);
   if (!match) return 0;
   return Number(match[0]) || 0;
+}
+
+function splitIntoParagraphs(texts: string[]): string[] {
+  const paragraphs: string[] = [];
+
+  for (const text of texts) {
+    const normalized = text.replace(/\r/g, "").trim();
+    if (!normalized) continue;
+
+    const segments = normalized.split(/\n{2,}/);
+    for (const segment of segments) {
+      const paragraph = segment.trim();
+      if (!paragraph) continue;
+      if (!paragraphs.includes(paragraph)) {
+        paragraphs.push(paragraph);
+      }
+    }
+  }
+
+  return paragraphs;
+}
+
+function attemptParseAIResponse(
+  content: string
+): Partial<GameAnalysis> | null {
+  const trimmed = content.trim();
+  const candidates: string[] = [];
+
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    candidates.push(codeBlockMatch[1]);
+  }
+
+  const braceMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    candidates.push(braceMatch[0]);
+  }
+
+  candidates.push(trimmed);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed as Partial<GameAnalysis>;
+      }
+    } catch (_e) {
+      // ignore parse errors, try next candidate
+    }
+  }
+
+  console.error("AI analysis JSON could not be parsed", content);
+  return null;
+}
+
+function normalizeStringArray(input?: any[]): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  return input
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((text): text is string => {
+      if (!text) return false;
+      if (seen.has(text)) return false;
+      seen.add(text);
+      return true;
+    });
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return min;
+  }
+  return Math.min(Math.max(Math.round(value), min), max);
+}
+
+function buildFallbackSummary(opts: {
+  title: string;
+  positiveRatio: number;
+  totalReviews: number;
+  price: number;
+  hasReviews: boolean;
+}): string {
+  const parts: string[] = [];
+
+  if (opts.totalReviews > 0) {
+    parts.push(
+      `${opts.title} はレビュー ${opts.totalReviews} 件で、評価率は ${opts.positiveRatio}% です。`
+    );
+  } else {
+    parts.push(`${opts.title} はレビューがまだ存在しないか、少ないタイトルです。`);
+  }
+
+  if (opts.price > 0) {
+    parts.push(`価格は約 $${opts.price.toFixed(2)}。`);
+  } else {
+    parts.push("価格は無料または未設定です。");
+  }
+
+  if (!opts.hasReviews) {
+    parts.push("レビューが不足しているため、数値情報を中心に慎重に評価しています。");
+  }
+
+  return parts.join(" ");
+}
+
+function buildFallbackLabels(tags: string[], totalReviews: number): string[] {
+  const normalizedTags = tags
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+
+  if (normalizedTags.length > 0) {
+    return normalizedTags.slice(0, 5);
+  }
+
+  if (totalReviews === 0) {
+    return ["レビュー不足"];
+  }
+
+  return ["Hidden Gem 候補"];
+}
+
+function buildFallbackPros(positiveRatio: number, totalReviews: number): string[] {
+  const pros: string[] = [];
+
+  if (positiveRatio >= 80) {
+    pros.push(`高評価率 ${positiveRatio}%`);
+  } else if (positiveRatio >= 60) {
+    pros.push(`評価率 ${positiveRatio}%`);
+  }
+
+  if (totalReviews >= 100) {
+    pros.push("一定のレビュー数あり");
+  } else if (totalReviews > 0) {
+    pros.push("レビュー数は少ないが、好意的な傾向");
+  }
+
+  if (!pros.length) {
+    pros.push("レビュー傾向が掴みづらい");
+  }
+
+  return pros.slice(0, 3);
+}
+
+function buildFallbackCons(totalReviews: number, sampleCount: number): string[] {
+  const cons: string[] = [];
+
+  if (totalReviews === 0) {
+    cons.push("レビューが存在しない");
+  } else if (totalReviews < 30) {
+    cons.push(`レビュー ${totalReviews} 件と少なめ`);
+  }
+
+  if (sampleCount === 0) {
+    cons.push("レビュー本文が取得できませんでした");
+  }
+
+  if (!cons.length) {
+    cons.push("情報が限定的なので注意が必要");
+  }
+
+  return cons.slice(0, 3);
 }
