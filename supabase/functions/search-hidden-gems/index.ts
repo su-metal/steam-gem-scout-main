@@ -26,8 +26,8 @@ interface GameAnalysis {
   // ★ アップデ前後の変化情報（analyze-hidden-gem で追加したやつ）
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
+  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
   hasImprovedSinceLaunch?: boolean;
-  stabilityTrend?: "Improving" | "Stable" | "Deteriorating";
 }
 
 interface RankingGameData {
@@ -44,7 +44,7 @@ interface RankingGameData {
   steamUrl: string;
   reviewScoreDesc: string;
   analysis: GameAnalysis;
-    gemLabel:
+  gemLabel:
     | "Hidden Gem"
     | "Improved Hidden Gem"
     | "Emerging Gem"
@@ -208,6 +208,7 @@ async function analyzeGameWithAI(params: {
   totalReviews: number;
   price: number;
   sampleReviews: string[];
+  reviewScoreDesc?: string;
   contextNotes?: string[];
 }): Promise<GameAnalysis> {
   const {
@@ -218,8 +219,10 @@ async function analyzeGameWithAI(params: {
     totalReviews,
     price,
     sampleReviews,
+    reviewScoreDesc = "",
     contextNotes = [],
   } = params;
+
 
   // デフォルト値（エラーやAPI失敗時の保険）
   const defaultAnalysis: GameAnalysis = {
@@ -236,7 +239,7 @@ async function analyzeGameWithAI(params: {
     stabilityTrend: "Stable",
   };
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+    const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
     console.error("OPENAI_API_KEY is not set");
     return defaultAnalysis;
@@ -266,7 +269,6 @@ ${reviewsSection}
 
 出力フォーマット（必ず VALID な JSON のみ。説明文は禁止）:
 
-{
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
   "summary": "日本語で2〜3文の要約",
   "labels": ["短い日本語ラベルを3〜6個"],
@@ -275,8 +277,13 @@ ${reviewsSection}
   "riskScore": 1〜10の整数,
   "bugRisk": 1〜10の整数,
   "refundMentions": 0〜20の整数,
-  "reviewQualityScore": 1〜10の整数
+  "reviewQualityScore": 1〜10の整数,
+  "currentStateSummary": "現在のバージョンの評価・遊び心地の傾向を日本語で2〜4文。最近のアップデートや直近1年の印象を中心に書く。",
+  "historicalIssuesSummary": "リリース初期〜過去の問題点や評価の推移（昔はバグが多かった／ボリューム不足だった など）を日本語で2〜4文。",
+  "hasImprovedSinceLaunch": true | false,
+  "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown"
 }
+
 `.trim();
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -355,11 +362,12 @@ ${reviewsSection}
       1,
       10
     ),
+    // 今と昔系はまだAIから返していないので、一旦 undefined のまま
     currentStateSummary: parsed?.currentStateSummary?.trim(),
     historicalIssuesSummary: parsed?.historicalIssuesSummary?.trim(),
     hasImprovedSinceLaunch:
       parsed?.hasImprovedSinceLaunch ?? defaultAnalysis.hasImprovedSinceLaunch,
-    stabilityTrend: parsed?.stabilityTrend ?? "Stable",
+    stabilityTrend: parsed?.stabilityTrend ?? defaultAnalysis.stabilityTrend,
   };
 
   return finalAnalysis;
@@ -486,9 +494,7 @@ async function fetchAndBuildRankingGame(
         }
 
         const rawText =
-          typeof reviewItem.review === "string"
-            ? reviewItem.review.trim()
-            : "";
+          typeof reviewItem.review === "string" ? reviewItem.review.trim() : "";
         if (!rawText) continue;
 
         const normalized = rawText.replace(/\s+/g, " ").trim();
@@ -509,7 +515,10 @@ async function fetchAndBuildRankingGame(
   sampleReviews = sampleReviewPool.slice(0, maxSampleReviews);
 
   if (sampleReviews.length === 0 && contextNotes.length > 0) {
-    const fallbackSamples = contextNotes.slice(0, Math.min(5, contextNotes.length));
+    const fallbackSamples = contextNotes.slice(
+      0,
+      Math.min(5, contextNotes.length)
+    );
     sampleReviews = fallbackSamples;
     console.log(
       "Using description fallback as sample reviews",
@@ -558,6 +567,7 @@ async function fetchAndBuildRankingGame(
     price,
     sampleReviews,
     contextNotes,
+    reviewScoreDesc,
   });
 
   console.log("AI analysis finished", appId, {
@@ -575,7 +585,7 @@ async function fetchAndBuildRankingGame(
   const improved = analysis.hasImprovedSinceLaunch ?? false;
   const trend = analysis.stabilityTrend ?? "Stable"; // Improving / Stable / Deteriorating
 
-    // --- Updated Hidden Gem Verdict Logic (recent state prioritized) ---
+  // --- Updated Hidden Gem Verdict Logic (recent state prioritized) ---
 
   if (trend === "Deteriorating") {
     // 最近悪化 → Hidden Gem として推奨しない
@@ -596,8 +606,7 @@ async function fetchAndBuildRankingGame(
     analysis.hiddenGemVerdict = "Yes"; // “復活した Hidden Gem” パターン
   }
 
-
-    // --- Advanced gemLabel with update-aware logic ---
+  // --- Advanced gemLabel with update-aware logic ---
   if (
     isStatisticallyHidden &&
     positiveRatio >= 85 &&
@@ -683,9 +692,7 @@ function splitIntoParagraphs(texts: string[]): string[] {
   return paragraphs;
 }
 
-function attemptParseAIResponse(
-  content: string
-): Partial<GameAnalysis> | null {
+function attemptParseAIResponse(content: string): Partial<GameAnalysis> | null {
   const trimmed = content.trim();
   const candidates: string[] = [];
 
@@ -705,7 +712,18 @@ function attemptParseAIResponse(
     try {
       const parsed = JSON.parse(candidate);
       if (typeof parsed === "object" && parsed !== null) {
-        return parsed as Partial<GameAnalysis>;
+        const normalized: Partial<GameAnalysis> = {
+          ...(parsed as Partial<GameAnalysis>),
+          // ここで「今と昔」系のフィールドにデフォルトを入れておく
+          currentStateSummary: (parsed as any).currentStateSummary ?? "",
+          historicalIssuesSummary:
+            (parsed as any).historicalIssuesSummary ?? "",
+          stabilityTrend: (parsed as any).stabilityTrend ?? "Unknown",
+          hasImprovedSinceLaunch:
+            (parsed as any).hasImprovedSinceLaunch ?? false,
+        };
+
+        return normalized;
       }
     } catch (_e) {
       // ignore parse errors, try next candidate
@@ -750,7 +768,9 @@ function buildFallbackSummary(opts: {
       `${opts.title} はレビュー ${opts.totalReviews} 件で、評価率は ${opts.positiveRatio}% です。`
     );
   } else {
-    parts.push(`${opts.title} はレビューがまだ存在しないか、少ないタイトルです。`);
+    parts.push(
+      `${opts.title} はレビューがまだ存在しないか、少ないタイトルです。`
+    );
   }
 
   if (opts.price > 0) {
@@ -760,7 +780,9 @@ function buildFallbackSummary(opts: {
   }
 
   if (!opts.hasReviews) {
-    parts.push("レビューが不足しているため、数値情報を中心に慎重に評価しています。");
+    parts.push(
+      "レビューが不足しているため、数値情報を中心に慎重に評価しています。"
+    );
   }
 
   return parts.join(" ");
@@ -782,7 +804,10 @@ function buildFallbackLabels(tags: string[], totalReviews: number): string[] {
   return ["Hidden Gem 候補"];
 }
 
-function buildFallbackPros(positiveRatio: number, totalReviews: number): string[] {
+function buildFallbackPros(
+  positiveRatio: number,
+  totalReviews: number
+): string[] {
   const pros: string[] = [];
 
   if (positiveRatio >= 80) {
@@ -804,7 +829,10 @@ function buildFallbackPros(positiveRatio: number, totalReviews: number): string[
   return pros.slice(0, 3);
 }
 
-function buildFallbackCons(totalReviews: number, sampleCount: number): string[] {
+function buildFallbackCons(
+  totalReviews: number,
+  sampleCount: number
+): string[] {
   const cons: string[] = [];
 
   if (totalReviews === 0) {

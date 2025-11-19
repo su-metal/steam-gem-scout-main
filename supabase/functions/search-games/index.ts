@@ -128,6 +128,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           bugRisk: toNumber(analysisRaw.bugRisk, 0),
           refundMentions: toNumber(analysisRaw.refundMentions, 0),
           reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
+          // ★ ここから追加：「今と昔」関連
+          currentStateSummary: analysisRaw.currentStateSummary ?? "",
+          historicalIssuesSummary: analysisRaw.historicalIssuesSummary ?? "",
+          stabilityTrend: analysisRaw.stabilityTrend ?? "Unknown",
+          hasImprovedSinceLaunch: analysisRaw.hasImprovedSinceLaunch ?? false,
+          // ★ ここまで
         },
         gemLabel: g.gemLabel ?? "",
         isStatisticallyHidden: g.isStatisticallyHidden ?? false,

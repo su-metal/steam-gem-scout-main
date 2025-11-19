@@ -41,23 +41,6 @@ type GemLabel =
   | "Highly rated but not hidden"
   | "Not a hidden gem";
 
-interface GameAnalysis {
-  hiddenGemVerdict?: "Yes" | "No" | "Unknown";
-  summary?: string;
-  labels?: string[];
-  pros?: string[];
-  cons?: string[];
-  riskScore?: number;
-  bugRisk?: number;
-  refundMentions?: number;
-  reviewQualityScore?: number; // 1〜10
-  // 追加: 「今と昔」系の情報
-  currentStateSummary?: string;
-  historicalIssuesSummary?: string;
-  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
-  hasImprovedSinceLaunch?: boolean;
-}
-
 interface AnalysisData {
   hiddenGemVerdict?: "Yes" | "No" | "Unknown";
   summary?: string;
@@ -112,7 +95,7 @@ interface GameDetailState {
   tags?: string[];
   steamUrl?: string;
   reviewScoreDesc?: string;
-  // 追加: レガシー経由でも拾えるようにしておく
+  // レガシー経由でも拾えるようにしておく
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
@@ -134,6 +117,12 @@ export default function GameDetail() {
   }, []);
 
   const game = location.state as GameDetailState;
+
+   // ★ これを追加
+  useEffect(() => {
+    console.log("GameDetail location.state =", location.state);
+    console.log("GameDetail game =", game);
+  }, [location.state, game]);
 
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -191,7 +180,7 @@ export default function GameDetail() {
       bugRisk: game.bugRisk,
       refundMentions: game.refundMentions,
       reviewQualityScore: game.reviewQualityScore,
-      // レガシーからも「今と昔」の情報を引き継げるように
+      // レガシーからも「今と昔」の情報を引き継げる
       currentStateSummary: game.currentStateSummary,
       historicalIssuesSummary: game.historicalIssuesSummary,
       stabilityTrend: game.stabilityTrend as AnalysisData["stabilityTrend"],
