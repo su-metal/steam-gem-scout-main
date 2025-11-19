@@ -57,6 +57,30 @@ interface RankingGameData {
   isAvailableInStore: boolean;
 }
 
+async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
+  const { error } = await supabase.from("steam_games").upsert(
+    {
+      app_id: rankingGame.appId,
+      title: rankingGame.title,
+      positive_ratio: rankingGame.positiveRatio,
+      total_reviews: rankingGame.totalReviews,
+      estimated_owners: rankingGame.estimatedOwners,
+      price: rankingGame.price,
+      average_playtime: rankingGame.averagePlaytime,
+      tags: rankingGame.tags,
+      steam_url: rankingGame.steamUrl,
+      review_score_desc: rankingGame.reviewScoreDesc,
+      // 「いつ取得したか」は今の時刻でOK
+      last_steam_fetch_at: new Date().toISOString(),
+    },
+    { onConflict: "app_id" }
+  );
+
+  if (error) {
+    console.error("steam_games upsert error", error);
+  }
+}
+
 type ImportResult = {
   appId: number;
   status: "ok" | "error";
@@ -109,7 +133,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     console.log("Importing Steam apps:", appIds);
 
-    const results: ImportResult[] = [];
+        const results: ImportResult[] = [];
 
     for (const appId of appIds) {
       try {
@@ -123,54 +147,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        const { data: existing, error: selectError } = await supabase
-          .from("game_rankings_cache")
-          .select("id")
-          .eq("data->>appId", appId.toString())
-          .maybeSingle();
+        // ★ ここがポイント：
+        //   もう game_rankings_cache には一切触らず、
+        //   倉庫テーブル（steam_games）にだけ保存する
+        await upsertSteamGameFromRanking(rankingGame);
 
-        if (selectError) {
-          console.error("Select error", selectError);
-          results.push({
-            appId,
-            status: "error",
-            message: selectError.message,
-          });
-          continue;
-        }
-
-        if (existing) {
-          const { error: updateError } = await supabase
-            .from("game_rankings_cache")
-            .update({ data: rankingGame })
-            .eq("id", existing.id);
-
-          if (updateError) {
-            console.error("Update error", updateError);
-            results.push({
-              appId,
-              status: "error",
-              message: updateError.message,
-            });
-          } else {
-            results.push({ appId, status: "ok" });
-          }
-        } else {
-          const { error: insertError } = await supabase
-            .from("game_rankings_cache")
-            .insert({ data: rankingGame });
-
-          if (insertError) {
-            console.error("Insert error", insertError);
-            results.push({
-              appId,
-              status: "error",
-              message: insertError.message,
-            });
-          } else {
-            results.push({ appId, status: "ok" });
-          }
-        }
+        results.push({ appId, status: "ok" });
       } catch (e) {
         console.error("Unexpected error while importing", appId, e);
         results.push({
@@ -180,6 +162,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
       }
     }
+
 
     return new Response(
       JSON.stringify({
@@ -223,7 +206,6 @@ async function analyzeGameWithAI(params: {
     contextNotes = [],
   } = params;
 
-
   // デフォルト値（エラーやAPI失敗時の保険）
   const defaultAnalysis: GameAnalysis = {
     hiddenGemVerdict: "Unknown",
@@ -239,7 +221,7 @@ async function analyzeGameWithAI(params: {
     stabilityTrend: "Stable",
   };
 
-    const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) {
     console.error("OPENAI_API_KEY is not set");
     return defaultAnalysis;
@@ -346,11 +328,7 @@ ${reviewsSection}
       normalizedCons.length > 0
         ? normalizedCons
         : buildFallbackCons(totalReviews, sampleReviews.length),
-    riskScore: clampInt(
-      parsed?.riskScore ?? defaultAnalysis.riskScore,
-      1,
-      10
-    ),
+    riskScore: clampInt(parsed?.riskScore ?? defaultAnalysis.riskScore, 1, 10),
     bugRisk: clampInt(parsed?.bugRisk ?? defaultAnalysis.bugRisk, 1, 10),
     refundMentions: clampInt(
       parsed?.refundMentions ?? defaultAnalysis.refundMentions,
@@ -372,7 +350,6 @@ ${reviewsSection}
 
   return finalAnalysis;
 }
-
 
 /**
  * Fetches Steam app details and builds a RankingGame-like JSON object.
