@@ -190,7 +190,10 @@ export function ImportSteamGamesPage() {
     if (Number.isFinite(rd) && rd > 0) payload.recentDays = rd;
 
     const pos = Number(minPositivePercent);
-    if (Number.isFinite(pos) && pos > 0) payload.minPositiveRatio = pos / 100;
+    if (Number.isFinite(pos) && pos > 0) {
+      // DB の positive_ratio は 0–100 の数値なので、割らずにそのまま渡す
+      payload.minPositiveRatio = pos;
+    }
 
     const minRev = Number(minTotalReviews);
     if (Number.isFinite(minRev) && minRev > 0) payload.minTotalReviews = minRev;
@@ -201,8 +204,8 @@ export function ImportSteamGamesPage() {
 
     const maxPrice = Number(maxPriceUsd);
     if (Number.isFinite(maxPrice) && maxPrice > 0) {
-      // Edge Function 側は cents / 最小通貨単位を想定
-      payload.maxPrice = Math.round(maxPrice * 100);
+      // Edge Function 側も USD 単位で比較する
+      payload.maxPrice = maxPrice;
     }
 
     const lim = Number(limit);
@@ -527,12 +530,12 @@ export function ImportSteamGamesPage() {
                       <td className="px-2 py-1 font-mono">{c.appId}</td>
                       <td className="px-2 py-1">{c.title}</td>
                       <td className="px-2 py-1">
-                        {(c.positiveRatio * 100).toFixed(1)}%
+                        {c.positiveRatio.toFixed(1)}%
                       </td>
                       <td className="px-2 py-1">{c.totalReviews}</td>
                       <td className="px-2 py-1">{c.estimatedOwners}</td>
                       <td className="px-2 py-1">
-                        ${(c.price / 100).toFixed(2)}
+                        {c.price != null ? `$${c.price.toFixed(2)}` : "-"}
                       </td>
                       <td className="px-2 py-1">
                         {c.tags?.slice(0, 4).join(", ")}

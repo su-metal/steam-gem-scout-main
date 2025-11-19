@@ -299,13 +299,13 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   }[] = [];
 
   let inserted = 0;
-  let skippedExisting = 0; // 現状は upsert の結果からは区別していない
+  let skippedExisting = 0;
 
   if (!appIds.length) {
     return { inserted, skippedExisting, results };
   }
 
-  // まず、対象の appId に対応する steam_games の行をまとめて取得する
+  // まず倉庫テーブル steam_games から、対象 appId の行をまとめて取得
   const { data: steamRows, error } = await supabase
     .from("steam_games")
     .select(
@@ -327,7 +327,6 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
   if (error) {
     console.error("supabase steam_games fetch error", error);
-    // 全体エラーとして扱う
     for (const appId of appIds) {
       results.push({
         appId,
@@ -340,12 +339,12 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
   const rowsByAppId = new Map<number, any>();
   for (const row of steamRows ?? []) {
-    rowsByAppId.set(row.app_id, row);
+    rowsByAppId.set(Number(row.app_id), row);
   }
 
   for (const appId of appIds) {
     try {
-      const row = rowsByAppId.get(appId);
+      const row = rowsByAppId.get(Number(appId));
       if (!row) {
         results.push({
           appId,
@@ -355,27 +354,64 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         continue;
       }
 
+      // steam_games の行から RankingGame を組み立てる
       const rankingGame = buildRankingGameFromSteamRow(row);
 
-      const { error: upsertError } = await supabase
-        .from("game_rankings_cache")
-        .upsert(rankingGame, {
-          onConflict: "appId", // snake_case の場合は "app_id" などに変更
-        });
+      const appIdStr = String(appId);
 
-      if (upsertError) {
-        console.error("Supabase upsert error", upsertError);
+      // 既に同じ appId の行があれば UPDATE、なければ INSERT
+      const { data: existing, error: selectError } = await supabase
+        .from("game_rankings_cache")
+        .select("id")
+        .eq("data->>appId", appIdStr)
+        .maybeSingle();
+
+      if (selectError) {
+        console.error("Select error in game_rankings_cache", selectError);
         results.push({
           appId,
           status: "error",
-          message: upsertError.message,
+          message: selectError.message,
         });
+        continue;
+      }
+
+      if (existing) {
+        const { error: updateError } = await supabase
+          .from("game_rankings_cache")
+          .update({ data: rankingGame })
+          .eq("id", existing.id);
+
+        if (updateError) {
+          console.error("Update error in game_rankings_cache", updateError);
+          results.push({
+            appId,
+            status: "error",
+            message: updateError.message,
+          });
+          continue;
+        }
+
+        skippedExisting++; // 既存行の更新としてカウント
+        inserted++; // UI 的には「処理成功」として数えたいので increment
+        results.push({ appId, status: "ok" });
       } else {
+        const { error: insertError } = await supabase
+          .from("game_rankings_cache")
+          .insert({ data: rankingGame });
+
+        if (insertError) {
+          console.error("Insert error in game_rankings_cache", insertError);
+          results.push({
+            appId,
+            status: "error",
+            message: insertError.message,
+          });
+          continue;
+        }
+
         inserted++;
-        results.push({
-          appId,
-          status: "ok",
-        });
+        results.push({ appId, status: "ok" });
       }
     } catch (e) {
       console.error("Error importing appId from steam_games", appId, e);
@@ -389,6 +425,8 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
   return { inserted, skippedExisting, results };
 }
+
+
 
 
 async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{

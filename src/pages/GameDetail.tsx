@@ -118,7 +118,7 @@ export default function GameDetail() {
 
   const game = location.state as GameDetailState;
 
-   // ★ これを追加
+  // ★ これを追加
   useEffect(() => {
     console.log("GameDetail location.state =", location.state);
     console.log("GameDetail game =", game);
@@ -281,6 +281,10 @@ export default function GameDetail() {
   const estimatedOwners = baseGame.estimatedOwners || 0;
   const price = baseGame.price || 0;
   const averagePlaytime = baseGame.averagePlaytime || 0;
+  // 平均プレイ時間（分） → 時間（x.x h）へ変換
+  const averagePlaytimeHours =
+    averagePlaytime > 0 ? (averagePlaytime / 60).toFixed(1) : "N/A";
+
   const tags = baseGame.tags || [];
   const steamUrl = baseGame.steamUrl;
   const reviewScoreDesc = baseGame.reviewScoreDesc;
@@ -699,7 +703,7 @@ export default function GameDetail() {
                     Avg Playtime
                   </div>
                   <div className="text-2xl font-bold">
-                    {averagePlaytime}h
+                    {averagePlaytimeHours !== "N/A" ? `${averagePlaytimeHours}h` : "N/A"}
                   </div>
                 </div>
               </div>

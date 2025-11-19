@@ -9,6 +9,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 // Steam API (we only use the public store API, key is optional here)
 const STEAM_APP_DETAILS_URL = "https://store.steampowered.com/api/appdetails";
+const STEAMSPY_APP_DETAILS_URL =
+  "https://steamspy.com/api.php?request=appdetails&appid=";
 
 type HiddenGemVerdict = "Yes" | "No" | "Unknown";
 
@@ -38,7 +40,7 @@ interface RankingGameData {
   estimatedOwners: number;
   recentPlayers: number;
   price: number; // ドル単位
-  averagePlaytime: number; // 時間（今は 0）
+  averagePlaytime: number; // 分単位（平均プレイ時間）
   lastUpdated: string; // ISO 文字列
   tags: string[];
   steamUrl: string;
@@ -50,7 +52,6 @@ interface RankingGameData {
     | "Emerging Gem"
     | "Highly rated but not hidden"
     | "Not a hidden gem";
-
   isStatisticallyHidden: boolean;
   releaseDate: string;
   releaseYear: number;
@@ -133,7 +134,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     console.log("Importing Steam apps:", appIds);
 
-        const results: ImportResult[] = [];
+    const results: ImportResult[] = [];
 
     for (const appId of appIds) {
       try {
@@ -162,7 +163,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
       }
     }
-
 
     return new Response(
       JSON.stringify({
@@ -426,6 +426,11 @@ async function fetchAndBuildRankingGame(
   let steamReviewDesc = "";
   let summaryCaptured = false;
 
+  // ▼ 平均プレイ時間用の集計（分）
+  let averagePlaytime = 0;
+  let totalPlaytimeMinutes = 0;
+  let playtimeSamples = 0;
+
   // REVIEW FETCH：複数パターンの filter で試す
   for (const config of reviewFetchConfigs) {
     const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=${config.language}&purchase_type=all&filter=${config.filter}&num_per_page=${config.numPerPage}`;
@@ -479,6 +484,13 @@ async function fetchAndBuildRankingGame(
 
         seenReviews.add(normalized);
         sampleReviewPool.push(normalized);
+
+        // ▼ レビュー投稿者のプレイ時間（分）を集計
+        const playtime = Number(reviewItem?.author?.playtime_forever ?? 0);
+        if (Number.isFinite(playtime) && playtime > 0) {
+          totalPlaytimeMinutes += playtime;
+          playtimeSamples++;
+        }
       }
 
       if (sampleReviewPool.length >= maxSampleReviews) {
@@ -490,6 +502,11 @@ async function fetchAndBuildRankingGame(
   }
 
   sampleReviews = sampleReviewPool.slice(0, maxSampleReviews);
+
+  // ▼ プレイ時間サンプルが取れていれば平均を算出（分）
+  if (playtimeSamples > 0) {
+    averagePlaytime = Math.round(totalPlaytimeMinutes / playtimeSamples);
+  }
 
   if (sampleReviews.length === 0 && contextNotes.length > 0) {
     const fallbackSamples = contextNotes.slice(
@@ -619,7 +636,7 @@ async function fetchAndBuildRankingGame(
     estimatedOwners,
     recentPlayers: 0,
     price,
-    averagePlaytime: 0,
+    averagePlaytime,
     lastUpdated: nowIso,
     tags,
     steamUrl: `https://store.steampowered.com/app/${appId}`,
