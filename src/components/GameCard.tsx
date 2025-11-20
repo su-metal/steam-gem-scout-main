@@ -18,6 +18,8 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
   return baseTags.slice(0, limit);
 };
 
+
+
 // gemLabel のバリエーション
 type GemLabel =
   | "Hidden Gem"
@@ -65,6 +67,7 @@ interface GameCardProps {
   // 追加: 明示的に gemLabel を渡す場合用（オプショナル）
   gemLabel?: GemLabel;
 }
+
 
 export const GameCard = ({
   title,
@@ -138,25 +141,63 @@ export const GameCard = ({
   // --- AI / gemLabel 情報を抽出 ---
   const ai = analysisData || gameData?.analysis || {};
 
-  // 統計ベースの AI Gem Score（statGemScore）と、
-  // 旧来の reviewQualityScore を取り出す
+  // 統計ベースの AI Gem Score と旧AIスコアを、analysisData / gameData の両方から安全に拾う
+  const statGemScoreFromAnalysis =
+    typeof analysisData?.statGemScore === "number"
+      ? analysisData.statGemScore
+      : null;
+
+  const statGemScoreFromGameData =
+    typeof gameData?.analysis?.statGemScore === "number"
+      ? gameData.analysis.statGemScore
+      : null;
+
   const statGemScore: number | null =
-    typeof (ai as any).statGemScore === "number" ? (ai as any).statGemScore : null;
+    statGemScoreFromAnalysis ??
+    statGemScoreFromGameData ??
+    (Number.isFinite(hiddenGemScore) ? hiddenGemScore : null);
+
+
+  const reviewQualityFromAnalysis =
+    typeof analysisData?.reviewQualityScore === "number"
+      ? analysisData.reviewQualityScore
+      : null;
+
+  const reviewQualityFromGameData =
+    typeof gameData?.analysis?.reviewQualityScore === "number"
+      ? gameData.analysis.reviewQualityScore
+      : null;
 
   const reviewQualityScore: number | null =
-    typeof (ai as any).reviewQualityScore === "number" ? (ai as any).reviewQualityScore : null;
+    reviewQualityFromAnalysis ?? reviewQualityFromGameData ?? null;
 
 
-
-  const derivedGemLabel: GemLabel | undefined =
+  // バックエンドのシグナルも使って gemLabel を補完する
+  const explicitGemLabel: GemLabel | undefined =
     gemLabel ??
     (gameData?.gemLabel as GemLabel | undefined) ??
     (analysisData?.gemLabel as GemLabel | undefined) ??
-    (ai.gemLabel as GemLabel | undefined) ??
-    (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
+    (ai.gemLabel as GemLabel | undefined);
+
+  // AI 判定値を取得（Index.tsx と同じ考え方に揃える）
+  const aiVerdict: "Yes" | "No" | "Unknown" =
+    ai.hiddenGemVerdict ?? hiddenGemVerdict ?? "Unknown";
+
+  const isStatisticallyHidden: boolean =
+    ai.isStatisticallyHidden === true || gameData?.isStatisticallyHidden === true;
+
+  const qualifiesAsHiddenGem: boolean =
+    isStatisticallyHidden ||
+    aiVerdict === "Yes" ||
+    (statGemScore !== null && statGemScore >= 8);
+
+  const derivedGemLabel: GemLabel | undefined =
+    explicitGemLabel ??
+    (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
 
   // gemLabel バッジの見た目設定
   let gemBadgeText: string | null = null;
+
   let gemBadgeClass =
     "bg-muted text-muted-foreground border border-border/40";
   let GemIcon: any = null;
@@ -223,28 +264,26 @@ export const GameCard = ({
           ? "Medium"
           : "High";
 
+
+
   // Gem スコア（カード右側に表示する唯一のスコア）
   // 優先順位:
   //  1. statGemScore（統計ベースの隠れた名作度）
-  //  2. reviewQualityScore（旧AIスコア・移行期間用のバックアップ）
-  //  3. hiddenGemScore（props からのフォールバック）
-  const gemScore: number | null =
+  //  2. reviewQualityScore（旧AIスコア：statGemScore が無い古いデータ用）
+  const aiGemScore: number | null =
     statGemScore !== null
       ? statGemScore
       : reviewQualityScore !== null
         ? reviewQualityScore
-        : typeof hiddenGemScore === "number"
-          ? hiddenGemScore
-          : null;
-
+        : null;
 
 
   const gemScoreCircleClass =
-    gemScore === null
+    aiGemScore === null
       ? "bg-muted text-muted-foreground"
-      : gemScore >= 8
+      : aiGemScore >= 8
         ? "bg-emerald-500 text-emerald-50"
-        : gemScore >= 6
+        : aiGemScore >= 6
           ? "bg-yellow-500 text-yellow-900"
           : "bg-red-500 text-red-50";
 
@@ -402,7 +441,7 @@ export const GameCard = ({
             <div
               className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
             >
-              {gemScore !== null ? gemScore.toFixed(1) : "N/A"}
+              {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
             </div>
             <span className="text-[10px] mt-0.5 text-muted-foreground">
               AI Gem Score

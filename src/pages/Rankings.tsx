@@ -19,10 +19,18 @@ interface HiddenGemAnalysis {
   bugRisk: number;
   refundMentions: number;
   reviewQualityScore: number;
+  statGemScore?: number; // ← 追加（バックエンドのAIスコア）
   aiError?: boolean;
 }
 
-type GemLabel = "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
+
+type GemLabel =
+  | "Hidden Gem"
+  | "Improved Hidden Gem"
+  | "Emerging Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
+
 
 interface RankingGame {
   appId: number;
@@ -105,7 +113,7 @@ const STORAGE_KEYS = {
 } as const;
 
 export default function Rankings() {
-    const [games, setGames] = useState<RankingGame[]>([]);
+  const [games, setGames] = useState<RankingGame[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ---- フィルター state（localStorage から復元） ----
@@ -164,7 +172,7 @@ export default function Rankings() {
     }
   });
 
-    // フィルターが変わるたびに localStorage に保存
+  // フィルターが変わるたびに localStorage に保存
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -220,11 +228,11 @@ export default function Rankings() {
           minPlaytime,
           ...(selectedSort === "custom"
             ? {
-                aiWeight: gemWeights.aiScore,
-                positiveRatioWeight: gemWeights.positiveRatio,
-                reviewCountWeight: gemWeights.reviewCount,
-                recencyWeight: gemWeights.recency,
-              }
+              aiWeight: gemWeights.aiScore,
+              positiveRatioWeight: gemWeights.positiveRatio,
+              reviewCountWeight: gemWeights.reviewCount,
+              recencyWeight: gemWeights.recency,
+            }
             : {}),
         },
       });
@@ -247,9 +255,9 @@ export default function Rankings() {
         maxPrice === MAX_PRICE_SLIDER
           ? rankings
           : rankings.filter((game) => {
-              const priceInDollars = game.price / 100;
-              return priceInDollars <= maxPrice;
-            });
+            const priceInDollars = game.price / 100;
+            return priceInDollars <= maxPrice;
+          });
 
       console.log(`After client-side price filter (<= $${maxPrice} or Any): ${filteredByPrice.length} games`);
 
@@ -409,9 +417,8 @@ export default function Rankings() {
             </p>
 
             <div
-              className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${
-                !isCustomSort ? "opacity-50 pointer-events-none" : ""
-              }`}
+              className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${!isCustomSort ? "opacity-50 pointer-events-none" : ""
+                }`}
             >
               {/* AI Score */}
               <div className="space-y-2">
@@ -644,41 +651,80 @@ export default function Rankings() {
           </div>
         ) : (
           <div className="space-y-4">
-            {games.map((game) => (
-              <div key={game.appId} className="relative">
-                {/* Gem Label Badge */}
-                <div className="absolute -top-3 left-6 z-10">
-                  <span
-                    className={`inline-block px-4 py-1 rounded-full text-xs font-semibold shadow-lg ${
-                      game.gemLabel === "Hidden Gem"
-                        ? "bg-accent text-accent-foreground"
-                        : game.gemLabel === "Highly rated but not hidden"
-                          ? "bg-primary/20 text-primary border border-primary/40"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {game.gemLabel}
-                    {game.isStatisticallyHidden && (
-                      <span className="ml-2 text-[10px] opacity-70">(&lt;200 reviews or &lt;50K owners)</span>
-                    )}
-                  </span>
-                </div>
+            {games.map((game) => {
+              // -------------------------
+              // Hidden Gem 判定 & ラベル補完
+              // -------------------------
 
-                <SearchResultCard
-                  appId={game.appId}
-                  title={game.title}
-                  hiddenGemScore={game.analysis.reviewQualityScore}
-                  summary={game.analysis.summary}
-                  labels={game.analysis.labels}
-                  positiveRatio={game.positiveRatio}
-                  totalReviews={game.totalReviews}
-                  price={game.price}
-                  averagePlaytime={game.averagePlaytime}
-                  gameData={game}
-                  analysisData={game.analysis}
-                />
-              </div>
-            ))}
+              // バックエンドが明示的につけたラベルを優先
+              const explicitGemLabel = game.gemLabel as GemLabel | undefined;
+
+              // AI 判定情報
+              const aiVerdict: "Yes" | "No" | "Unknown" =
+                game.analysis?.hiddenGemVerdict ?? "Unknown";
+
+              const statGemScore =
+                typeof game.analysis?.statGemScore === "number"
+                  ? game.analysis.statGemScore
+                  : null;
+
+              const isStatisticallyHidden = game.isStatisticallyHidden === true;
+
+              // Index / GameCard / SearchResultCard と同じ基準：
+              // どれか1つでも true なら Hidden Gem とみなす
+              const qualifiesAsHiddenGem =
+                isStatisticallyHidden ||
+                aiVerdict === "Yes" ||
+                (statGemScore !== null && statGemScore >= 8);
+
+              // 最終的にバッジに使うラベル
+              const derivedGemLabel: GemLabel | undefined =
+                explicitGemLabel ??
+                (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
+
+              // バッジのクラスを derivedGemLabel に合わせて決定
+              const gemBadgeClass =
+                derivedGemLabel === "Hidden Gem" || derivedGemLabel === "Improved Hidden Gem"
+                  ? "bg-accent text-accent-foreground"
+                  : derivedGemLabel === "Highly rated but not hidden"
+                    ? "bg-primary/20 text-primary border border-primary/40"
+                    : "bg-muted text-muted-foreground";
+
+              return (
+                <div key={game.appId} className="relative">
+                  {/* Gem Label Badge */}
+                  {derivedGemLabel && (
+                    <div className="absolute -top-3 left-6 z-10">
+                      <span
+                        className={`inline-block px-4 py-1 rounded-full text-xs font-semibold shadow-lg ${gemBadgeClass}`}
+                      >
+                        {derivedGemLabel}
+                        {isStatisticallyHidden && (
+                          <span className="ml-2 text-[10px] opacity-70">
+                            (&lt;200 reviews or &lt;50K owners)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  <SearchResultCard
+                    appId={game.appId}
+                    title={game.title}
+                    hiddenGemScore={game.analysis.reviewQualityScore}
+                    summary={game.analysis.summary}
+                    labels={game.analysis.labels}
+                    positiveRatio={game.positiveRatio}
+                    totalReviews={game.totalReviews}
+                    price={game.price}
+                    averagePlaytime={game.averagePlaytime}
+                    gameData={game}
+                    analysisData={game.analysis}
+                  />
+                </div>
+              );
+            })}
+
 
             {games.length === 0 && (
               <div className="text-center py-20">

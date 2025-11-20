@@ -39,6 +39,34 @@ const toNumber = (val: any, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+const toNumberOrUndefined = (val: any): number | undefined => {
+  if (typeof val === "number" && Number.isFinite(val)) return val;
+  if (typeof val === "string") {
+    const parsed = Number.parseFloat(val);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+};
+
+const parseGameDate = (value: unknown): Date | null => {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+};
+
+const getReferenceDate = (game: any): Date | null => {
+  return (
+    parseGameDate(game.releaseDate) ??
+    parseGameDate(game.lastUpdated) ??
+    null
+  );
+};
+
 // ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
 //   指標: positive_ratio / reviews / owners / price / playtime / release_year
 //   重み: 40 / 20 / 15 / 10 / 10 / 5
@@ -160,8 +188,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // まずは JSON データをまとめて取得
     const { data, error } = await supabase
       .from("game_rankings_cache")
-      .select("data")
-      .limit(500);
+      .select("data");
 
     if (error) {
       console.error("search-games db error", error);
@@ -229,6 +256,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           riskScore: toNumber(analysisRaw.riskScore, 0),
           bugRisk: toNumber(analysisRaw.bugRisk, 0),
           refundMentions: toNumber(analysisRaw.refundMentions, 0),
+          statGemScore: toNumberOrUndefined(analysisRaw.statGemScore),
           reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
           // ★ ここから追加：「今と昔」関連
           currentStateSummary: analysisRaw.currentStateSummary ?? "",
@@ -266,15 +294,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (!Number.isNaN(days) && days > 0) {
         const now = new Date();
         filtered = filtered.filter((g) => {
-          const base =
-            g.releaseDate && typeof g.releaseDate === "string"
-              ? new Date(g.releaseDate)
-              : g.lastUpdated
-              ? new Date(g.lastUpdated)
-              : null;
-          if (!base || Number.isNaN(base.getTime())) return true; // 情報なければ残す
+          const referenceDate = getReferenceDate(g);
+          if (!referenceDate) return false;
           const diffDays =
-            (now.getTime() - base.getTime()) / (1000 * 60 * 60 * 24);
+            (now.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24);
           return diffDays <= days;
         });
       }
@@ -294,9 +317,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // ===== AIスコア（ベース＋ブースト） =====
       const rawReviewQuality =
-        typeof analysis.reviewQualityScore === "number"
-          ? analysis.reviewQualityScore
-          : 5;
+        typeof analysis.statGemScore === "number"
+          ? analysis.statGemScore
+          : typeof analysis.reviewQualityScore === "number"
+            ? analysis.reviewQualityScore
+            : 5;
 
       let aiScore = rawReviewQuality / 10; // 0.1〜1.0 くらい
 

@@ -157,7 +157,6 @@ function computeStatGemScore(params: {
   return Math.round(score10 * 10) / 10;
 }
 
-
 async function updateGameRankingsCacheFromRanking(
   rankingGame: RankingGameData
 ) {
@@ -213,7 +212,6 @@ async function updateGameRankingsCacheFromRanking(
     );
   }
 }
-
 
 type ImportResult = {
   appId: number;
@@ -762,7 +760,7 @@ async function fetchAndBuildRankingGame(
     gemLabel = "Not a hidden gem"; // or "Declining title" 作ってもOK
   }
 
-    // 統計ベースの「隠れた名作」スコアを計算（1〜10）
+  // 統計ベースの「隠れた名作」スコアを計算（1〜10）
   const statGemScore = computeStatGemScore({
     positiveRatio,
     totalReviews,
@@ -771,12 +769,18 @@ async function fetchAndBuildRankingGame(
     isStatisticallyHidden,
   });
 
+  // ★ 追加ルール：スコアが 8 以上ならラベルを強制的に Hidden Gem にする
+  if (typeof statGemScore === "number" && statGemScore >= 8) {
+    gemLabel = "Hidden Gem";
+    // （必要なら verdict も揃えたい場合は次の1行を追加）
+    // analysis.hiddenGemVerdict = "Yes";
+  }
+
   // analysis に statGemScore を埋め込む
   const enrichedAnalysis: GameAnalysis = {
     ...analysis,
     statGemScore,
   };
-
 
   const rankingGame: RankingGameData = {
     appId,

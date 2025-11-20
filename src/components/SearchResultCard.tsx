@@ -102,18 +102,48 @@ export const SearchResultCard = ({
           ? "Medium"
           : "High";
 
-  // --- gemLabel 抽出 ---
-  const gemLabel: GemLabel | undefined =
+  // --- AI Gem Score (statGemScore 優先) ---
+  const statGemScore: number | null =
+    typeof ai.statGemScore === "number" ? ai.statGemScore : null;
+
+  const reviewQualityScore: number | null =
+    typeof ai.reviewQualityScore === "number"
+      ? ai.reviewQualityScore
+      : null;
+
+
+  // --- gemLabel 抽出 & Hidden Gem 判定補完 ---
+
+  // まずは明示的についているラベルを優先
+  const explicitGemLabel: GemLabel | undefined =
     (gameData?.gemLabel as GemLabel | undefined) ??
     (analysisData?.gemLabel as GemLabel | undefined) ??
     (ai.gemLabel as GemLabel | undefined) ??
     undefined;
+
+  // AI 判定情報
+  const aiVerdict: "Yes" | "No" | "Unknown" =
+    ai.hiddenGemVerdict ?? "Unknown";
+
+  const isStatisticallyHidden: boolean =
+    ai.isStatisticallyHidden === true || gameData?.isStatisticallyHidden === true;
+
+  const qualifiesAsHiddenGem: boolean =
+    isStatisticallyHidden ||
+    aiVerdict === "Yes" ||
+    (statGemScore !== null && statGemScore >= 8);
+
+  // 最終的にカードで扱う gemLabel
+  const gemLabel: GemLabel | undefined =
+    explicitGemLabel ??
+    (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
 
   // 表示用の gem バッジ設定
   let gemBadgeText: string | null = null;
   let gemBadgeClass =
     "bg-muted text-muted-foreground border border-border/40";
   let GemIcon: React.ComponentType<{ className?: string }> | null = null;
+
 
   if (gemLabel) {
     switch (gemLabel) {
@@ -153,8 +183,19 @@ export const SearchResultCard = ({
   }
 
   // --- AI gem score & verdict line ---
+  // 優先順位:
+  //  1. statGemScore（統計ベースの隠れた名作度）
+  //  2. reviewQualityScore（旧AIスコア：statGemScore の無い古いデータ用）
+  //  3. hiddenGemScore（props から渡されるフォールバック）
   const gemScore: number | null =
-    typeof ai.reviewQualityScore === "number" ? ai.reviewQualityScore : null;
+    statGemScore !== null
+      ? statGemScore
+      : reviewQualityScore !== null
+        ? reviewQualityScore
+        : Number.isFinite(hiddenGemScore)
+          ? hiddenGemScore
+          : null;
+
 
   // 色付き丸バッジ class
   const gemScoreCircleClass =
@@ -226,11 +267,10 @@ export const SearchResultCard = ({
         aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
       >
         <Heart
-          className={`w-4 h-4 ${
-            isInWishlist
-              ? "fill-red-500 text-red-500"
-              : "text-muted-foreground"
-          }`}
+          className={`w-4 h-4 ${isInWishlist
+            ? "fill-red-500 text-red-500"
+            : "text-muted-foreground"
+            }`}
         />
       </button>
 
@@ -298,13 +338,12 @@ export const SearchResultCard = ({
             {/* Verdict Badge */}
             <Badge
               variant="outline"
-              className={`text-[10px] px-2 py-0.5 rounded-full ${
-                verdict === "Yes"
-                  ? "border-green-500 text-green-400"
-                  : verdict === "Unknown"
-                    ? "border-yellow-500 text-yellow-400"
-                    : "border-red-500 text-red-400"
-              }`}
+              className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
+                ? "border-green-500 text-green-400"
+                : verdict === "Unknown"
+                  ? "border-yellow-500 text-yellow-400"
+                  : "border-red-500 text-red-400"
+                }`}
             >
               AI: {verdict}
             </Badge>
@@ -313,13 +352,12 @@ export const SearchResultCard = ({
             {riskLevel && (
               <Badge
                 variant="outline"
-                className={`text-[10px] px-2 py-0.5 rounded-full ${
-                  riskLevel === "Low"
-                    ? "border-green-500 text-green-400"
-                    : riskLevel === "Medium"
-                      ? "border-yellow-500 text-yellow-400"
-                      : "border-red-500 text-red-400"
-                }`}
+                className={`text-[10px] px-2 py-0.5 rounded-full ${riskLevel === "Low"
+                  ? "border-green-500 text-green-400"
+                  : riskLevel === "Medium"
+                    ? "border-yellow-500 text-yellow-400"
+                    : "border-red-500 text-red-400"
+                  }`}
               >
                 Risk: {riskLevel}
               </Badge>

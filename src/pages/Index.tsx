@@ -18,10 +18,18 @@ interface HiddenGemAnalysis {
   bugRisk: number;
   refundMentions: number;
   reviewQualityScore: number;
+  statGemScore?: number; // ← オプショナルに
   aiError?: boolean;
 }
 
-type GemLabel = "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
+
+type GemLabel =
+  | "Hidden Gem"
+  | "Improved Hidden Gem"
+  | "Emerging Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
+
 
 interface RankingGame {
   appId: number;
@@ -42,6 +50,28 @@ interface RankingGame {
   releaseYear?: number;
   releaseDate?: string;
 }
+
+const isHiddenGemCandidate = (game: RankingGame) => {
+  const statScore =
+    typeof game.analysis?.statGemScore === "number"
+      ? game.analysis.statGemScore
+      : null;
+
+  const verdictYes = game.analysis?.hiddenGemVerdict === "Yes";
+  const labeledHidden =
+    game.gemLabel === "Hidden Gem" ||
+    game.gemLabel === "Improved Hidden Gem";
+  const statisticallyHidden = game.isStatisticallyHidden === true;
+
+  // バックエンドの「隠れた良作」シグナルをすべて尊重
+  return (
+    statisticallyHidden ||
+    labeledHidden ||
+    verdictYes ||
+    (statScore !== null && statScore >= 8)
+  );
+};
+
 
 const QUICK_GENRES = [
   "All",
@@ -85,9 +115,11 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 const Index = () => {
   const navigate = useNavigate();
   const [games, setGames] = useState<RankingGame[]>([]);
+  const [allHiddenGames, setAllHiddenGames] = useState<RankingGame[]>([]); // ★ 追加：全期間 Hidden 用プール
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fallbackMessage, setFallbackMessage] = useState<string>("");
+
 
   useEffect(() => {
     fetchRecentGems();
@@ -116,7 +148,8 @@ const Index = () => {
         }
 
         const list = (data as RankingGame[]) || [];
-        const hidden = list.filter((game) => game.gemLabel === "Hidden Gem");
+        const hidden = list.filter(isHiddenGemCandidate);
+
 
         return { hidden, all: list };
       };
@@ -180,6 +213,12 @@ const Index = () => {
       if (limitedResults.length === 0) {
         toast.info("No hidden gems found matching our quality criteria");
       }
+
+      // ★ Todayʼs Hidden Gems 用：
+      // recentDays に依存しない「全期間 Hidden Gem プール」を取得
+      console.log("Home: fetching all-time hidden gems for Today lane");
+      const { hidden: allTimeHidden } = await fetchForPeriod(null); // recentDays = ""（All time）
+      setAllHiddenGames(allTimeHidden);
     } catch (err) {
       console.error("Exception fetching gems:", err);
       toast.error("An error occurred while loading hidden gems");
@@ -187,7 +226,6 @@ const Index = () => {
       setLoading(false);
     }
   };
-
 
 
 
@@ -207,11 +245,7 @@ const Index = () => {
     });
   }, [games, selectedGenre]);
 
-  // レーン1: 真の Hidden Gems
-  const hiddenGems = useMemo(
-    () => filteredGames.filter((game) => game.gemLabel === "Hidden Gem"),
-    [filteredGames],
-  );
+
 
   // レーン2: Hidden ではないが高評価のタイトル（露出はまだ少なめ）
   const noticedGames = useMemo(
@@ -219,7 +253,8 @@ const Index = () => {
       filteredGames
         .filter(
           (game) =>
-            game.gemLabel !== "Hidden Gem" &&
+            // Hidden Gem 判定に引っかからないものだけを「New & Noticed」に出す
+            !isHiddenGemCandidate(game) &&
             (game.positiveRatio ?? 0) >= 85 &&
             (game.totalReviews ?? 0) >= 50,
         )
@@ -227,8 +262,58 @@ const Index = () => {
     [filteredGames],
   );
 
-  const featuredHiddenGems = hiddenGems.slice(0, 3);
-  const otherHiddenGems = hiddenGems.slice(3);
+  // ★ 「Recent High-Quality Hidden Gems」用のサマリー（ジャンルフィルタなしでそのまま上位だけ）
+  const recentHighQualityGems = useMemo(
+    () => games.slice(0, 6),
+    [games],
+  );
+
+
+  // ★ Todayʼs Hidden Gems 用：
+  // recentDays に関係なく「全期間 Hidden Gems」からランダムでピックアップ
+  const todaysHiddenGems = useMemo(() => {
+    if (allHiddenGames.length === 0) return [];
+
+    // まず全期間 Hidden のプールを用意
+    let pool = allHiddenGames;
+
+    // ジャンルフィルタがあれば、getDisplayTags を使って絞り込み
+    if (selectedGenre) {
+      const target = normalizeTag(selectedGenre);
+      const filteredByGenre = allHiddenGames.filter((game) => {
+        const cardTags = getDisplayTags(game);
+        if (cardTags.length === 0) return false;
+        const normalized = cardTags.map(normalizeTag);
+        return normalized.includes(target);
+      });
+
+      // 該当ジャンルで1件もなければ、全体プールにフォールバック
+      if (filteredByGenre.length > 0) {
+        pool = filteredByGenre;
+      }
+    }
+
+    // Recent High-Quality に出ている appId はできるだけ除外
+    const excludedIds = new Set(recentHighQualityGems.map((g) => g.appId));
+    const candidates = pool.filter((g) => !excludedIds.has(g.appId));
+
+    const base = candidates.length > 0 ? candidates : pool;
+
+    // ランダムシャッフルして、最大 24 件まで（上位3件をfeatured、残りをotherで使う）
+    const shuffled = [...base];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    return shuffled.slice(0, 24);
+  }, [allHiddenGames, selectedGenre, recentHighQualityGems]);
+
+
+
+  const featuredHiddenGems = todaysHiddenGems.slice(0, 3);
+  const otherHiddenGems = todaysHiddenGems.slice(3);
+
 
 
   return (
@@ -358,6 +443,38 @@ const Index = () => {
           </Card>
         ) : (
           <div className="space-y-12">
+            {/* レーン0: Recent High-Quality Hidden Gems（7〜30日の最近タイトル） */}
+            {recentHighQualityGems.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  {/* <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {recentHighQualityGems.length} titles
+                  </span> */}
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {recentHighQualityGems.map((game) => (
+                    <GameCard
+                      key={game.appId}
+                      appId={game.appId}
+                      title={game.title}
+                      hiddenGemScore={game.analysis.statGemScore}
+                      summary={game.analysis.summary}
+                      labels={game.analysis.labels}
+                      positiveRatio={game.positiveRatio}
+                      totalReviews={game.totalReviews}
+                      estimatedOwners={game.estimatedOwners}
+                      price={game.price}
+                      averagePlaytime={game.averagePlaytime}
+                      gameData={game}
+                      analysisData={game.analysis}
+                      releaseDate={game.releaseDate}
+                      releaseYear={game.releaseYear}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
             {/* レーン1: Hidden Gems */}
             {(featuredHiddenGems.length > 0 || otherHiddenGems.length > 0) && (
               <section className="space-y-4">
@@ -369,7 +486,7 @@ const Index = () => {
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                    {hiddenGems.length} titles
+                    {todaysHiddenGems.length} titles
                   </span>
                 </div>
 
@@ -381,7 +498,7 @@ const Index = () => {
                         key={game.appId}
                         appId={game.appId}
                         title={game.title}
-                        hiddenGemScore={game.analysis.reviewQualityScore}
+                        hiddenGemScore={game.analysis.statGemScore}
                         summary={game.analysis.summary}
                         labels={game.analysis.labels}
                         positiveRatio={game.positiveRatio}
@@ -424,6 +541,7 @@ const Index = () => {
                 )}
               </section>
             )}
+
 
             {/* レーン2: 高評価だけど非Hidden（New & Noticed） */}
             {noticedGames.length > 0 && (

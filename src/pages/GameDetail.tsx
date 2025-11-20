@@ -287,8 +287,7 @@ export default function GameDetail() {
       : null;
 
   // …price / tags などの定義の前でOK
-  const aiGemScore =
-    statGemScore !== null ? statGemScore : reviewQualityScore;
+  const aiGemScore = statGemScore ?? reviewQualityScore ?? null;
 
 
   const riskScore =
@@ -356,13 +355,6 @@ export default function GameDetail() {
     if (value >= 7) return "text-destructive";
     if (value >= 4) return "text-warning";
     return "text-success";
-  };
-
-  const getQualityColor = (score: number | null) => {
-    const value = score ?? 0;
-    if (value >= 7) return "text-success";
-    if (value >= 4) return "text-warning";
-    return "text-destructive";
   };
 
   // タイトル付近に出す「安定度バッジ」の内容を決める
@@ -656,25 +648,6 @@ export default function GameDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <div className="flex justify-between text-sm mb-2">
-                  <span>Review Quality</span>
-                  <span
-                    className={`font-semibold ${getQualityColor(
-                      reviewQualityScore
-                    )}`}
-                  >
-                    {reviewQualityScore !== null
-                      ? `${reviewQualityScore}/10`
-                      : "N/A"}
-                  </span>
-                </div>
-                <Progress
-                  value={(reviewQualityScore ?? 0) * 10}
-                  className="h-2.5"
-                />
-              </div>
-
               <div>
                 <div className="flex justify-between text-sm mb-2">
                   <span>Bug Risk</span>
