@@ -42,6 +42,12 @@ interface GameCardProps {
 
   /** featured: larger cards for the top 3 games on the Home page */
   variant?: "default" | "featured";
+  /** 発売日情報（バックエンドから渡す） */
+  releaseDate?: string | null;
+  releaseYear?: number | null;
+
+  /** 0〜5 のレビュー深度スコア（任意） */
+  reviewDepthScore?: number;
 
   // Legacy props for backward compatibility
   hiddenGemVerdict?: string;
@@ -84,6 +90,8 @@ export const GameCard = ({
   steamUrl,
   variant = "default",
   gemLabel,
+  releaseDate,
+  releaseYear,
 }: GameCardProps) => {
   const navigate = useNavigate();
   const isFeatured = variant === "featured";
@@ -108,11 +116,37 @@ export const GameCard = ({
 
   const displayTags = getDisplayTags(tagSource);
 
-  const isFree = price === 0;
-  const priceDisplay = isFree ? "Free" : `$${(price / 100).toFixed(2)}`;
+  // 価格の正規化
+  const normalizedPrice =
+    typeof price === "number" && Number.isFinite(price) ? price : 0;
+  const isFree = normalizedPrice === 0;
+  const priceDisplay = isFree ? "Free" : `$${normalizedPrice.toFixed(2)}`;
+
+  // 発売日の表示用（releaseDate を優先、なければ releaseYear だけ表示）
+  const formattedReleaseDate =
+    releaseDate
+      ? new Date(releaseDate).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+      })
+      : releaseYear
+        ? String(releaseYear)
+        : null;
+
 
   // --- AI / gemLabel 情報を抽出 ---
   const ai = analysisData || gameData?.analysis || {};
+
+  // 統計ベースの AI Gem Score（statGemScore）と、
+  // 旧来の reviewQualityScore を取り出す
+  const statGemScore: number | null =
+    typeof (ai as any).statGemScore === "number" ? (ai as any).statGemScore : null;
+
+  const reviewQualityScore: number | null =
+    typeof (ai as any).reviewQualityScore === "number" ? (ai as any).reviewQualityScore : null;
+
+
 
   const derivedGemLabel: GemLabel | undefined =
     gemLabel ??
@@ -164,40 +198,103 @@ export const GameCard = ({
     }
   }
 
+  // --- AI 情報の抽出（SearchResultCard と同じロジック） ---
+
+  const positiveDisplay = Number.isFinite(positiveRatio)
+    ? Math.round(positiveRatio)
+    : 0;
+
+  const verdict: "Yes" | "No" | "Unknown" =
+    ai.hiddenGemVerdict ?? hiddenGemVerdict ?? "Unknown";
+
+  const combinedRiskScore =
+    typeof ai.riskScore === "number"
+      ? ai.riskScore
+      : typeof riskScore === "number"
+        ? riskScore
+        : null;
+
+  const riskLevel =
+    combinedRiskScore == null
+      ? null
+      : combinedRiskScore <= 3
+        ? "Low"
+        : combinedRiskScore <= 6
+          ? "Medium"
+          : "High";
+
+  // Gem スコア（カード右側に表示する唯一のスコア）
+  // 優先順位:
+  //  1. statGemScore（統計ベースの隠れた名作度）
+  //  2. reviewQualityScore（旧AIスコア・移行期間用のバックアップ）
+  //  3. hiddenGemScore（props からのフォールバック）
+  const gemScore: number | null =
+    statGemScore !== null
+      ? statGemScore
+      : reviewQualityScore !== null
+        ? reviewQualityScore
+        : typeof hiddenGemScore === "number"
+          ? hiddenGemScore
+          : null;
+
+
+
+  const gemScoreCircleClass =
+    gemScore === null
+      ? "bg-muted text-muted-foreground"
+      : gemScore >= 8
+        ? "bg-emerald-500 text-emerald-50"
+        : gemScore >= 6
+          ? "bg-yellow-500 text-yellow-900"
+          : "bg-red-500 text-red-50";
+
+  const aiRecommendsLabel =
+    verdict === "Yes"
+      ? "AI strongly recommends this title."
+      : verdict === "Unknown"
+        ? "AI is cautiously positive based on limited data."
+        : verdict === "No"
+          ? "AI does not recommend this title."
+          : null;
+
+
   const handleViewDetails = () => {
     navigate(`/game/${appId}`, {
       state:
         gameData && analysisData
           ? {
-              gameData,
-              analysisData,
-            }
+            gameData,
+            analysisData,
+          }
           : {
-              appId,
-              title,
-              hiddenGemVerdict,
-              gemLabel: derivedGemLabel,
-              summary,
-              labels,
-              pros,
-              cons,
-              riskScore,
-              bugRisk,
-              refundMentions,
-              reviewScoreDesc,
-              positiveRatio,
-              totalReviews,
-              estimatedOwners,
-              price,
-              averagePlaytime,
-              tags,
-              steamUrl,
-            },
+            appId,
+            title,
+            hiddenGemVerdict,
+            gemLabel: derivedGemLabel,
+            summary,
+            labels,
+            pros,
+            cons,
+            riskScore,
+            bugRisk,
+            refundMentions,
+            reviewScoreDesc,
+            positiveRatio,
+            totalReviews,
+            estimatedOwners,
+            price,
+            averagePlaytime,
+            tags,
+            steamUrl,
+          },
     });
   };
 
   return (
-    <Card className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 overflow-hidden rounded-xl shadow-sm hover:shadow-md">
+    <Card
+      className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md"
+      onClick={handleViewDetails}
+    >
       {/* Wishlist heart button */}
       <button
         type="button"
@@ -205,113 +302,167 @@ export const GameCard = ({
           e.stopPropagation();
           toggle(appIdStr);
         }}
-        className="absolute top-3 right-3 z-10 rounded-full p-2 bg-background/80 hover:bg-background shadow-sm border border-border/50"
+        className="absolute top-3 right-3 rounded-full p-2 bg-background/80 hover:bg-background shadow-sm border border-border/50"
         aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
       >
-        <Heart className={`w-4 h-4 ${isInWishlist ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+        <Heart
+          className={`w-4 h-4 ${isInWishlist
+            ? "fill-red-500 text-red-500"
+            : "text-muted-foreground"
+            }`}
+        />
       </button>
 
-      {/* Header image with gradient overlay */}
-      <div className="relative">
-        <img
-          src={headerImageUrl}
-          alt={title}
-          loading="lazy"
-          className={`w-full object-cover ${isFeatured ? "h-52 md:h-64" : "h-40 md:h-48"}`}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/30 to-transparent" />
+      <div className="flex flex-col sm:flex-row gap-4 p-4">
+        {/* Left: Header Image */}
+        <div className="flex-shrink-0">
+          <img
+            src={headerImageUrl}
+            alt={title}
+            loading="lazy"
+            className="w-full sm:w-40 h-24 sm:h-auto object-cover rounded"
+          />
+        </div>
 
-        {/* Title + Gem Score badge */}
-        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3
-                className={`font-semibold line-clamp-2 ${
-                  isFeatured ? "text-lg md:text-xl" : "text-base md:text-lg"
-                }`}
+        {/* Middle: Title, Release, Summary, Tags, AI Verdict/Risk */}
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-lg line-clamp-2">{title}</h3>
+
+            {/* gemLabel バッジ */}
+            {gemBadgeText && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${gemBadgeClass}`}
               >
-                {title}
-              </h3>
-
-              {/* gemLabel バッジ */}
-              {gemBadgeText && (
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${gemBadgeClass}`}
-                >
-                  {GemIcon && <GemIcon className="w-3 h-3" />}
-                  <span className="leading-none">{gemBadgeText}</span>
-                </span>
-              )}
-            </div>
-
-            <p
-              className={`text-xs text-muted-foreground line-clamp-2 ${
-                isFeatured ? "md:line-clamp-3" : ""
-              }`}
-            >
-              {safeSummary}
-            </p>
+                {GemIcon && <GemIcon className="w-3 h-3" />}
+                <span className="leading-none">{gemBadgeText}</span>
+              </span>
+            )}
           </div>
 
-          <div className="flex flex-col items-center shrink-0">
-            <div className="rounded-full bg-primary text-primary-foreground w-14 h-14 flex items-center justify-center text-xl font-bold shadow-lg border border-primary/70">
-              {hiddenGemScore}
+          {formattedReleaseDate && (
+            <p className="text-[11px] text-muted-foreground">
+              Release: {formattedReleaseDate}
+            </p>
+          )}
+
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {safeSummary}
+          </p>
+
+          {displayTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {displayTags.map((label, i) => (
+                <Badge
+                  key={`${label}-${i}`}
+                  variant="secondary"
+                  className="text-xs px-2 py-0.5 rounded-full"
+                >
+                  {label}
+                </Badge>
+              ))}
             </div>
-            <span className="text-[10px] mt-1 text-primary-foreground/90 drop-shadow">
-              Gem Score
+          )}
+
+          {/* AI Verdict & Risk badges */}
+          <div className="flex flex-wrap gap-1 mt-1">
+            {/* Verdict Badge */}
+            <Badge
+              variant="outline"
+              className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
+                ? "border-green-500 text-green-400"
+                : verdict === "Unknown"
+                  ? "border-yellow-500 text-yellow-400"
+                  : "border-red-500 text-red-400"
+                }`}
+            >
+              AI: {verdict}
+            </Badge>
+
+            {/* Risk Level Badge */}
+            {riskLevel && (
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-2 py-0.5 rounded-full ${riskLevel === "Low"
+                  ? "border-green-500 text-green-400"
+                  : riskLevel === "Medium"
+                    ? "border-yellow-500 text-yellow-400"
+                    : "border-red-500 text-red-400"
+                  }`}
+              >
+                Risk: {riskLevel}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Gem Score + Stats */}
+        <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:gap-2 flex-shrink-0">
+          <div className="flex flex-col items-center">
+            <div
+              className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
+            >
+              {gemScore !== null ? gemScore.toFixed(1) : "N/A"}
+            </div>
+            <span className="text-[10px] mt-0.5 text-muted-foreground">
+              AI Gem Score
             </span>
+          </div>
+
+          {aiRecommendsLabel && (
+            <p className="text-[10px] text-muted-foreground text-right">
+              {aiRecommendsLabel}
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 text-xs text-right">
+            <div>
+              <div className="text-muted-foreground">Positive</div>
+              <div className="font-semibold text-primary">
+                {positiveDisplay}%
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Reviews</div>
+              <div className="font-semibold">
+                {totalReviews?.toLocaleString?.() ?? "-"}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Owners</div>
+              <div className="font-semibold">
+                {estimatedOwners?.toLocaleString?.() ?? "-"}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground">Value</div>
+              <div className="font-semibold">
+                {isFree
+                  ? `Free / ${averagePlaytime}h`
+                  : `${priceDisplay} / ${averagePlaytime}h`}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
-
-      {/* Body */}
-      <CardContent className="space-y-4 pt-4">
-        {/* Tags / labels */}
-        {displayTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {displayTags.map((label, i) => (
-              <Badge key={`${label}-${i}`} variant="secondary" className="text-xs px-2 py-0.5 rounded-full">
-                {label}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        {/* Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <div className="text-muted-foreground text-xs uppercase tracking-wide">Positive</div>
-            <div className="font-semibold text-primary">{Math.round(positiveRatio)}%</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground text-xs uppercase tracking-wide">Reviews</div>
-            <div className="font-semibold">{totalReviews?.toLocaleString?.() ?? "-"}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground text-xs uppercase tracking-wide">Owners</div>
-            <div className="font-semibold">{estimatedOwners?.toLocaleString?.() ?? "-"}</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground text-xs uppercase tracking-wide">Value</div>
-            <div className="font-semibold">
-              {isFree ? `Free / ${averagePlaytime}h` : `${priceDisplay} / ${averagePlaytime}h`}
-            </div>
-          </div>
-        </div>
-
-        {/* View details button */}
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleViewDetails}
-            className="text-primary hover:text-primary/80 px-0 h-auto"
-          >
-            View details
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
-      </CardContent>
+      {/* View details ボタン（カード右下） */}
+      <div className="flex justify-end px-4 pb-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleViewDetails();
+          }}
+          className="text-primary hover:text-primary/80 px-0 h-auto"
+        >
+          View details
+          <ArrowRight className="w-4 h-4 ml-2" />
+        </Button>
+      </div>
     </Card>
   );
 };
+
+

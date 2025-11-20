@@ -51,12 +51,15 @@ interface AnalysisData {
   bugRisk?: number;
   refundMentions?: number;
   reviewQualityScore?: number;
+  // ★ 追加: 統計ベースの「隠れた名作度」スコア
+  statGemScore?: number;
   // 追加: 「今と昔」系の情報
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
   hasImprovedSinceLaunch?: boolean;
 }
+
 
 interface GameDetailState {
   appId?: string | number;
@@ -74,6 +77,8 @@ interface GameDetailState {
     reviewScoreDesc?: string;
     gemLabel?: GemLabel;
     analysis?: AnalysisData;
+    releaseDate?: string | null;
+    releaseYear?: number | null;
   };
   analysisData?: AnalysisData;
   // Legacy props for backward compatibility
@@ -95,6 +100,8 @@ interface GameDetailState {
   tags?: string[];
   steamUrl?: string;
   reviewScoreDesc?: string;
+  releaseDate?: string | null;
+  releaseYear?: number | null;
   // レガシー経由でも拾えるようにしておく
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
@@ -161,6 +168,8 @@ export default function GameDetail() {
       // fallback 側にも gemLabel / analysis を用意しておく
       gemLabel: game.gemLabel as GameData["gemLabel"],
       analysis: game.analysisData as GameData["analysis"],
+      releaseDate: game.releaseDate ?? null,
+      releaseYear: game.releaseYear ?? null,
     } as GameData);
 
   // Steam から取得した最新情報があれば優先する
@@ -224,6 +233,14 @@ export default function GameDetail() {
             steamUrl: data.steam_url ?? gameData.steamUrl,
             reviewScoreDesc:
               data.review_score_desc ?? gameData.reviewScoreDesc,
+            releaseDate:
+              data.release_date ??
+              (prev ?? gameData).releaseDate ??
+              null,
+            releaseYear:
+              data.release_year ??
+              (prev ?? gameData).releaseYear ??
+              null,
             gemLabel: gameData.gemLabel,
             analysis: gameData.analysis,
           }));
@@ -263,6 +280,17 @@ export default function GameDetail() {
       ? analysisData.reviewQualityScore
       : null;
 
+  // ★ 統計ベースの隠れた名作度スコア（1〜10）
+  const statGemScore =
+    typeof analysisData.statGemScore === "number"
+      ? analysisData.statGemScore
+      : null;
+
+  // …price / tags などの定義の前でOK
+  const aiGemScore =
+    statGemScore !== null ? statGemScore : reviewQualityScore;
+
+
   const riskScore =
     typeof analysisData.riskScore === "number"
       ? analysisData.riskScore
@@ -288,6 +316,21 @@ export default function GameDetail() {
   const tags = baseGame.tags || [];
   const steamUrl = baseGame.steamUrl;
   const reviewScoreDesc = baseGame.reviewScoreDesc;
+
+  const releaseDateValue =
+    baseGame.releaseDate ?? game.releaseDate ?? null;
+  const releaseYearValue =
+    baseGame.releaseYear ?? game.releaseYear ?? null;
+  const formattedReleaseDate =
+    releaseDateValue
+      ? new Date(releaseDateValue).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+      })
+      : releaseYearValue
+        ? String(releaseYearValue)
+        : null;
 
   const isFree = price === 0;
   const normalizedPrice =
@@ -397,6 +440,11 @@ export default function GameDetail() {
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
               <div className="flex-1 space-y-2">
                 <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
+                {formattedReleaseDate && (
+                  <p className="text-sm text-muted-foreground">
+                    Release: {formattedReleaseDate}
+                  </p>
+                )}
 
                 {/* 安定度ステータスバッジ（今と昔） */}
                 {stabilityBadge && (
@@ -436,8 +484,8 @@ export default function GameDetail() {
                 </div>
                 <div className="flex items-baseline justify-center gap-1 mb-2">
                   <span className="text-5xl font-bold text-primary">
-                    {reviewQualityScore !== null
-                      ? reviewQualityScore.toFixed(1)
+                    {aiGemScore !== null
+                      ? aiGemScore.toFixed(1)
                       : "N/A"}
                   </span>
                   <span className="text-2xl text-muted-foreground">/10</span>

@@ -45,6 +45,11 @@ export function ImportSteamGamesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
 
+    // ★ ここから AI 解析オプション用の state を追加
+  const [runAiAfterImport, setRunAiAfterImport] = useState(false);
+  const [maxAiCount, setMaxAiCount] = useState("20");
+  const [isAiRunning, setIsAiRunning] = useState(false);
+
   // 新規：条件インポート
   const [recentDays, setRecentDays] = useState("90");
   const [minPositivePercent, setMinPositivePercent] = useState("85");
@@ -269,6 +274,57 @@ export function ImportSteamGamesPage() {
     }
   };
 
+  const runAiAnalysisForCandidates = async () => {
+  if (previewCandidates.length === 0) {
+    toast({
+      title: "No candidates to analyze",
+      description:
+        'まず "Preview candidates" を実行して候補を表示してください。',
+      variant: "destructive",
+    });
+    return;
+  }
+
+  const max = Number(maxAiCount);
+  const limit =
+    Number.isFinite(max) && max > 0
+      ? Math.min(max, previewCandidates.length)
+      : previewCandidates.length;
+
+  const targets = previewCandidates.slice(0, limit);
+
+  setIsAiRunning(true);
+  try {
+    for (let i = 0; i < targets.length; i++) {
+      const appId = targets[i].appId;
+
+      const { data, error } = await supabase.functions.invoke(
+        "search-hidden-gems",
+        {
+          body: { appId },
+        }
+      );
+
+      console.log("search-hidden-gems result", { appId, data, error });
+
+      if (error) {
+        console.error("AI analysis error for appId", appId, error);
+        // 全体は止めず、次へ
+      }
+    }
+
+    toast({
+      title: "AI analysis completed",
+      description: `Ran analysis for ${targets.length} games via search-hidden-gems.`,
+    });
+  } finally {
+    setIsAiRunning(false);
+  }
+};
+
+
+
+
   const handleRunFilterImport = async () => {
     const payload = buildFilterPayload(false);
 
@@ -309,6 +365,10 @@ export function ImportSteamGamesPage() {
         title: "Filtered import completed",
         description: `Imported ${data.inserted} games (total candidates: ${data.totalCandidates}).`,
       });
+      // ★ ここで AI 解析オプションを実行
+      if (runAiAfterImport) {
+        await runAiAnalysisForCandidates();
+      }
     } finally {
       setIsFilterImporting(false);
     }
@@ -487,21 +547,52 @@ export function ImportSteamGamesPage() {
             </div>
           </div>
 
+                    {/* AI 解析オプション */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mt-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={runAiAfterImport}
+                onChange={(e) => setRunAiAfterImport(e.target.checked)}
+              />
+              <span>After import, run AI analysis for candidates</span>
+            </label>
+
+            <div className="flex items-center gap-2 text-xs">
+              <span>Max AI analyses</span>
+              <Input
+                type="number"
+                className="w-20 h-7 text-xs"
+                value={maxAiCount}
+                onChange={(e) => setMaxAiCount(e.target.value)}
+                disabled={!runAiAfterImport}
+              />
+              {isAiRunning && (
+                <span className="text-muted-foreground">
+                  Running AI...
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2">
+            {/* 既存のボタンたち（上から少しだけ変更） */}
             <Button
               variant="outline"
               onClick={handlePreviewFilterImport}
-              disabled={isPreviewLoading || isFilterImporting}
+              disabled={isPreviewLoading || isFilterImporting || isAiRunning}
             >
               {isPreviewLoading ? "Previewing..." : "Preview candidates"}
             </Button>
             <Button
               onClick={handleRunFilterImport}
-              disabled={isFilterImporting}
+              disabled={isPreviewLoading || isFilterImporting || isAiRunning}
             >
               {isFilterImporting ? "Importing..." : "Import filtered games"}
             </Button>
           </div>
+
 
           {filterStats && (
             <p className="text-xs text-muted-foreground">

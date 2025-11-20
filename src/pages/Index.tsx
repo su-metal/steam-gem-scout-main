@@ -391,6 +391,8 @@ const Index = () => {
                         averagePlaytime={game.averagePlaytime}
                         gameData={game}
                         analysisData={game.analysis}
+                        releaseDate={game.releaseDate}
+                        releaseYear={game.releaseYear}
                       />
                     ))}
                   </div>
@@ -414,6 +416,8 @@ const Index = () => {
                         averagePlaytime={game.averagePlaytime}
                         gameData={game}
                         analysisData={game.analysis}
+                        releaseDate={game.releaseDate}
+                        releaseYear={game.releaseYear}
                       />
                     ))}
                   </div>
@@ -452,6 +456,8 @@ const Index = () => {
                       averagePlaytime={game.averagePlaytime}
                       gameData={game}
                       analysisData={game.analysis}
+                      releaseDate={game.releaseDate}
+                      releaseYear={game.releaseYear}
                     />
                   ))}
                 </div>

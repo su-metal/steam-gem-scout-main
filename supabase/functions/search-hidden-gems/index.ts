@@ -92,6 +92,129 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
   }
 }
 
+function computeStatGemScore(params: {
+  positiveRatio: number;
+  totalReviews: number;
+  estimatedOwners: number;
+  averagePlaytime: number;
+  isStatisticallyHidden: boolean;
+}): number {
+  const {
+    positiveRatio,
+    totalReviews,
+    estimatedOwners,
+    averagePlaytime,
+    isStatisticallyHidden,
+  } = params;
+
+  // 1) レビュー密度（所有者あたりのレビュー数）
+  //    例: 10,000人中 300レビュー → 30 / 1000人
+  let reviewsPerThousand = 0;
+  if (estimatedOwners > 0 && totalReviews > 0) {
+    reviewsPerThousand = (totalReviews / estimatedOwners) * 1000;
+  }
+  // 0〜1 に正規化。20件/1000人でほぼ満点、それ以上は頭打ち
+  const reviewDensityScore = Math.min(reviewsPerThousand / 20, 1);
+
+  // 2) 高評価率（75〜100% を 0〜1 にマッピング）
+  let positivityScore = 0.5;
+  if (positiveRatio > 0) {
+    const shifted = (positiveRatio - 75) / 25; // 75% 未満→マイナス
+    positivityScore = Math.max(0, Math.min(1, shifted));
+  }
+
+  // 3) 所有者が少ないほど「隠れ度」が高い
+  //    estimatedOwners が 10^2〜10^6 くらいにいる想定で log10 を使う
+  let ownerHiddenScore = 0.5;
+  if (estimatedOwners > 0) {
+    const logOwners = Math.log10(estimatedOwners); // 例: 1万→4, 100万→6
+    const normalized = Math.min(logOwners / 6, 1); // 0〜1
+    ownerHiddenScore = 1 - normalized; // 所有者が少ないほど 1 に近い
+  }
+
+  // 4) 平均プレイ時間（10時間=600分くらいで頭打ち）
+  let playtimeScore = 0;
+  if (averagePlaytime > 0) {
+    playtimeScore = Math.min(averagePlaytime / 600, 1);
+  }
+
+  // 5) 既存の isStatisticallyHidden フラグ
+  const hiddenFlagScore = isStatisticallyHidden ? 1 : 0;
+
+  // ---- 重み付け合成（0〜1）----
+  const score01 =
+    reviewDensityScore * 0.35 + // レビュー密度を最重視
+    positivityScore * 0.25 +
+    ownerHiddenScore * 0.2 +
+    playtimeScore * 0.1 +
+    hiddenFlagScore * 0.1;
+
+  // 1〜10 に変換して小数1桁に丸める
+  let score10 = 1 + score01 * 9;
+  if (score10 < 1) score10 = 1;
+  if (score10 > 10) score10 = 10;
+
+  return Math.round(score10 * 10) / 10;
+}
+
+
+async function updateGameRankingsCacheFromRanking(
+  rankingGame: RankingGameData
+) {
+  const nowIso = new Date().toISOString();
+
+  // appId で該当のランキングキャッシュを1件取得
+  // ※もしカラム名が違う場合は eq("appId", ...) の部分を実際のカラム名に合わせてください
+  const { data, error } = await supabase
+    .from("game_rankings_cache")
+    .select("id, data")
+    .contains("data", { appId: rankingGame.appId })
+    .limit(1);
+
+  if (error) {
+    console.error(
+      "game_rankings_cache select error for appId",
+      rankingGame.appId,
+      error
+    );
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    console.warn(
+      "game_rankings_cache row not found for appId",
+      rankingGame.appId
+    );
+    return;
+  }
+
+  const row = data[0] as { id: string | number; data: any };
+
+  // 既存 data を維持しつつ analysis / gemLabel だけ上書き
+  const mergedData = {
+    ...(row.data || {}),
+    analysis: rankingGame.analysis,
+    gemLabel: rankingGame.gemLabel,
+    lastUpdated: rankingGame.lastUpdated ?? new Date().toISOString(),
+  };
+
+  const { error: updateError } = await supabase
+    .from("game_rankings_cache")
+    .update({
+      data: mergedData,
+    })
+    .eq("id", row.id);
+
+  if (updateError) {
+    console.error(
+      "game_rankings_cache update error for appId",
+      rankingGame.appId,
+      updateError
+    );
+  }
+}
+
+
 type ImportResult = {
   appId: number;
   status: "ok" | "error";
@@ -162,6 +285,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         //   もう game_rankings_cache には一切触らず、
         //   倉庫テーブル（steam_games）にだけ保存する
         await upsertSteamGameFromRanking(rankingGame);
+        await updateGameRankingsCacheFromRanking(rankingGame);
 
         results.push({ appId, status: "ok" });
       } catch (e) {
@@ -638,6 +762,22 @@ async function fetchAndBuildRankingGame(
     gemLabel = "Not a hidden gem"; // or "Declining title" 作ってもOK
   }
 
+    // 統計ベースの「隠れた名作」スコアを計算（1〜10）
+  const statGemScore = computeStatGemScore({
+    positiveRatio,
+    totalReviews,
+    estimatedOwners,
+    averagePlaytime,
+    isStatisticallyHidden,
+  });
+
+  // analysis に statGemScore を埋め込む
+  const enrichedAnalysis: GameAnalysis = {
+    ...analysis,
+    statGemScore,
+  };
+
+
   const rankingGame: RankingGameData = {
     appId,
     title,
@@ -651,7 +791,7 @@ async function fetchAndBuildRankingGame(
     tags,
     steamUrl: `https://store.steampowered.com/app/${appId}`,
     reviewScoreDesc,
-    analysis, // ← ここに AI の結果が入る
+    analysis: enrichedAnalysis,
     gemLabel,
     isStatisticallyHidden,
     releaseDate: releaseDateStr,
