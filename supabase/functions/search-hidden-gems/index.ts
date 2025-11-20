@@ -59,6 +59,8 @@ interface RankingGameData {
 }
 
 async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
+  const nowIso = new Date().toISOString();
+
   const { error } = await supabase.from("steam_games").upsert(
     {
       app_id: rankingGame.appId,
@@ -71,14 +73,22 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
       tags: rankingGame.tags,
       steam_url: rankingGame.steamUrl,
       review_score_desc: rankingGame.reviewScoreDesc,
-      // 「いつ取得したか」は今の時刻でOK
-      last_steam_fetch_at: new Date().toISOString(),
+
+      // ★ 追加したカラム
+      release_date: rankingGame.releaseDate ?? nowIso,
+      release_year: rankingGame.releaseYear ?? null,
+      is_statistically_hidden: rankingGame.isStatisticallyHidden ?? false,
+      is_available_in_store: rankingGame.isAvailableInStore ?? true,
+
+      // 取得日時
+      last_steam_fetch_at: nowIso,
     },
     { onConflict: "app_id" }
   );
 
   if (error) {
     console.error("steam_games upsert error", error);
+    // 必要ならここで throw error; にしてプレビュー側にも失敗を返してもOK
   }
 }
 

@@ -149,6 +149,9 @@ Deno.serve(async (req) => {
       tags,
       limit,
       dryRun,
+      // ★ 追加: 発売年月フィルタ
+      releaseFrom,
+      releaseTo,
     } = body as any;
 
     if (
@@ -157,7 +160,9 @@ Deno.serve(async (req) => {
       minTotalReviews == null &&
       maxEstimatedOwners == null &&
       maxPrice == null &&
-      (!tags || !Array.isArray(tags) || tags.length === 0)
+      (!tags || !Array.isArray(tags) || tags.length === 0) &&
+      !releaseFrom &&
+      !releaseTo
     ) {
       return new Response(
         JSON.stringify({
@@ -179,6 +184,8 @@ Deno.serve(async (req) => {
       maxPrice,
       tags,
       limit,
+      releaseFrom,
+      releaseTo,
     });
 
     // dryRun: true → プレビュー用。DB には書かない
@@ -233,6 +240,9 @@ type FilterParams = {
   maxPrice?: number;
   tags?: string[];
   limit?: number;
+  // ★ 追加: 発売年月フィルタ（"YYYY-MM" 形式）
+  releaseFrom?: string; // 例: "2017-01"
+  releaseTo?: string; // 例: "2017-12"
 };
 
 function buildRankingGameFromSteamRow(row: any): RankingGame {
@@ -244,7 +254,7 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   const estimatedOwners: number = row.estimated_owners ?? 0;
   const recentPlayers: number = 0; // steam_games には現状含めていないので 0 で初期化
 
-  const price: number = row.price ?? 0;
+  const price: number = row.price ?? 0; // USD (例: 19.99)
   const averagePlaytime: number = row.average_playtime ?? 0;
 
   const tags: string[] = Array.isArray(row.tags) ? row.tags : [];
@@ -254,11 +264,40 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
 
   const reviewScoreDesc: string = row.review_score_desc ?? "Unknown";
 
-  // 倉庫の「取得日」を releaseDate としてそのまま使う（プレビューと同じ挙動）
-  const releaseDateStr: string = row.last_steam_fetch_at ?? "";
+  // ★ 本当の発売日を使う。なければ最後の取得日時でフォールバック
+  const releaseDateStr: string =
+    row.release_date ?? row.last_steam_fetch_at ?? "";
   const releaseYear: number = parseReleaseYear(releaseDateStr);
 
   const nowIso = new Date().toISOString();
+  const currentYear = new Date().getFullYear();
+
+  // ---- ここから hidden_gem_candidates 用の統計フィルタ ----
+  // price は cents 想定なのでドルに変換
+  const priceUsd = price;
+
+  // 1) total_reviews: 30〜5000
+  const withinReviewRange = totalReviews >= 30 && totalReviews <= 5000;
+
+  // 2) positive_ratio: 90%以上
+  const highPositiveRatio = positiveRatio >= 90;
+
+  // 3) owners: 〜20万
+  const ownersInRange = estimatedOwners > 0 && estimatedOwners <= 200_000;
+
+  // 4) price: 2〜40ドル
+  const priceInRange = priceUsd >= 2 && priceUsd <= 40;
+
+  // 5) release_year: 直近5年以内（※現状は last_steam_fetch_at から年だけ抜いた近似）
+  const releaseRecentEnough = releaseYear > 0 && currentYear - releaseYear <= 5;
+
+  const isStatisticallyHidden =
+    withinReviewRange &&
+    highPositiveRatio &&
+    ownersInRange &&
+    priceInRange &&
+    releaseRecentEnough;
+  // ---- ここまで hidden_gem_candidates 判定 ----
 
   const rankingGame: RankingGame = {
     appId,
@@ -275,9 +314,10 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     reviewScoreDesc,
     // ランキング生成時点では AI 解析は未実行なので null
     analysis: null,
-    // gemLabel / isStatisticallyHidden も AI 解析 or 別プロセスで後から設定
+    // gemLabel は後から AI/別処理で更新
     gemLabel: "",
-    isStatisticallyHidden: false,
+    // ★ 統計ベースの「隠れ良作候補」フラグ
+    isStatisticallyHidden,
     releaseDate: releaseDateStr,
     releaseYear,
     isAvailableInStore: true,
@@ -285,7 +325,6 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
 
   return rankingGame;
 }
-
 
 async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   inserted: number;
@@ -306,7 +345,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   }
 
   // まず倉庫テーブル steam_games から、対象 appId の行をまとめて取得
-  const { data: steamRows, error } = await supabase
+    const { data: steamRows, error } = await supabase
     .from("steam_games")
     .select(
       `
@@ -320,10 +359,13 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         tags,
         steam_url,
         review_score_desc,
+        release_date,
+        release_year,
         last_steam_fetch_at
       `
     )
     .in("app_id", appIds);
+
 
   if (error) {
     console.error("supabase steam_games fetch error", error);
@@ -426,9 +468,6 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   return { inserted, skippedExisting, results };
 }
 
-
-
-
 async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
   candidates: ImportCandidate[];
   totalCandidates: number;
@@ -441,6 +480,9 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
     maxPrice,
     tags,
     limit = 200,
+    // ★ 追加
+    releaseFrom,
+    releaseTo,
   } = params;
 
   let query = supabase.from("steam_games").select(
@@ -452,16 +494,38 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
         estimated_owners,
         price,
         tags,
+        release_date,
+        release_year,
         last_steam_fetch_at
       `,
     { count: "exact" }
   );
 
   // 直近◯日フィルタ（last_steam_fetch_at 基準）
+  // 直近◯日フィルタ（last_steam_fetch_at 基準）
   if (recentDays && recentDays > 0) {
     const since = new Date();
     since.setDate(since.getDate() - recentDays);
     query = query.gte("last_steam_fetch_at", since.toISOString());
+  }
+
+  // ★ 発売年月フィルタ（"YYYY-MM" を期待）
+  if (releaseFrom) {
+    // "YYYY-MM" → "YYYY-MM-01"
+    const fromDate = `${releaseFrom}-01`;
+    query = query.gte("release_date", fromDate);
+  }
+
+  if (releaseTo) {
+    const [y, m] = releaseTo.split("-").map((v: string) => Number(v));
+    if (y && m) {
+      const lastDay = new Date(y, m, 0).getDate(); // 月末日
+      const toDate = `${releaseTo}-${String(lastDay).padStart(
+        2,
+        "0"
+      )}T23:59:59Z`;
+      query = query.lte("release_date", toDate);
+    }
   }
 
   if (minPositiveRatio != null) {
@@ -503,8 +567,8 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
       estimatedOwners: row.estimated_owners ?? 0,
       price: row.price ?? 0,
       tags: row.tags ?? [],
-      // フロントでは「取得日」として使える
-      releaseDate: row.last_steam_fetch_at ?? undefined,
+      // ★ 発売日があればそちらを優先、なければ取得日時
+      releaseDate: row.release_date ?? row.last_steam_fetch_at ?? undefined,
     })) ?? [];
 
   return {

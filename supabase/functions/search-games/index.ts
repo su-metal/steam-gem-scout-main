@@ -39,6 +39,92 @@ const toNumber = (val: any, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+// ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
+//   指標: positive_ratio / reviews / owners / price / playtime / release_year
+//   重み: 40 / 20 / 15 / 10 / 10 / 5
+const computeBaseScore = (g: {
+  positiveRatio: number;
+  totalReviews: number;
+  estimatedOwners: number;
+  price: number;            // cents
+  averagePlaytime: number;  // hours 想定
+  releaseYear: number;
+}) => {
+  const currentYear = new Date().getFullYear();
+
+  // 1) positive_ratio: 0〜100 → 0〜1
+  const pr = Math.max(0, Math.min(100, g.positiveRatio));
+  const positiveScore = pr / 100;
+
+  // 2) reviews: 30〜5000 を log スケールで 0〜1
+  let reviewsScore = 0;
+  if (g.totalReviews > 0) {
+    const minR = 30;
+    const maxR = 5000;
+    const clamped = Math.min(maxR, Math.max(minR, g.totalReviews));
+    const logMin = Math.log10(minR);
+    const logMax = Math.log10(maxR);
+    reviewsScore = (Math.log10(clamped) - logMin) / (logMax - logMin);
+    if (!Number.isFinite(reviewsScore)) reviewsScore = 0;
+    reviewsScore = Math.max(0, Math.min(1, reviewsScore));
+  }
+
+  // 3) owners:「隠れ度」重視。〜20k なら満点、200k で 0 に落ちる
+  let ownersScore = 0;
+  if (g.estimatedOwners > 0) {
+    const ideal = 20000;   // ここまでは「かなり隠れてる」
+    const maxOwners = 200000;
+    const clamped = Math.min(maxOwners, Math.max(0, g.estimatedOwners));
+    if (clamped <= ideal) {
+      ownersScore = 1;
+    } else {
+      ownersScore = 1 - (clamped - ideal) / (maxOwners - ideal);
+    }
+    ownersScore = Math.max(0, Math.min(1, ownersScore));
+  }
+
+  // 4) price: 2〜40ドルを想定。安いほど高スコア
+  let priceScore = 0;
+  if (g.price > 0) {
+    const priceUsd = g.price;
+    const minPrice = 2;
+    const maxPrice = 40;
+    const clamped = Math.min(maxPrice, Math.max(minPrice, priceUsd));
+    priceScore = 1 - (clamped - minPrice) / (maxPrice - minPrice); // 2ドルで1, 40ドルで0
+    priceScore = Math.max(0, Math.min(1, priceScore));
+  }
+
+  // 5) playtime: 0〜50時間を 0〜1 に正規化（長く遊ばれているほど高評価）
+  let playtimeScore = 0;
+  if (g.averagePlaytime > 0) {
+    const maxPlay = 50;
+    const clamped = Math.min(maxPlay, Math.max(0, g.averagePlaytime));
+    playtimeScore = clamped / maxPlay;
+    playtimeScore = Math.max(0, Math.min(1, playtimeScore));
+  }
+
+  // 6) release_year: 新しいほど高スコア。10年差までを見る
+  let yearScore = 0.5;
+  if (g.releaseYear && Number.isFinite(g.releaseYear)) {
+    const diff = Math.max(0, Math.min(10, currentYear - g.releaseYear));
+    yearScore = 1 - diff / 10; // 今年=1, 10年前=0
+    yearScore = Math.max(0, Math.min(1, yearScore));
+  }
+
+  // 重み付け合計（重みは 40/20/15/10/10/5 = 100）
+  const score =
+    positiveScore * 40 +
+    reviewsScore * 20 +
+    ownersScore * 15 +
+    priceScore * 10 +
+    playtimeScore * 10 +
+    yearScore * 5;
+
+  // 少しだけ見やすく 0.1 刻みに丸める（好みで変えてOK）
+  return Math.round(score * 10) / 10;
+};
+
+
 Deno.serve(async (req: Request): Promise<Response> => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -94,53 +180,73 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .filter((g) => g && g.appId != null);
 
     const mapped = rawGames.map((g) => {
-      const analysisRaw =
-        typeof g.analysis === "string"
-          ? (() => {
-              try {
-                return JSON.parse(g.analysis);
-              } catch {
-                return {};
-              }
-            })()
-          : g.analysis ?? {};
+  const analysisRaw =
+    typeof g.analysis === "string"
+      ? (() => {
+          try {
+            return JSON.parse(g.analysis);
+          } catch {
+            return {};
+          }
+        })()
+      : g.analysis ?? {};
 
-      return {
-        appId: toNumber(g.appId, 0),
-        title: g.title ?? `App ${g.appId}`,
-        positiveRatio: toNumber(g.positiveRatio, 0),
-        totalReviews: toNumber(g.totalReviews, 0),
-        estimatedOwners: toNumber(g.estimatedOwners, 0),
-        recentPlayers: toNumber(g.recentPlayers, 0),
-        price: toNumber(g.price, 0),
-        averagePlaytime: toNumber(g.averagePlaytime, 0),
-        lastUpdated: g.lastUpdated ?? null,
-        tags: Array.isArray(g.tags) ? g.tags : [],
-        steamUrl: g.steamUrl ?? `https://store.steampowered.com/app/${g.appId}`,
-        reviewScoreDesc: g.reviewScoreDesc ?? "",
-        analysis: {
-          hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
-          summary: analysisRaw.summary ?? "",
-          labels: analysisRaw.labels ?? [],
-          pros: analysisRaw.pros ?? [],
-          cons: analysisRaw.cons ?? [],
-          riskScore: toNumber(analysisRaw.riskScore, 0),
-          bugRisk: toNumber(analysisRaw.bugRisk, 0),
-          refundMentions: toNumber(analysisRaw.refundMentions, 0),
-          reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
-          // ★ ここから追加：「今と昔」関連
-          currentStateSummary: analysisRaw.currentStateSummary ?? "",
-          historicalIssuesSummary: analysisRaw.historicalIssuesSummary ?? "",
-          stabilityTrend: analysisRaw.stabilityTrend ?? "Unknown",
-          hasImprovedSinceLaunch: analysisRaw.hasImprovedSinceLaunch ?? false,
-          // ★ ここまで
-        },
-        gemLabel: g.gemLabel ?? "",
-        isStatisticallyHidden: g.isStatisticallyHidden ?? false,
-        releaseDate: g.releaseDate ?? "",
-        releaseYear: toNumber(g.releaseYear, 0),
-      };
-    });
+  // ★ BaseScore 用に事前に数値化
+  const positiveRatio = toNumber(g.positiveRatio, 0);
+  const totalReviews = toNumber(g.totalReviews, 0);
+  const estimatedOwners = toNumber(g.estimatedOwners, 0);
+  const price = toNumber(g.price, 0);
+  const averagePlaytime = toNumber(g.averagePlaytime, 0);
+  const releaseYear = toNumber(g.releaseYear, 0);
+
+  const baseScore = computeBaseScore({
+    positiveRatio,
+    totalReviews,
+    estimatedOwners,
+    price,
+    averagePlaytime,
+    releaseYear,
+  });
+
+  return {
+    appId: toNumber(g.appId, 0),
+    title: g.title ?? `App ${g.appId}`,
+    positiveRatio,
+    totalReviews,
+    estimatedOwners,
+    recentPlayers: toNumber(g.recentPlayers, 0),
+    price,
+    averagePlaytime,
+    lastUpdated: g.lastUpdated ?? null,
+    tags: Array.isArray(g.tags) ? g.tags : [],
+    steamUrl: g.steamUrl ?? `https://store.steampowered.com/app/${g.appId}`,
+    reviewScoreDesc: g.reviewScoreDesc ?? "",
+    analysis: {
+      hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
+      summary: analysisRaw.summary ?? "",
+      labels: analysisRaw.labels ?? [],
+      pros: analysisRaw.pros ?? [],
+      cons: analysisRaw.cons ?? [],
+      riskScore: toNumber(analysisRaw.riskScore, 0),
+      bugRisk: toNumber(analysisRaw.bugRisk, 0),
+      refundMentions: toNumber(analysisRaw.refundMentions, 0),
+      reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
+      // ★ ここから追加：「今と昔」関連
+      currentStateSummary: analysisRaw.currentStateSummary ?? "",
+      historicalIssuesSummary: analysisRaw.historicalIssuesSummary ?? "",
+      stabilityTrend: analysisRaw.stabilityTrend ?? "Unknown",
+      hasImprovedSinceLaunch: analysisRaw.hasImprovedSinceLaunch ?? false,
+      // ★ ここまで
+    },
+    gemLabel: g.gemLabel ?? "",
+    isStatisticallyHidden: g.isStatisticallyHidden ?? false,
+    releaseDate: g.releaseDate ?? "",
+    releaseYear,
+    // ★ 新フィールド: 統計ベースの Base Hidden Gem Score (0〜100)
+    baseScore,
+  };
+});
+
 
     // ---- フィルタ ----
     let filtered = mapped;
