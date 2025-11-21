@@ -246,6 +246,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         lastUpdated: g.lastUpdated ?? null,
         tags: Array.isArray(g.tags) ? g.tags : [],
         steamUrl: g.steamUrl ?? `https://store.steampowered.com/app/${g.appId}`,
+        screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         reviewScoreDesc: g.reviewScoreDesc ?? "",
         analysis: {
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",

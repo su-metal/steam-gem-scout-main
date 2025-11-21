@@ -398,12 +398,17 @@ export default function GameDetail() {
           )}
         </div>
 
-        {/* Screenshot Gallery */}
+      
+
+        {/* Title & Hero Section */}
+        <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
+          <CardHeader>
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex-1 space-y-2">
+                <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
+                        {/* Screenshot Gallery */}
         {screenshotUrls.length > 0 && (
           <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Screenshots
-            </h2>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
               {screenshotUrls.map((url, index) => (
                 <div
@@ -428,19 +433,13 @@ export default function GameDetail() {
             </div>
           </div>
         )}
-
-
-        {/* Title & Hero Section */}
-        <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
-          <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-              <div className="flex-1 space-y-2">
-                <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
                 {formattedReleaseDate && (
                   <p className="text-sm text-muted-foreground">
                     Release: {formattedReleaseDate}
                   </p>
                 )}
+
+        
 
                 {/* 安定度ステータスバッジ（今と昔） */}
                 {stabilityBadge && (
