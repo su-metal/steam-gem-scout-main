@@ -66,6 +66,10 @@ interface GameCardProps {
 
   // 追加: 明示的に gemLabel を渡す場合用（オプショナル）
   gemLabel?: GemLabel;
+  screenshots?: {
+    full?: string;
+    thumbnail?: string;
+  }[];
 }
 
 
@@ -95,6 +99,7 @@ export const GameCard = ({
   gemLabel,
   releaseDate,
   releaseYear,
+  screenshots,
 }: GameCardProps) => {
   const navigate = useNavigate();
   const isFeatured = variant === "featured";
@@ -325,6 +330,7 @@ export const GameCard = ({
             averagePlaytime,
             tags,
             steamUrl,
+            screenshots,
           },
     });
   };

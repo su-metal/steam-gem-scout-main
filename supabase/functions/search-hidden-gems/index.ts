@@ -45,6 +45,7 @@ interface RankingGameData {
   tags: string[];
   steamUrl: string;
   reviewScoreDesc: string;
+  screenshots?: { thumbnail: string; full: string }[];
   analysis: GameAnalysis;
   gemLabel:
     | "Hidden Gem"
@@ -71,6 +72,7 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
       price: rankingGame.price,
       average_playtime: rankingGame.averagePlaytime,
       tags: rankingGame.tags,
+      screenshots: rankingGame.screenshots ?? null,
       steam_url: rankingGame.steamUrl,
       review_score_desc: rankingGame.reviewScoreDesc,
 
@@ -534,6 +536,15 @@ async function fetchAndBuildRankingGame(
     }
   }
 
+    const screenshots =
+    Array.isArray(data.screenshots)
+      ? data.screenshots.map((shot: any) => ({
+          thumbnail: shot.path_thumbnail,
+          full: shot.path_full,
+        }))
+      : [];
+
+
   const descriptionSources = [
     data.short_description,
     data.about_the_game,
@@ -795,6 +806,7 @@ async function fetchAndBuildRankingGame(
     tags,
     steamUrl: `https://store.steampowered.com/app/${appId}`,
     reviewScoreDesc,
+    screenshots,
     analysis: enrichedAnalysis,
     gemLabel,
     isStatisticallyHidden,

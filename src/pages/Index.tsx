@@ -49,6 +49,10 @@ interface RankingGame {
   isStatisticallyHidden: boolean;
   releaseYear?: number;
   releaseDate?: string;
+  screenshots?: {
+    full?: string;
+    thumbnail?: string;
+  }[];
 }
 
 const isHiddenGemCandidate = (game: RankingGame) => {
@@ -314,6 +318,101 @@ const Index = () => {
   const featuredHiddenGems = todaysHiddenGems.slice(0, 3);
   const otherHiddenGems = todaysHiddenGems.slice(3);
 
+  // Steam風の横長サムネつきタイル
+  const renderCompactGameCard = (game: RankingGame) => {
+  const tags = getDisplayTags(game, 3);
+
+  // 価格表示を安全に正規化
+  const rawPrice =
+    typeof game.price === "number" && Number.isFinite(game.price)
+      ? game.price
+      : 0;
+  const priceDisplay = rawPrice === 0 ? "Free" : `$${rawPrice.toFixed(2)}`;
+
+  const headerUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
+  const score =
+    typeof game.analysis?.statGemScore === "number"
+      ? game.analysis.statGemScore
+      : null;
+
+  return (
+    <button
+      key={game.appId}
+      onClick={() =>
+        navigate(`/game/${game.appId}`, {
+          // ★ GameDetail へ state も一緒に渡す（リンク切れ対策）
+          state: {
+            gameData: game,
+            analysisData: game.analysis,
+          },
+        })
+      }
+      className="
+        min-w-[260px] max-w-[260px] h-[260px]
+        rounded-lg border bg-card text-left
+        hover:bg-accent hover:text-accent-foreground
+        transition-all shadow-sm hover:shadow-md
+        overflow-hidden flex flex-col
+      "
+    >
+      {/* サムネ（高さ固定）＋ Gem Score グラデ丸バッジ */}
+      <div className="relative w-full h-32">
+        <img
+          src={headerUrl}
+          alt={game.title}
+          loading="lazy"
+          className="w-full h-full object-cover"
+        />
+        {score !== null && (
+          <div className="absolute bottom-2 left-2">
+            <div
+              className="
+                w-12 h-12 rounded-full
+                bg-gradient-to-tr from-emerald-400 via-cyan-400 to-sky-500
+                text-white
+                flex items-center justify-center
+                shadow-lg 
+              "
+            >
+              <span className="text-lg font-extrabold leading-none">
+                {score.toFixed(1)}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 本文 */}
+      <div className="p-3 flex flex-col gap-1.5 flex-1">
+        <div className="font-semibold text-sm line-clamp-2">
+          {game.title}
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>{Math.round(game.positiveRatio ?? 0)}% positive</span>
+          <span>{priceDisplay}</span>
+        </div>
+
+        {/* 下はタグだけ（AI Gem Score のテキスト行は削除） */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-auto">
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                className="px-1.5 py-0.5 rounded-full bg-muted text-[10px]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+};
+
+
+
 
 
   return (
@@ -414,176 +513,121 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Recent Gems Section */}
-      <div className="max-w-6xl mx-auto px-4 py-12 space-y-8">
-        <div>
-          <h2 className="text-3xl font-bold mb-2">Recent High-Quality Hidden Gems</h2>
-          <p className="text-muted-foreground">Newly released games with excellent reviews but low visibility</p>
-        </div>
+      <div className="max-w-6xl mx-auto px-4 py-12 space-y-16">
 
-        {fallbackMessage && (
-          <div className="bg-muted/50 border border-border rounded-lg p-4 text-sm text-muted-foreground">
-            {fallbackMessage}
-          </div>
-        )}
+        {/* 🔥 1st Fold: 行動喚起タイル  */}
+        <section className="space-y-6">
+          <h2 className="text-2xl font-bold tracking-tight">
+            Discover Great Games Instantly
+          </h2>
+          <p className="text-muted-foreground">
+            気になるカテゴリーをタップして、すぐにおすすめをチェックできます。
+          </p>
 
-        {loading ? (
-          <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-64 w-full" />
+          {/* タイルグリッド */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[
+              { label: "今日の隠れた高評価", target: "/rankings?mode=today-hidden" },
+              { label: "最近話題のインディー", target: "/rankings?tag=indie" },
+              { label: "レビュー急上昇タイトル", target: "/rankings?mode=trending" },
+              { label: "少数レビューだけど神ゲー", target: "/rankings?mode=small-but-great" },
+              { label: "復活したHidden Gem", target: "/rankings?mode=improved" },
+              { label: "Steam Deck最適タイトル", target: "/rankings?tag=steamdeck" },
+              { label: "低価格の高評価", target: "/rankings?mode=cheap-gems" },
+              { label: "長時間遊べるゲーム", target: "/rankings?mode=longplay" },
+            ].map((item, idx) => (
+              <button
+                key={idx}
+                onClick={() => navigate(item.target)}
+                className="
+            w-full rounded-xl border bg-card hover:bg-accent 
+            hover:text-accent-foreground p-4 text-left
+            transition-all shadow-sm hover:shadow-md
+          "
+              >
+                <span className="font-semibold text-sm md:text-base block">
+                  {item.label}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Tap to explore →
+                </span>
+              </button>
             ))}
           </div>
-        ) : games.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Home className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground mb-4">No recent hidden gems found matching our quality criteria</p>
-            <Button onClick={() => navigate("/search")} variant="outline">
-              Try Advanced Search
-            </Button>
-          </Card>
-        ) : (
-          <div className="space-y-12">
-            {/* レーン0: Recent High-Quality Hidden Gems（7〜30日の最近タイトル） */}
-            {recentHighQualityGems.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  {/* <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                    {recentHighQualityGems.length} titles
-                  </span> */}
-                </div>
+        </section>
 
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {recentHighQualityGems.map((game) => (
-                    <GameCard
-                      key={game.appId}
-                      appId={game.appId}
-                      title={game.title}
-                      hiddenGemScore={game.analysis.statGemScore}
-                      summary={game.analysis.summary}
-                      labels={game.analysis.labels}
-                      positiveRatio={game.positiveRatio}
-                      totalReviews={game.totalReviews}
-                      estimatedOwners={game.estimatedOwners}
-                      price={game.price}
-                      averagePlaytime={game.averagePlaytime}
-                      gameData={game}
-                      analysisData={game.analysis}
-                      releaseDate={game.releaseDate}
-                      releaseYear={game.releaseYear}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-            {/* レーン1: Hidden Gems */}
-            {(featuredHiddenGems.length > 0 || otherHiddenGems.length > 0) && (
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-2xl font-semibold">Today&apos;s Hidden Gems</h3>
-                    <p className="text-sm text-muted-foreground">
-                      AI が「本当に隠れている良作」と判断したタイトルだけをピックアップ
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                    {todaysHiddenGems.length} titles
-                  </span>
-                </div>
 
-                {/* Featured hidden gems */}
-                {featuredHiddenGems.length > 0 && (
-                  <div className="grid gap-6 md:grid-cols-3">
-                    {featuredHiddenGems.map((game) => (
-                      <GameCard
-                        key={game.appId}
-                        appId={game.appId}
-                        title={game.title}
-                        hiddenGemScore={game.analysis.statGemScore}
-                        summary={game.analysis.summary}
-                        labels={game.analysis.labels}
-                        positiveRatio={game.positiveRatio}
-                        totalReviews={game.totalReviews}
-                        estimatedOwners={game.estimatedOwners}
-                        price={game.price}
-                        averagePlaytime={game.averagePlaytime}
-                        gameData={game}
-                        analysisData={game.analysis}
-                        releaseDate={game.releaseDate}
-                        releaseYear={game.releaseYear}
-                      />
-                    ))}
-                  </div>
+        {/* 🔵 2nd Fold: Recent High-Quality Picks（横スクロールタイル） */}
+        {recentHighQualityGems.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <h3 className="text-xl font-semibold">Recent High-Quality Picks</h3>
+                <p className="text-muted-foreground text-sm">
+                  過去7〜30日にリリースまたは注目を集めた高評価タイトル。
+                </p>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {recentHighQualityGems.length} titles
+              </span>
+            </div>
+
+            <div className="relative">
+              <div
+                className="
+                  flex gap-3 overflow-x-auto pb-2 -mx-4 px-4
+                  [scrollbar-width:none] [-ms-overflow-style:none]
+                  [&::-webkit-scrollbar]:hidden
+                "
+              >
+                {recentHighQualityGems.map((game) =>
+                  renderCompactGameCard(game),
                 )}
-
-                {/* Other hidden gems */}
-                {otherHiddenGems.length > 0 && (
-                  <div className="space-y-6">
-                    {otherHiddenGems.map((game) => (
-                      <GameCard
-                        key={game.appId}
-                        appId={game.appId}
-                        title={game.title}
-                        hiddenGemScore={game.analysis.reviewQualityScore}
-                        summary={game.analysis.summary}
-                        labels={game.analysis.labels}
-                        positiveRatio={game.positiveRatio}
-                        totalReviews={game.totalReviews}
-                        estimatedOwners={game.estimatedOwners}
-                        price={game.price}
-                        averagePlaytime={game.averagePlaytime}
-                        gameData={game}
-                        analysisData={game.analysis}
-                        releaseDate={game.releaseDate}
-                        releaseYear={game.releaseYear}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
-
-
-            {/* レーン2: 高評価だけど非Hidden（New & Noticed） */}
-            {noticedGames.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold">New &amp; Noticed</h3>
-                    <p className="text-sm text-muted-foreground">
-                      まだ Hidden 判定ではないものの、高評価で勢いが出てきているタイトル
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => navigate("/search")}>
-                    Open Advanced Search
-                  </Button>
-                </div>
-
-                <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-                  {noticedGames.map((game) => (
-                    <GameCard
-                      key={game.appId}
-                      appId={game.appId}
-                      title={game.title}
-                      hiddenGemScore={game.analysis.reviewQualityScore}
-                      summary={game.analysis.summary}
-                      labels={game.analysis.labels}
-                      positiveRatio={game.positiveRatio}
-                      totalReviews={game.totalReviews}
-                      estimatedOwners={game.estimatedOwners}
-                      price={game.price}
-                      averagePlaytime={game.averagePlaytime}
-                      gameData={game}
-                      analysisData={game.analysis}
-                      releaseDate={game.releaseDate}
-                      releaseYear={game.releaseYear}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
+              </div>
+              {/* 右端フェード */}
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          </section>
         )}
+
+
+
+        {/* 🔶 3rd Fold: Today’s Hidden Gems（横スクロールタイル） */}
+        {(featuredHiddenGems.length > 0 || otherHiddenGems.length > 0) && (
+          <section className="space-y-4">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <h3 className="text-xl font-semibold">Today's Hidden Gems</h3>
+                <p className="text-sm text-muted-foreground">
+                  全期間の隠れた高評価タイトルから毎日ランダムにセレクト。
+                </p>
+              </div>
+              <span className="text-[11px] text-muted-foreground">
+                {todaysHiddenGems.length} titles
+              </span>
+            </div>
+
+            <div className="relative">
+              <div
+                className="
+                  flex gap-3 overflow-x-auto pb-2 -mx-4 px-4
+                  [scrollbar-width:none] [-ms-overflow-style:none]
+                  [&::-webkit-scrollbar]:hidden
+                "
+              >
+                {todaysHiddenGems.map((game) =>
+                  renderCompactGameCard(game),
+                )}
+              </div>
+              {/* 右端フェード */}
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          </section>
+        )}
+
+
       </div>
+
     </div>
   );
 };

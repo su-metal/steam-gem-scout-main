@@ -37,6 +37,10 @@ interface SearchResultCardProps {
   gameData?: any;
   analysisData?: any;
   tags?: string[];
+  screenshots?: {
+    full?: string;
+    thumbnail?: string;
+  }[];
 }
 
 export const SearchResultCard = ({
@@ -52,6 +56,7 @@ export const SearchResultCard = ({
   gameData,
   analysisData,
   tags,
+  screenshots,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);

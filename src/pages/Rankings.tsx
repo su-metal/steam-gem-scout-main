@@ -50,6 +50,10 @@ interface RankingGame {
   isStatisticallyHidden: boolean;
   // Edge Function 側で compositeScore を付ける予定（ここでは未使用）
   // compositeScore?: number;
+  screenshots?: {
+    full?: string;
+    thumbnail?: string;
+  }[];
 }
 
 // -----------------------------
@@ -720,6 +724,7 @@ export default function Rankings() {
                     averagePlaytime={game.averagePlaytime}
                     gameData={game}
                     analysisData={game.analysis}
+                    screenshots={game.screenshots}
                   />
                 </div>
               );

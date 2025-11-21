@@ -60,6 +60,10 @@ interface AnalysisData {
   hasImprovedSinceLaunch?: boolean;
 }
 
+interface SteamScreenshot {
+  thumbnail?: string;
+  full?: string;
+}
 
 interface GameDetailState {
   appId?: string | number;
@@ -77,6 +81,7 @@ interface GameDetailState {
     reviewScoreDesc?: string;
     gemLabel?: GemLabel;
     analysis?: AnalysisData;
+    screenshots?: SteamScreenshot[];
     releaseDate?: string | null;
     releaseYear?: number | null;
   };
@@ -100,6 +105,7 @@ interface GameDetailState {
   tags?: string[];
   steamUrl?: string;
   reviewScoreDesc?: string;
+  screenshots?: SteamScreenshot[];
   releaseDate?: string | null;
   releaseYear?: number | null;
   // レガシー経由でも拾えるようにしておく
@@ -119,9 +125,11 @@ export default function GameDetail() {
   const [liveGameData, setLiveGameData] = useState<GameData | null>(null);
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
 
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
 
   const game = location.state as GameDetailState;
 
@@ -168,6 +176,7 @@ export default function GameDetail() {
       // fallback 側にも gemLabel / analysis を用意しておく
       gemLabel: game.gemLabel as GameData["gemLabel"],
       analysis: game.analysisData as GameData["analysis"],
+      screenshots: game.screenshots as GameData["screenshots"],
       releaseDate: game.releaseDate ?? null,
       releaseYear: game.releaseYear ?? null,
     } as GameData);
@@ -196,64 +205,6 @@ export default function GameDetail() {
       hasImprovedSinceLaunch: game.hasImprovedSinceLaunch,
     };
 
-  // Steam キャッシュ Edge Function から最新メタ情報を取得
-  useEffect(() => {
-    const fetchSteamData = async () => {
-      const effectiveAppId = baseGame.appId || game.appId || 0;
-      if (!effectiveAppId) return;
-
-      try {
-        setIsLoadingSteam(true);
-
-        const { data, error } = await supabase.functions.invoke(
-          "get-or-create-steam-game",
-          {
-            body: { appId: effectiveAppId },
-          }
-        );
-
-        if (error) {
-          console.error("get-or-create-steam-game error", error);
-          return;
-        }
-
-        if (data) {
-          setLiveGameData((prev) => ({
-            ...(prev ?? gameData),
-            appId: data.app_id ?? effectiveAppId,
-            title: data.title ?? gameData.title ?? "Unknown Game",
-            positiveRatio: data.positive_ratio ?? gameData.positiveRatio,
-            totalReviews: data.total_reviews ?? gameData.totalReviews,
-            estimatedOwners:
-              data.estimated_owners ?? gameData.estimatedOwners,
-            price: data.price ?? gameData.price,
-            averagePlaytime:
-              data.average_playtime ?? gameData.averagePlaytime,
-            tags: data.tags ?? gameData.tags,
-            steamUrl: data.steam_url ?? gameData.steamUrl,
-            reviewScoreDesc:
-              data.review_score_desc ?? gameData.reviewScoreDesc,
-            releaseDate:
-              data.release_date ??
-              (prev ?? gameData).releaseDate ??
-              null,
-            releaseYear:
-              data.release_year ??
-              (prev ?? gameData).releaseYear ??
-              null,
-            gemLabel: gameData.gemLabel,
-            analysis: gameData.analysis,
-          }));
-        }
-      } catch (e) {
-        console.error("get-or-create-steam-game exception", e);
-      } finally {
-        setIsLoadingSteam(false);
-      }
-    };
-
-    fetchSteamData();
-  }, [baseGame.appId, game.appId]);
 
   // Safe fallback arrays for fields that may be undefined
   const pros = Array.isArray(analysisData.pros) ? analysisData.pros : [];
@@ -340,7 +291,22 @@ export default function GameDetail() {
 
   const effectiveAppId = baseGame.appId || game.appId || 0;
   const appIdStr = String(effectiveAppId);
-  const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+  const headerImageUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+
+  // Edge Function / DB から渡ってくるスクリーンショット配列を優先的に使う
+  const screenshots: SteamScreenshot[] =
+    (liveGameData?.screenshots ??
+      baseGame.screenshots ??
+      game.screenshots ??
+      []) as SteamScreenshot[];
+
+  // 表示用に URL のみの配列へ変換（full が無ければ thumbnail を使用）
+  const screenshotUrls = screenshots
+    .map((shot) => shot.full || shot.thumbnail)
+    .filter((url): url is string => Boolean(url));
+
+
+
 
   const gemLabel: GemLabel | undefined =
     baseGame.gemLabel ||
@@ -397,8 +363,28 @@ export default function GameDetail() {
   const stabilityBadge = getStabilityBadge();
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-background">
+      {/* === Hero Header Image (Full-width) ======================== */}
+      <div className="w-full border-b border-primary/20 bg-black/40">
+        <div className="max-w-5xl mx-auto">
+          <div className="relative w-full h-[260px] md:h-[320px] overflow-hidden">
+            <img
+              src={headerImageUrl}
+              alt={title}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // 画像が存在しない場合は非表示
+                e.currentTarget.style.display = "none";
+              }}
+            />
+            {/* 将来的にトレーラー動画やオーバーレイを載せるための relative コンテナ */}
+          </div>
+        </div>
+      </div>
+
+      {/* === Main Content ========================================= */}
+      <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
         {/* Header Navigation */}
         <div className="flex items-center gap-4">
           <Button variant="outline" onClick={handleBack}>
@@ -412,19 +398,37 @@ export default function GameDetail() {
           )}
         </div>
 
-        {/* Steam Header Image */}
-        <Card className="overflow-hidden border-primary/20">
-          <img
-            src={headerImageUrl}
-            alt={title}
-            loading="lazy"
-            className="w-full max-h-[320px] object-cover"
-            onError={(e) => {
-              // Hide the image if it fails to load
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        </Card>
+        {/* Screenshot Gallery */}
+        {screenshotUrls.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Screenshots
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+              {screenshotUrls.map((url, index) => (
+                <div
+                  key={url}
+                  className="relative flex-none h-40 md:h-48 aspect-video rounded-lg overflow-hidden border border-primary/20 bg-muted"
+                >
+                  <img
+                    src={url}
+                    alt={`${title} screenshot ${index + 1}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // 画像が存在しない場合はカードごと非表示にする
+                      const card = e.currentTarget.parentElement;
+                      if (card) {
+                        card.style.display = "none";
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
 
         {/* Title & Hero Section */}
         <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
@@ -470,15 +474,14 @@ export default function GameDetail() {
                 )}
               </div>
 
+              {/* AI Gem Score ブロック（位置そのまま / 後続タスクでデザイン合わせ） */}
               <div className="text-center bg-background/50 p-6 rounded-lg border border-primary/30">
                 <div className="text-sm text-muted-foreground mb-2">
                   AI Gem Score
                 </div>
                 <div className="flex items-baseline justify-center gap-1 mb-2">
                   <span className="text-5xl font-bold text-primary">
-                    {aiGemScore !== null
-                      ? aiGemScore.toFixed(1)
-                      : "N/A"}
+                    {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
                   </span>
                   <span className="text-2xl text-muted-foreground">/10</span>
                 </div>
@@ -724,7 +727,9 @@ export default function GameDetail() {
                     Avg Playtime
                   </div>
                   <div className="text-2xl font-bold">
-                    {averagePlaytimeHours !== "N/A" ? `${averagePlaytimeHours}h` : "N/A"}
+                    {averagePlaytimeHours !== "N/A"
+                      ? `${averagePlaytimeHours}h`
+                      : "N/A"}
                   </div>
                 </div>
               </div>
@@ -772,4 +777,5 @@ export default function GameDetail() {
       </div>
     </div>
   );
+
 }

@@ -29,6 +29,7 @@ type RankingGame = {
   tags: string[];
   steamUrl: string;
   reviewScoreDesc: string;
+  screenshots?: { thumbnail?: string; full?: string }[];
   analysis: Analysis | null;
   gemLabel: string;
   isStatisticallyHidden: boolean;
@@ -259,6 +260,9 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
 
   const tags: string[] = Array.isArray(row.tags) ? row.tags : [];
 
+  // steam_games 側に既に入っている screenshots JSON をそのまま使う
+  const screenshots = Array.isArray(row.screenshots) ? row.screenshots : [];
+
   const steamUrl: string =
     row.steam_url ?? `https://store.steampowered.com/app/${appId}`;
 
@@ -312,6 +316,7 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     tags,
     steamUrl,
     reviewScoreDesc,
+    screenshots,
     // ランキング生成時点では AI 解析は未実行なので null
     analysis: null,
     // gemLabel は後から AI/別処理で更新
@@ -345,7 +350,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   }
 
   // まず倉庫テーブル steam_games から、対象 appId の行をまとめて取得
-    const { data: steamRows, error } = await supabase
+  const { data: steamRows, error } = await supabase
     .from("steam_games")
     .select(
       `
@@ -357,6 +362,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         price,
         average_playtime,
         tags,
+        screenshots,  
         steam_url,
         review_score_desc,
         release_date,
@@ -365,7 +371,6 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       `
     )
     .in("app_id", appIds);
-
 
   if (error) {
     console.error("supabase steam_games fetch error", error);
