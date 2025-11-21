@@ -528,6 +528,59 @@ export default function GameDetail() {
           </CardContent>
         </Card>
 
+         {/* Pros & Cons */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card className="border-success/20">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2 text-success">
+                <ThumbsUp className="w-5 h-5" />
+                Strengths
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pros.length > 0 ? (
+                <ul className="space-y-3">
+                  {pros.map((pro, idx) => (
+                    <li key={idx} className="flex gap-3 text-sm">
+                      <span className="text-success mt-0.5">●</span>
+                      <span className="text-muted-foreground">{pro}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  レビューから特徴的な「良い点」はまだ抽出されていません。
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-destructive/20">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2 text-destructive">
+                <ThumbsDown className="w-5 h-5" />
+                Weaknesses
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {cons.length > 0 ? (
+                <ul className="space-y-3">
+                  {cons.map((con, idx) => (
+                    <li key={idx} className="flex gap-3 text-sm">
+                      <span className="text-destructive mt-0.5">●</span>
+                      <span className="text-muted-foreground">{con}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  目立った「弱点」についてのレビューはまだ少ないようです。
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         {/* 「今」と「昔」を分けて表示 */}
         {(currentStateSummary || historicalIssuesSummary) && (
           <div className="grid md:grid-cols-2 gap-6">
@@ -587,58 +640,7 @@ export default function GameDetail() {
           </CardContent>
         </Card>
 
-        {/* Pros & Cons */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="border-success/20">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2 text-success">
-                <ThumbsUp className="w-5 h-5" />
-                Strengths
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pros.length > 0 ? (
-                <ul className="space-y-3">
-                  {pros.map((pro, idx) => (
-                    <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-success mt-0.5">●</span>
-                      <span className="text-muted-foreground">{pro}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  レビューから特徴的な「良い点」はまだ抽出されていません。
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-destructive/20">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2 text-destructive">
-                <ThumbsDown className="w-5 h-5" />
-                Weaknesses
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cons.length > 0 ? (
-                <ul className="space-y-3">
-                  {cons.map((con, idx) => (
-                    <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-destructive mt-0.5">●</span>
-                      <span className="text-muted-foreground">{con}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  目立った「弱点」についてのレビューはまだ少ないようです。
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+       
 
         {/* Metrics & Scores */}
         <div className="grid md:grid-cols-2 gap-6">
