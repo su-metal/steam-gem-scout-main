@@ -324,43 +324,66 @@ export default function Rankings() {
     minPlaytime > 0;
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-2">
-              Hidden Gems Search
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_50%,_#020008_100%)] text-slate-50">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-8">
+        {/* === Page Header ======================================= */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+              Hidden Gems / Search
+            </p>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
+              Find Your Next Steam Gem
             </h1>
-            <p className="text-muted-foreground">Find high-quality games by genre and release period</p>
+            <p className="text-xs md:text-sm text-slate-300/90">
+              ジャンル・期間・価格などを組み合わせて、
+              <span className="font-semibold text-sky-300">
+                「まだバズっていない良作」
+              </span>
+              を絞り込みます。
+            </p>
           </div>
 
           {/* Right side: navigation buttons */}
           <div className="flex items-center gap-2">
-            <Button variant="outline" asChild>
+            <Button
+              variant="outline"
+              asChild
+              className="rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
+            >
               <a href="/">
                 <Home className="w-4 h-4 mr-2" />
                 Home
               </a>
             </Button>
 
-            <Button variant="outline" asChild>
+            <Button
+              variant="outline"
+              asChild
+              className="rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
+            >
               <a href="/wishlist">Wishlist</a>
             </Button>
           </div>
         </div>
 
-        {/* Filter Controls */}
-        <div className="space-y-4 p-6 bg-card rounded-lg border">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* === Filter Panel ====================================== */}
+        <div className="space-y-4 rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#141327_45%,_#050509_100%)] px-4 py-5 md:px-6 md:py-6 shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
+          {/* Top row: genre / period / sort */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {/* Genre */}
             <div className="space-y-2">
-              <label htmlFor="genre" className="text-sm font-medium">
+              <label
+                htmlFor="genre"
+                className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
+              >
                 Genre
               </label>
               <select
                 id="genre"
                 value={selectedGenre}
                 onChange={(e) => setSelectedGenre(e.target.value)}
-                className="w-full px-3 py-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
               >
                 <option value="">All genres</option>
                 {GENRE_OPTIONS.map((genre) => (
@@ -371,15 +394,19 @@ export default function Rankings() {
               </select>
             </div>
 
+            {/* Period */}
             <div className="space-y-2">
-              <label htmlFor="period" className="text-sm font-medium">
+              <label
+                htmlFor="period"
+                className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
+              >
                 Released within
               </label>
               <select
                 id="period"
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="w-full px-3 py-2 bg-background border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
               >
                 {PERIOD_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -389,14 +416,24 @@ export default function Rankings() {
               </select>
             </div>
 
+            {/* Sort */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Sort by</label>
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                Sort by
+              </label>
               <div className="flex flex-wrap gap-2">
                 {SORT_OPTIONS.map((option) => (
                   <Button
                     key={option.value}
-                    variant={selectedSort === option.value ? "default" : "outline"}
+                    variant={
+                      selectedSort === option.value ? "default" : "outline"
+                    }
                     size="sm"
+                    className={
+                      selectedSort === option.value
+                        ? "rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 border-none text-slate-950 shadow-[0_10px_25px_rgba(0,0,0,0.7)]"
+                        : "rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
+                    }
                     onClick={() => setSelectedSort(option.value)}
                   >
                     {option.label}
@@ -407,43 +444,59 @@ export default function Rankings() {
           </div>
 
           {/* Gem Score Weights (Custom Sort) */}
-          <div className="border-t pt-4 mt-2">
+          <div className="border-t border-white/10 pt-4 mt-2">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium">Gem Score Weights</h3>
-              <button type="button" className="text-xs underline" onClick={() => setGemWeights(DEFAULT_WEIGHTS)}>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                Gem Score Weights
+              </h3>
+              <button
+                type="button"
+                className="text-[11px] underline text-slate-300/80"
+                onClick={() => setGemWeights(DEFAULT_WEIGHTS)}
+              >
                 Reset
               </button>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="mb-3 text-xs text-slate-300/80">
               {isCustomSort
-                ? "When 'Custom Gem Score' is selected, the results will be sorted based on the weights below."
-                : "These weight settings become active when 'Custom Gem Score' is selected."}
+                ? "「Custom Gem Score」選択時、下記の重みづけで並び替えを行います。"
+                : "重み設定は「Custom Gem Score」を選択すると有効になります。"}
             </p>
 
             <div
-              className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${!isCustomSort ? "opacity-50 pointer-events-none" : ""
+              className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${!isCustomSort ? "opacity-60 pointer-events-none" : ""
                 }`}
             >
               {/* AI Score */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">AI Score</Label>
-                  <span className="text-xs text-muted-foreground">{gemWeights.aiScore}</span>
+                <div className="mb-1 flex items-center justify-between">
+                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                    AI Score
+                  </Label>
+                  <span className="text-xs text-slate-300/80">
+                    {gemWeights.aiScore}
+                  </span>
                 </div>
                 <Slider
                   min={0}
                   max={100}
                   step={5}
                   value={[gemWeights.aiScore]}
-                  onValueChange={([value]) => setGemWeights((prev) => ({ ...prev, aiScore: value }))}
+                  onValueChange={([value]) =>
+                    setGemWeights((prev) => ({ ...prev, aiScore: value }))
+                  }
                 />
               </div>
 
               {/* Positive Ratio */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">Positive Ratio</Label>
-                  <span className="text-xs text-muted-foreground">{gemWeights.positiveRatio}</span>
+                <div className="mb-1 flex items-center justify-between">
+                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                    Positive Ratio
+                  </Label>
+                  <span className="text-xs text-slate-300/80">
+                    {gemWeights.positiveRatio}
+                  </span>
                 </div>
                 <Slider
                   min={0}
@@ -461,9 +514,13 @@ export default function Rankings() {
 
               {/* Review Count */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">Review Count</Label>
-                  <span className="text-xs text-muted-foreground">{gemWeights.reviewCount}</span>
+                <div className="mb-1 flex items-center justify-between">
+                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                    Review Count
+                  </Label>
+                  <span className="text-xs text-slate-300/80">
+                    {gemWeights.reviewCount}
+                  </span>
                 </div>
                 <Slider
                   min={0}
@@ -481,31 +538,44 @@ export default function Rankings() {
 
               {/* Recency */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">Recency</Label>
-                  <span className="text-xs text-muted-foreground">{gemWeights.recency}</span>
+                <div className="mb-1 flex items-center justify-between">
+                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                    Recency
+                  </Label>
+                  <span className="text-xs text-slate-300/80">
+                    {gemWeights.recency}
+                  </span>
                 </div>
                 <Slider
                   min={0}
                   max={100}
                   step={5}
                   value={[gemWeights.recency]}
-                  onValueChange={([value]) => setGemWeights((prev) => ({ ...prev, recency: value }))}
+                  onValueChange={([value]) =>
+                    setGemWeights((prev) => ({ ...prev, recency: value }))
+                  }
                 />
               </div>
             </div>
           </div>
 
           {/* Additional Filters */}
-          <div className="border-t pt-4 mt-4">
-            <h3 className="text-sm font-medium mb-4">Additional Filters</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="border-t border-white/10 pt-4 mt-4">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+              Additional Filters
+            </h3>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
               {/* Max Price */}
               <div className="space-y-3">
-                <label htmlFor="maxPrice" className="text-sm font-medium flex items-center justify-between">
+                <label
+                  htmlFor="maxPrice"
+                  className="flex items-center justify-between text-sm font-medium text-slate-100"
+                >
                   <span>Max Price</span>
-                  <span className="text-primary font-semibold">
-                    {maxPrice === MAX_PRICE_SLIDER ? "Any" : `$${maxPrice}`}
+                  <span className="font-semibold text-pink-300">
+                    {maxPrice === MAX_PRICE_SLIDER
+                      ? "Any"
+                      : `$${maxPrice}`}
                   </span>
                 </label>
                 <Slider
@@ -517,7 +587,7 @@ export default function Rankings() {
                   onValueChange={(vals) => setMaxPrice(vals[0])}
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex justify-between text-xs text-slate-400">
                   <span>$0</span>
                   <span>{`$${MAX_PRICE_SLIDER}+`}</span>
                 </div>
@@ -525,9 +595,14 @@ export default function Rankings() {
 
               {/* Min Reviews */}
               <div className="space-y-3">
-                <label htmlFor="minReviews" className="text-sm font-medium flex items-center justify-between">
+                <label
+                  htmlFor="minReviews"
+                  className="flex items-center justify-between text-sm font-medium text-slate-100"
+                >
                   <span>Min Reviews</span>
-                  <span className="text-primary font-semibold">{minReviews === 0 ? "Any" : `${minReviews}+`}</span>
+                  <span className="font-semibold text-pink-300">
+                    {minReviews === 0 ? "Any" : `${minReviews}+`}
+                  </span>
                 </label>
                 <Slider
                   id="minReviews"
@@ -538,7 +613,7 @@ export default function Rankings() {
                   onValueChange={(vals) => setMinReviews(vals[0])}
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex justify-between text-xs text-slate-400">
                   <span>0</span>
                   <span>2000+</span>
                 </div>
@@ -546,9 +621,14 @@ export default function Rankings() {
 
               {/* Min Playtime */}
               <div className="space-y-3">
-                <label htmlFor="minPlaytime" className="text-sm font-medium flex items-center justify-between">
+                <label
+                  htmlFor="minPlaytime"
+                  className="flex items-center justify-between text-sm font-medium text-slate-100"
+                >
                   <span>Min Playtime</span>
-                  <span className="text-primary font-semibold">{minPlaytime === 0 ? "Any" : `${minPlaytime}h+`}</span>
+                  <span className="font-semibold text-pink-300">
+                    {minPlaytime === 0 ? "Any" : `${minPlaytime}h+`}
+                  </span>
                 </label>
                 <Slider
                   id="minPlaytime"
@@ -559,7 +639,7 @@ export default function Rankings() {
                   onValueChange={(vals) => setMinPlaytime(vals[0])}
                   className="w-full"
                 />
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex justify-between text-xs text-slate-400">
                   <span>0h</span>
                   <span>50h+</span>
                 </div>
@@ -567,61 +647,87 @@ export default function Rankings() {
             </div>
           </div>
 
-          {/* Apply ボタン */}
+          {/* Apply Button */}
           <div className="flex justify-end pt-4">
-            <Button onClick={fetchRankings} disabled={loading}>
+            <Button
+              onClick={fetchRankings}
+              disabled={loading}
+              className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-6 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.75)] hover:brightness-105"
+            >
               {loading ? "Searching..." : "Apply filters"}
             </Button>
           </div>
         </div>
 
-        {/* Active Filter Chips */}
+        {/* === Active Filter Chips ================================ */}
         {hasActiveFilters && !loading && (
-          <div className="flex flex-wrap items-center gap-2 p-4 bg-card/50 rounded-lg border">
-            <span className="text-sm text-muted-foreground">Active filters:</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.7)]">
+            <span className="text-xs text-slate-300/90">
+              Active filters:
+            </span>
 
             {selectedGenre && (
-              <Badge variant="secondary" className="gap-2">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
                 Genre: {selectedGenre}
-                <button onClick={() => removeFilter("genre")} className="hover:bg-destructive/20 rounded-full p-0.5">
+                <button
+                  onClick={() => removeFilter("genre")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             )}
 
             {selectedPeriod && (
-              <Badge variant="secondary" className="gap-2">
-                Period: {PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)?.label}
-                <button onClick={() => removeFilter("period")} className="hover:bg-destructive/20 rounded-full p-0.5">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+                Period:{" "}
+                {
+                  PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)
+                    ?.label
+                }
+                <button
+                  onClick={() => removeFilter("period")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             )}
 
             {selectedSort !== "recommended" && (
-              <Badge variant="secondary" className="gap-2">
-                Sort: {SORT_OPTIONS.find((s) => s.value === selectedSort)?.label ?? selectedSort}
-                <button onClick={() => removeFilter("sort")} className="hover:bg-destructive/20 rounded-full p-0.5">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+                Sort:{" "}
+                {
+                  SORT_OPTIONS.find((s) => s.value === selectedSort)
+                    ?.label
+                }
+                <button
+                  onClick={() => removeFilter("sort")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             )}
 
             {maxPrice !== MAX_PRICE_SLIDER && (
-              <Badge variant="secondary" className="gap-2">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
                 Price ≤ ${maxPrice}
-                <button onClick={() => removeFilter("maxPrice")} className="hover:bg-destructive/20 rounded-full p-0.5">
+                <button
+                  onClick={() => removeFilter("maxPrice")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             )}
 
             {minReviews > 0 && (
-              <Badge variant="secondary" className="gap-2">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
                 Reviews ≥ {minReviews}
                 <button
                   onClick={() => removeFilter("minReviews")}
-                  className="hover:bg-destructive/20 rounded-full p-0.5"
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -629,41 +735,44 @@ export default function Rankings() {
             )}
 
             {minPlaytime > 0 && (
-              <Badge variant="secondary" className="gap-2">
+              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
                 Playtime ≥ {minPlaytime}h
                 <button
                   onClick={() => removeFilter("minPlaytime")}
-                  className="hover:bg-destructive/20 rounded-full p-0.5"
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
                 >
                   <X className="w-3 h-3" />
                 </button>
               </Badge>
             )}
 
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="ml-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="ml-auto text-xs text-slate-200 hover:bg-rose-500/10 rounded-full px-3"
+            >
               Clear All
             </Button>
           </div>
         )}
 
-        {/* Results */}
+        {/* === Results ============================================ */}
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-64 w-full" />
+              <Skeleton
+                key={i}
+                className="h-64 w-full rounded-[26px] bg-[#070716] border border-white/10"
+              />
             ))}
           </div>
         ) : (
           <div className="space-y-4">
             {games.map((game) => {
-              // -------------------------
-              // Hidden Gem 判定 & ラベル補完
-              // -------------------------
-
-              // バックエンドが明示的につけたラベルを優先
+              // --- ここから下は元のロジックそのまま ------------------
               const explicitGemLabel = game.gemLabel as GemLabel | undefined;
 
-              // AI 判定情報
               const aiVerdict: "Yes" | "No" | "Unknown" =
                 game.analysis?.hiddenGemVerdict ?? "Unknown";
 
@@ -672,24 +781,22 @@ export default function Rankings() {
                   ? game.analysis.statGemScore
                   : null;
 
-              const isStatisticallyHidden = game.isStatisticallyHidden === true;
+              const isStatisticallyHidden =
+                game.isStatisticallyHidden === true;
 
-              // Index / GameCard / SearchResultCard と同じ基準：
-              // どれか1つでも true なら Hidden Gem とみなす
               const qualifiesAsHiddenGem =
                 isStatisticallyHidden ||
                 aiVerdict === "Yes" ||
                 (statGemScore !== null && statGemScore >= 8);
 
-              // 最終的にバッジに使うラベル
               const derivedGemLabel: GemLabel | undefined =
                 explicitGemLabel ??
                 (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
 
-              // バッジのクラスを derivedGemLabel に合わせて決定
               const gemBadgeClass =
-                derivedGemLabel === "Hidden Gem" || derivedGemLabel === "Improved Hidden Gem"
-                  ? "bg-accent text-accent-foreground"
+                derivedGemLabel === "Hidden Gem" ||
+                  derivedGemLabel === "Improved Hidden Gem"
+                  ? "bg-gradient-to-r from-pink-500 to-fuchsia-500 text-slate-950 shadow-[0_10px_30px_rgba(0,0,0,0.7)]"
                   : derivedGemLabel === "Highly rated but not hidden"
                     ? "bg-primary/20 text-primary border border-primary/40"
                     : "bg-muted text-muted-foreground";
@@ -700,7 +807,7 @@ export default function Rankings() {
                   {derivedGemLabel && (
                     <div className="absolute -top-3 left-6 z-10">
                       <span
-                        className={`inline-block px-4 py-1 rounded-full text-xs font-semibold shadow-lg ${gemBadgeClass}`}
+                        className={`inline-block rounded-full px-4 py-1 text-xs font-semibold ${gemBadgeClass}`}
                       >
                         {derivedGemLabel}
                         {isStatisticallyHidden && (
@@ -730,10 +837,12 @@ export default function Rankings() {
               );
             })}
 
-
             {games.length === 0 && (
-              <div className="text-center py-20">
-                <p className="text-muted-foreground">No games found</p>
+              <div className="py-20 text-center">
+                <p className="text-sm text-slate-400">
+                  条件に合うゲームが見つかりませんでした。
+                  フィルターを少しゆるめてみてください。
+                </p>
               </div>
             )}
           </div>
@@ -741,4 +850,5 @@ export default function Rankings() {
       </div>
     </div>
   );
+
 }

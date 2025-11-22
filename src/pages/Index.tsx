@@ -1,12 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+// src/pages/Index.tsx
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Sparkles, Search, Home, Heart } from "lucide-react";
+import "./landing.css";
 import { supabase } from "@/lib/supabaseClient";
 import { toast } from "sonner";
-import { GameCard } from "@/components/GameCard";
-import { Skeleton } from "@/components/ui/skeleton";
+
+/* ====== ここから: 2つ目のファイルから流用した型 & ロジック ====== */
 
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -18,10 +17,9 @@ interface HiddenGemAnalysis {
   bugRisk: number;
   refundMentions: number;
   reviewQualityScore: number;
-  statGemScore?: number; // ← オプショナルに
+  statGemScore?: number;
   aiError?: boolean;
 }
-
 
 type GemLabel =
   | "Hidden Gem"
@@ -29,7 +27,6 @@ type GemLabel =
   | "Emerging Gem"
   | "Highly rated but not hidden"
   | "Not a hidden gem";
-
 
 interface RankingGame {
   appId: number;
@@ -55,6 +52,7 @@ interface RankingGame {
   }[];
 }
 
+/** Hidden Gem 判定ロジック（2つ目のファイルからコピー） */
 const isHiddenGemCandidate = (game: RankingGame) => {
   const statScore =
     typeof game.analysis?.statGemScore === "number"
@@ -67,7 +65,6 @@ const isHiddenGemCandidate = (game: RankingGame) => {
     game.gemLabel === "Improved Hidden Gem";
   const statisticallyHidden = game.isStatisticallyHidden === true;
 
-  // バックエンドの「隠れた良作」シグナルをすべて尊重
   return (
     statisticallyHidden ||
     labeledHidden ||
@@ -76,75 +73,54 @@ const isHiddenGemCandidate = (game: RankingGame) => {
   );
 };
 
-
-const QUICK_GENRES = [
-  "All",
-  "Action",
-  "Adventure",
-  "RPG",
-  "Strategy",
-  "Simulation",
-  "Casual",
-  "Sports",
-  "Racing",
-  "Puzzle",
-  "Platformer",
-  "Metroidvania",
-  "Roguelike",
-  "Deckbuilding",
-  "Horror",
-  "Visual Novel",
-  "Indie",
-  "Open World",
-  "Survival",
-  "Co-op",
-];
-
-// Normalize tag strings for comparison (case-insensitive, ignore spaces and hyphens)
-const normalizeTag = (tag: string) => tag.toLowerCase().replace(/\s+/g, "").replace(/-/g, "");
-
-// Returns the tags that should be displayed on cards and detail pages.
-// Priority: analysis.labels (AI labels) -> fallback to raw tags.
-const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
+/** カードに載せるタグ（AIラベル優先） */
+const getDisplayTags = (
+  game: { analysis?: { labels?: string[] }; tags?: string[] },
+  limit?: number,
+): string[] => {
   const baseTags =
-    (game.analysis?.labels && game.analysis.labels.length > 0 ? game.analysis.labels : (game.tags ?? [])) || [];
+    (game.analysis?.labels && game.analysis.labels.length > 0
+      ? game.analysis.labels
+      : game.tags ?? []) || [];
 
-  if (!limit || baseTags.length <= limit) {
-    return baseTags;
-  }
-
+  if (!limit || baseTags.length <= limit) return baseTags;
   return baseTags.slice(0, limit);
 };
 
-const Index = () => {
-  const navigate = useNavigate();
-  const [games, setGames] = useState<RankingGame[]>([]);
-  const [allHiddenGames, setAllHiddenGames] = useState<RankingGame[]>([]); // ★ 追加：全期間 Hidden 用プール
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fallbackMessage, setFallbackMessage] = useState<string>("");
+/* ====== ここまで: 流用部分 ====== */
 
+const Index: React.FC = () => {
+  const navigate = useNavigate();
+
+  // 「今週の隠れた名作 TOP 6」に表示するゲーム
+  const [weeklyGems, setWeeklyGems] = useState<RankingGame[]>([]);
+  const [loadingWeekly, setLoadingWeekly] = useState(false);
 
   useEffect(() => {
-    fetchRecentGems();
+    fetchWeeklyGems();
   }, []);
 
-  const fetchRecentGems = async () => {
-    setLoading(true);
-    setFallbackMessage("");
+  /**
+   * search-games から Hidden Gem 候補を取り、スコア上位からランダム 6 本を選ぶ
+   * 優先順: 直近 7 日 → 直近 30 日 → 全期間
+   */
+  const fetchWeeklyGems = async () => {
+    setLoadingWeekly(true);
 
     try {
-      // 指定期間のランキングから Hidden Gem と全体候補を返すヘルパー
       const fetchForPeriod = async (recentDays: string | null) => {
-        const { data, error } = await supabase.functions.invoke("search-games", {
-          body: {
-            genre: "",                 // ホームはジャンル固定なし
-            recentDays: recentDays ?? "",
-            sort: "recommended",       // ← Gem Score ソート（UI では「Gem Score」）
-            minReviews: 0,
-            minPlaytime: 0,
+        const { data, error } = await supabase.functions.invoke(
+          "search-games",
+          {
+            body: {
+              genre: "",
+              recentDays: recentDays ?? "",
+              sort: "recommended", // Gem Score ソート
+              minReviews: 0,
+              minPlaytime: 0,
+            },
           },
-        });
+        );
 
         if (error) {
           console.error("Error fetching games for period", recentDays, error);
@@ -153,481 +129,537 @@ const Index = () => {
 
         const list = (data as RankingGame[]) || [];
         const hidden = list.filter(isHiddenGemCandidate);
-
-
         return { hidden, all: list };
       };
 
       let results: RankingGame[] = [];
       let fallback: RankingGame[] = [];
 
-      // ① まず 7 日以内の Hidden Gem
-      console.log("Home: fetching hidden gems from last 7 days");
+      // ① 直近 7 日
       let { hidden, all } = await fetchForPeriod("7");
-      if (hidden.length > 0) {
-        results = hidden;
-      }
-      if (all.length > 0) {
-        fallback = all;
-      }
+      if (hidden.length > 0) results = hidden;
+      if (all.length > 0) fallback = all;
 
-      // ② 7日で Hidden Gem が 0件なら 30日を試す
+      // ② 7 日で 0 件 → 30 日
       if (results.length === 0) {
-        console.log("Home: no hidden gems in last 7 days, trying 30 days");
         ({ hidden, all } = await fetchForPeriod("30"));
-
         if (hidden.length > 0) {
           results = hidden;
-          setFallbackMessage(
-            "No qualifying hidden gems were found in the last 7 days. Showing results from the last 30 days instead.",
-          );
         } else if (all.length > 0 && fallback.length === 0) {
-          // Hidden Gem はないが、30日内の良作リストは確保しておく
           fallback = all;
         }
       }
 
-      // ③ それでも Hidden Gem 0件なら All time
+      // ③ 30 日でも 0 件 → 全期間
       if (results.length === 0) {
-        console.log("Home: no hidden gems in last 30 days, trying all time");
         ({ hidden, all } = await fetchForPeriod(null));
-
         if (hidden.length > 0) {
           results = hidden;
-          setFallbackMessage(
-            "No qualifying hidden gems were found in the last 7 or 30 days. Showing top hidden gems from all time instead.",
-          );
         } else if (all.length > 0) {
-          // それでも Hidden Gem 0件なら、最後の手段として「高評価ゲーム」を出す
           fallback = all;
-          setFallbackMessage(
-            "No games met the strict hidden gem criteria. Showing top high-quality games instead.",
-          );
         }
       }
 
-      // Hidden Gem が1件もなければ fallback（高評価ゲーム）を使う
       if (results.length === 0 && fallback.length > 0) {
+        // Hidden Gem が一切ない場合は「高評価ゲーム」から選ぶ
         results = fallback;
       }
 
-      const limitedResults = results.slice(0, 24);
-      setGames(limitedResults);
+      // Gem Score ソート済みの上位 24 本を「上位プール」として扱う
+      const topPool = results.slice(0, 24);
 
-      if (limitedResults.length === 0) {
-        toast.info("No hidden gems found matching our quality criteria");
+      if (topPool.length === 0) {
+        setWeeklyGems([]);
+        toast.info("Hidden Gem候補が見つかりませんでした。");
+        return;
       }
 
-      // ★ Todayʼs Hidden Gems 用：
-      // recentDays に依存しない「全期間 Hidden Gem プール」を取得
-      console.log("Home: fetching all-time hidden gems for Today lane");
-      const { hidden: allTimeHidden } = await fetchForPeriod(null); // recentDays = ""（All time）
-      setAllHiddenGames(allTimeHidden);
-    } catch (err) {
-      console.error("Exception fetching gems:", err);
-      toast.error("An error occurred while loading hidden gems");
+      // 上位プールをシャッフルして、先頭 6 本を今週の TOP6 とする
+      const shuffled = [...topPool];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      setWeeklyGems(shuffled.slice(0, 6));
+    } catch (error) {
+      console.error("Exception while fetching weekly gems:", error);
+      toast.error("今週のHidden Gemsの取得に失敗しました。");
     } finally {
-      setLoading(false);
+      setLoadingWeekly(false);
     }
   };
 
-
-
-  // Filter games by selected quick genre (if any)
-  // Use the same tags that are displayed on the GameCard (analysis.labels first)
-  const filteredGames = useMemo(() => {
-    if (!selectedGenre) return games;
-
-    const target = normalizeTag(selectedGenre);
-
-    return games.filter((game) => {
-      const cardTags = getDisplayTags(game);
-      if (cardTags.length === 0) return false;
-
-      const normalized = cardTags.map(normalizeTag);
-      return normalized.includes(target);
-    });
-  }, [games, selectedGenre]);
-
-
-
-  // レーン2: Hidden ではないが高評価のタイトル（露出はまだ少なめ）
-  const noticedGames = useMemo(
-    () =>
-      filteredGames
-        .filter(
-          (game) =>
-            // Hidden Gem 判定に引っかからないものだけを「New & Noticed」に出す
-            !isHiddenGemCandidate(game) &&
-            (game.positiveRatio ?? 0) >= 85 &&
-            (game.totalReviews ?? 0) >= 50,
-        )
-        .slice(0, 16),
-    [filteredGames],
-  );
-
-  // ★ 「Recent High-Quality Hidden Gems」用のサマリー（ジャンルフィルタなしでそのまま上位だけ）
-  const recentHighQualityGems = useMemo(
-    () => games.slice(0, 6),
-    [games],
-  );
-
-
-  // ★ Todayʼs Hidden Gems 用：
-  // recentDays に関係なく「全期間 Hidden Gems」からランダムでピックアップ
-  const todaysHiddenGems = useMemo(() => {
-    if (allHiddenGames.length === 0) return [];
-
-    // まず全期間 Hidden のプールを用意
-    let pool = allHiddenGames;
-
-    // ジャンルフィルタがあれば、getDisplayTags を使って絞り込み
-    if (selectedGenre) {
-      const target = normalizeTag(selectedGenre);
-      const filteredByGenre = allHiddenGames.filter((game) => {
-        const cardTags = getDisplayTags(game);
-        if (cardTags.length === 0) return false;
-        const normalized = cardTags.map(normalizeTag);
-        return normalized.includes(target);
-      });
-
-      // 該当ジャンルで1件もなければ、全体プールにフォールバック
-      if (filteredByGenre.length > 0) {
-        pool = filteredByGenre;
-      }
-    }
-
-    // Recent High-Quality に出ている appId はできるだけ除外
-    const excludedIds = new Set(recentHighQualityGems.map((g) => g.appId));
-    const candidates = pool.filter((g) => !excludedIds.has(g.appId));
-
-    const base = candidates.length > 0 ? candidates : pool;
-
-    // ランダムシャッフルして、最大 24 件まで（上位3件をfeatured、残りをotherで使う）
-    const shuffled = [...base];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    return shuffled.slice(0, 24);
-  }, [allHiddenGames, selectedGenre, recentHighQualityGems]);
-
-
-
-  const featuredHiddenGems = todaysHiddenGems.slice(0, 3);
-  const otherHiddenGems = todaysHiddenGems.slice(3);
-
-  // Steam風の横長サムネつきタイル
-  const renderCompactGameCard = (game: RankingGame) => {
-  const tags = getDisplayTags(game, 3);
-
-  // 価格表示を安全に正規化
-  const rawPrice =
-    typeof game.price === "number" && Number.isFinite(game.price)
-      ? game.price
-      : 0;
-  const priceDisplay = rawPrice === 0 ? "Free" : `$${rawPrice.toFixed(2)}`;
-
-  const headerUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
-  const score =
-    typeof game.analysis?.statGemScore === "number"
-      ? game.analysis.statGemScore
-      : null;
-
   return (
-    <button
-      key={game.appId}
-      onClick={() =>
-        navigate(`/game/${game.appId}`, {
-          // ★ GameDetail へ state も一緒に渡す（リンク切れ対策）
-          state: {
-            gameData: game,
-            analysisData: game.analysis,
-          },
-        })
-      }
-      className="
-        min-w-[260px] max-w-[260px] h-[260px]
-        rounded-lg border bg-card text-left
-        hover:bg-accent hover:text-accent-foreground
-        transition-all shadow-sm hover:shadow-md
-        overflow-hidden flex flex-col
-      "
-    >
-      {/* サムネ（高さ固定）＋ Gem Score グラデ丸バッジ */}
-      <div className="relative w-full h-32">
-        <img
-          src={headerUrl}
-          alt={game.title}
-          loading="lazy"
-          className="w-full h-full object-cover"
-        />
-        {score !== null && (
-          <div className="absolute bottom-2 left-2">
-            <div
-              className="
-                w-12 h-12 rounded-full
-                bg-gradient-to-tr from-emerald-400 via-cyan-400 to-sky-500
-                text-white
-                flex items-center justify-center
-                shadow-lg 
-              "
-            >
-              <span className="text-lg font-extrabold leading-none">
-                {score.toFixed(1)}
-              </span>
+    <div className="page">
+      {/* Header */}
+      <header>
+        <div className="container">
+          <nav className="nav">
+            <div className="logo">
+              <div className="logo-badge">G</div>
+              <span>Hidden Gems</span>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* 本文 */}
-      <div className="p-3 flex flex-col gap-1.5 flex-1">
-        <div className="font-semibold text-sm line-clamp-2">
-          {game.title}
-        </div>
-
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>{Math.round(game.positiveRatio ?? 0)}% positive</span>
-          <span>{priceDisplay}</span>
-        </div>
-
-        {/* 下はタグだけ（AI Gem Score のテキスト行は削除） */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-auto">
-            {tags.map((tag) => (
-              <span
-                key={tag}
-                className="px-1.5 py-0.5 rounded-full bg-muted text-[10px]"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </button>
-  );
-};
-
-
-
-
-
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-b from-primary/10 via-background to-background border-b">
-        <div className="max-w-6xl mx-auto px-4 py-16 md:py-24">
-          <div className="text-center space-y-6">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 rounded-full border border-primary/20 mb-4">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-primary">Steam Hidden Gems Finder</span>
-            </div>
-
-            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-              Discover Hidden Gems on Steam
-            </h1>
-
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              Find high-quality indie games that deserve more attention. Powered by AI analysis of real player reviews.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <Button
-                size="lg"
-                onClick={() => navigate("/search")}
-                className="bg-gradient-to-r from-primary to-accent hover:opacity-90"
-              >
-                <Search className="w-5 h-5 mr-2" />
-                Search Hidden Gems
-              </Button>
-
-              <Button size="lg" variant="outline" asChild>
-                <a href="/wishlist">
-                  <Heart className="w-4 h-4 mr-2" />
-                  Wishlist
-                </a>
-              </Button>
-
-              <Button size="lg" variant="outline" onClick={fetchRecentGems}>
-                <Home className="w-4 h-4 mr-2" />
-                Refresh Recommendations
-              </Button>
-
-              {/* ⭐ 追加部分：Steam インポート（新規タブで開く） */}
-              <Button size="lg" variant="outline" asChild>
-                <a href="/admin/import-steam" target="_blank" rel="noreferrer">
-                  Steamインポート（管理用）
-                </a>
-              </Button>
-            </div>
-          </div>
-
-          {/* Quick Genre Shortcuts */}
-          <div className="mt-10">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Browse by tag</span>
-              <span className="text-[10px] text-muted-foreground">Swipe to see more →</span>
-            </div>
-
-            <div className="relative">
-              <div
-                className="
-                  flex gap-2 overflow-x-auto py-2 -mx-4 px-4
-                  [scrollbar-width:none] [-ms-overflow-style:none]
-                  [&::-webkit-scrollbar]:hidden
-                "
-              >
-                {/* "All" button to clear the genre filter */}
-                <Button
-                  variant={selectedGenre === null ? "default" : "outline"}
-                  size="sm"
-                  className="rounded-full text-xs flex-shrink-0"
-                  onClick={() => setSelectedGenre(null)}
-                >
-                  All
-                </Button>
-
-                {QUICK_GENRES.map((genre) => {
-                  const isActive = selectedGenre === genre;
-                  return (
-                    <Button
-                      key={genre}
-                      variant={isActive ? "default" : "outline"}
-                      size="sm"
-                      className="rounded-full text-xs flex-shrink-0"
-                      onClick={() => setSelectedGenre((current) => (current === genre ? null : genre))}
-                    >
-                      {genre}
-                    </Button>
-                  );
-                })}
-              </div>
-
-              {/* 右端のフェードで「まだ続きがある感」を出す */}
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 py-12 space-y-16">
-
-        {/* 🔥 1st Fold: 行動喚起タイル  */}
-        <section className="space-y-6">
-          <h2 className="text-2xl font-bold tracking-tight">
-            Discover Great Games Instantly
-          </h2>
-          <p className="text-muted-foreground">
-            気になるカテゴリーをタップして、すぐにおすすめをチェックできます。
-          </p>
-
-          {/* タイルグリッド */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {[
-              { label: "今日の隠れた高評価", target: "/rankings?mode=today-hidden" },
-              { label: "最近話題のインディー", target: "/rankings?tag=indie" },
-              { label: "レビュー急上昇タイトル", target: "/rankings?mode=trending" },
-              { label: "少数レビューだけど神ゲー", target: "/rankings?mode=small-but-great" },
-              { label: "復活したHidden Gem", target: "/rankings?mode=improved" },
-              { label: "Steam Deck最適タイトル", target: "/rankings?tag=steamdeck" },
-              { label: "低価格の高評価", target: "/rankings?mode=cheap-gems" },
-              { label: "長時間遊べるゲーム", target: "/rankings?mode=longplay" },
-            ].map((item, idx) => (
+            <div className="nav-links">
+              <a href="#features">Features</a>
+              <a href="#gems">Gems</a>
+              <a href="#reviews">Voices</a>
+              <a href="#faq">FAQ</a>
               <button
-                key={idx}
-                onClick={() => navigate(item.target)}
-                className="
-            w-full rounded-xl border bg-card hover:bg-accent 
-            hover:text-accent-foreground p-4 text-left
-            transition-all shadow-sm hover:shadow-md
-          "
+                type="button"
+                className="nav-cta"
+                onClick={() => navigate("/search")}
               >
-                <span className="font-semibold text-sm md:text-base block">
-                  {item.label}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Tap to explore →
-                </span>
+                Appを試す
               </button>
-            ))}
+            </div>
+          </nav>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <main>
+        <section className="hero">
+          <div className="hero-bg-orbit" />
+          <div className="container hero-inner">
+            <div>
+              <div className="badge-top">
+                <div className="badge-dot" />
+                <span>FOR STEAM PLAYERS / 隠れた名作ハンター向け</span>
+              </div>
+              <h1 className="hero-title">
+                Find Your Next <span className="highlight">Steam Gem</span>.
+              </h1>
+              <p className="hero-sub">
+                無限に流れてくるセール情報とレビューの海。<br />
+                <strong>「本当に自分に刺さる」隠れた神ゲー</strong>
+                だけを、AIがSteamレビューからピックアップします。
+              </p>
+              <div className="hero-cta-row">
+                <button
+                  type="button"
+                  className="btn-main"
+                  onClick={() => navigate("/search")}
+                >
+                  今すぐ隠れた名作を探す
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => navigate("/rankings?mode=today-hidden")}
+                >
+                  <span className="icon">▶</span>
+                  60秒で分かるアプリ紹介
+                </button>
+              </div>
+              <p className="hero-small-note">
+                Steamログイン不要の
+                <span>お試しモード</span> から使えます。
+              </p>
+            </div>
+
+            <div className="hero-visual">
+              <div className="pad-shell">
+                <div className="pad-top-row">
+                  <div className="pad-chip" />
+                  <div className="pad-pill">
+                    <div className="pad-pill-dot" />
+                    <span>AI Gem Detector</span>
+                  </div>
+                </div>
+                <div className="pad-screen">
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Pixel Haunt</div>
+                    <div className="pad-game-tag">Story / Atmosphere</div>
+                    <div className="pad-game-score">★ 9.1</div>
+                  </div>
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Neon Courier</div>
+                    <div className="pad-game-tag">Action / Roguelite</div>
+                    <div className="pad-game-score">★ 8.7</div>
+                  </div>
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Quiet Nights</div>
+                    <div className="pad-game-tag">Chill / Relax</div>
+                    <div className="pad-game-score">★ 9.4</div>
+                  </div>
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Deck & Dice</div>
+                    <div className="pad-game-tag">Deckbuilder</div>
+                    <div className="pad-game-score">★ 8.9</div>
+                  </div>
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Sky Threads</div>
+                    <div className="pad-game-tag">Adventure</div>
+                    <div className="pad-game-score">★ 9.0</div>
+                  </div>
+                  <div className="pad-game-tile">
+                    <div className="pad-game-title">Metro Bloom</div>
+                    <div className="pad-game-tag">Puzzle</div>
+                    <div className="pad-game-score">★ 8.5</div>
+                  </div>
+                </div>
+                <div className="pad-controls">
+                  <div className="pad-stick" />
+                  <div className="pad-buttons">
+                    <div className="pad-btn" />
+                    <div className="pad-btn" />
+                    <div className="pad-btn" />
+                  </div>
+                </div>
+              </div>
+              <div className="hero-floating-tag">
+                🔍 「レビューは微妙なのに自分は刺さる」
+                <br />
+                そんな“ズレた名作”も拾ってくれるのが、このアプリ。
+              </div>
+            </div>
           </div>
         </section>
 
+        {/* Features */}
+        <section id="features">
+          <div className="container">
+            <p className="section-label">features</p>
+            <h2 className="section-title">隠れた神ゲーを掘り当てる3つの仕組み</h2>
+            <p className="section-sub">
+              全員が同じ「おすすめ」を見る時代は終わり。
+              <br />
+              あなたのプレイスタイルとレビューの“行間”から、まだバズっていない名作だけを抽出します。
+            </p>
 
-        {/* 🔵 2nd Fold: Recent High-Quality Picks（横スクロールタイル） */}
-        {recentHighQualityGems.length > 0 && (
-          <section className="space-y-4">
-            <div className="flex items-baseline justify-between">
+            <div className="features-grid">
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>01 / AI REVIEW MINING</span>
+                </div>
+                <h3 className="feature-title">
+                  AIが膨大なSteamレビューを解析
+                </h3>
+                <p className="feature-text">
+                  単純な★評価ではなく、レビュー本文の「熱量」「不満ポイント」「プレイ時間」などをAIが分析。
+                  <br />
+                  <strong>“コア層だけに刺さっているタイトル”</strong>
+                  を浮かび上がらせます。
+                </p>
+                <div className="feature-emoji">🧠</div>
+              </article>
+
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>02 / VIBE SLIDER</span>
+                </div>
+                <h3 className="feature-title">気分で決める「Vibeスライダー」</h3>
+                <p className="feature-text">
+                  Action / Story / Chill / Horror / Solo / Co-op …。
+                  <br />
+                  スライダーを動かすだけで、
+                  <strong>今の気分に合う“空気感”のゲーム</strong>を瞬時に提案します。
+                </p>
+                <div className="feature-emoji">🎚️</div>
+              </article>
+
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>03 / GEM LIST</span>
+                </div>
+                <h3 className="feature-title">フレンドと共有できる「Gemリスト」</h3>
+                <p className="feature-text">
+                  見つけた隠れた名作は、カテゴリ別に「Gemリスト」として保存。
+                  <br />
+                  URLひとつでフレンドにシェアして、
+                  <strong>自分だけのレコメンドページ</strong>として使えます。
+                </p>
+                <div className="feature-emoji">💎</div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* Gems list */}
+        {/* Gems list（ここからが「今週の隠れた名作 TOP 6」の動的化部分） */}
+        <section id="gems">
+          <div className="container">
+            <p className="section-label">this week’s picks</p>
+            <h2 className="section-title">今週の隠れた名作 TOP 6</h2>
+            <p className="section-sub">
+              ここに並ぶのは、Steam全体では「評価数が少ない」のに、
+              <br />
+              コアプレイヤーから異常な熱量で推されているタイトルたちです（※デモ用ダミー）。
+            </p>
+
+            {loadingWeekly && weeklyGems.length === 0 && (
+              <p className="section-sub" style={{ marginTop: 16 }}>
+                Hidden Gems を読み込み中です…
+              </p>
+            )}
+
+            {!loadingWeekly && weeklyGems.length === 0 && (
+              <p className="section-sub" style={{ marginTop: 16 }}>
+                現在「今週の隠れた名作」として表示できるタイトルがありません。
+              </p>
+            )}
+
+            {weeklyGems.length > 0 && (
+              <div className="gems-grid">
+                {weeklyGems.map((game, index) => {
+                  const tags = getDisplayTags(game, 3);
+                  const statScore =
+                    typeof game.analysis?.statGemScore === "number"
+                      ? game.analysis.statGemScore
+                      : null;
+                  const summary =
+                    game.analysis?.summary ||
+                    "Steamレビューから抽出されたHidden Gem候補です。";
+
+                  // ★ カバー画像URL（2つ目のファイルと同じ作り方）
+                  const headerUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
+
+                  // ★ GameDetail への遷移ハンドラ
+                  const openDetail = () =>
+                    navigate(`/game/${game.appId}`, {
+                      state: {
+                        gameData: game,
+                        analysisData: game.analysis,
+                      },
+                    });
+
+                  return (
+                    <article
+                      className="gem-card"
+                      key={game.appId}
+                      onClick={openDetail} // カード全体クリックで遷移
+                    >
+                      <div className="gem-tag-rank">#{index + 1}</div>
+
+                      {/* カバー画像サムネ */}
+                      <div
+                        className="gem-thumb"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDetail();
+                        }}
+                      >
+                        <img src={headerUrl} alt={game.title} loading="lazy" />
+                      </div>
+
+                      <div className="gem-body">
+                        <div className="gem-title-row">
+                          <h3 className="gem-title">{game.title}</h3>
+                          {statScore !== null && (
+                            <div className="gem-score">
+                              AI GEM {statScore.toFixed(1)}
+                            </div>
+                          )}
+                        </div>
+
+                        {tags.length > 0 && (
+                          <div className="gem-tags">
+                            {tags.map((tag) => (
+                              <span className="gem-tag" key={tag}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <p className="gem-desc">{summary}</p>
+
+                        <div className="gem-footer">
+                          <span>
+                            レビュー数：
+                            {game.totalReviews.toLocaleString("en-US")} / 好意的：
+                            {Math.round(game.positiveRatio ?? 0)}%
+                          </span>
+
+                          {/* GameDetail へのリンクボタン */}
+                          <button
+                            type="button"
+                            className="gem-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDetail();
+                            }}
+                          >
+                            詳細を見る <span>↗</span>
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+
+          </div>
+        </section>
+
+        {/* Reviews */}
+        <section id="reviews">
+          <div className="container">
+            <p className="section-label">voices</p>
+            <h2 className="section-title">ヘビープレイヤーのホンネ</h2>
+            <p className="section-sub">
+              実際に「Hidden Gems for Steam」のコンセプトに近いツールを求めている、
+              海外プレイヤーの声をイメージしたサンプルです。
+            </p>
+            <div className="reviews-strip">
+              <article className="review-card">
+                <div className="review-header">
+                  <div className="avatar">S</div>
+                  <div>
+                    <div className="review-name">solo_queue</div>
+                    <div className="review-meta">ソロ専 / 3,000h+</div>
+                  </div>
+                </div>
+                <p className="review-text">
+                  Steamのおすすめは「みんなが好きそうなゲーム」ばかりで、
+                  自分の好みからほんの少しズレてる。もっとニッチなやつが知りたい。
+                </p>
+                <div className="review-game">
+                  欲しいのは「平均点じゃない」名作。
+                </div>
+              </article>
+
+              <article className="review-card">
+                <div className="review-header">
+                  <div className="avatar">A</div>
+                  <div>
+                    <div className="review-name">alt_f4</div>
+                    <div className="review-meta">インディー好き / 1,200h</div>
+                  </div>
+                </div>
+                <p className="review-text">
+                  バンドルやセールで買ったゲームが多すぎて、何から遊べばいいか分からない。
+                  「今の気分」に合わせて1〜2本だけ提案してくれるツールがほしい。
+                </p>
+                <div className="review-game">“Vibe”ベースで探したい。</div>
+              </article>
+
+              <article className="review-card">
+                <div className="review-header">
+                  <div className="avatar">M</div>
+                  <div>
+                    <div className="review-name">meta_mage</div>
+                    <div className="review-meta">レビュー投稿勢</div>
+                  </div>
+                </div>
+                <p className="review-text">
+                  「やってみたら神ゲーだったのに、レビュー件数が少なすぎて誰にも届いてない」
+                  っていうタイトルを救いたい。AIでそういうのだけ拾ってほしい。
+                </p>
+                <div className="review-game">
+                  埋もれてる名作を可視化したい。
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* FAQ + Final CTA */}
+        <section id="faq">
+          <div className="container">
+            <p className="section-label">faq</p>
+            <h2 className="section-title">よくある質問</h2>
+            <p className="section-sub">
+              実際のプロダクト化を想定したときに出てきそうな質問を、モックとして載せています。
+            </p>
+
+            <div className="faq-list">
+              <details className="faq-item">
+                <summary>
+                  <span className="faq-q">
+                    Steamアカウントのログインは必要ですか？
+                  </span>
+                  <span className="faq-icon">➤</span>
+                </summary>
+                <div className="faq-a">
+                  ベータ版では、ログイン不要の「お試しモード」と、プレイ履歴を使う「パーソナライズモード」の2種類を想定しています。
+                  モック段階ではUIのみで、実際のログイン連携は含まれていません。
+                </div>
+              </details>
+
+              <details className="faq-item">
+                <summary>
+                  <span className="faq-q">
+                    公式のSteamクライアントとは違うんですか？
+                  </span>
+                  <span className="faq-icon">➤</span>
+                </summary>
+                <div className="faq-a">
+                  公式クライアントの「おすすめ」は、全体の人気や類似タイトルに基づくことが多いです。
+                  <br />
+                  このアプリは、レビュー本文の“行間”とニッチな好みをもとに、
+                  <strong>「まだあまり知られていない名作」</strong>
+                  にフォーカスする点が違いです。
+                </div>
+              </details>
+
+              <details className="faq-item">
+                <summary>
+                  <span className="faq-q">
+                    マルチプレイが好きなのですが、絞り込みはできますか？
+                  </span>
+                  <span className="faq-icon">➤</span>
+                </summary>
+                <div className="faq-a">
+                  「ソロ / 協力 / 対戦」などのプレイスタイルは、Vibeスライダーとは別にフィルターとして用意する想定です。
+                  PTメンバーの好みを合算した「パーティー向けレコメンド」も拡張アイデアとして考えられます。
+                </div>
+              </details>
+
+              <details className="faq-item">
+                <summary>
+                  <span className="faq-q">料金はかかりますか？</span>
+                  <span className="faq-icon">➤</span>
+                </summary>
+                <div className="faq-a">
+                  基本機能は無料、詳細なフィルタリングやGemリストの公開・カスタムなどを含む「Proプラン」をサブスクで提供するモデルを想定しています。
+                  このページはそのためのLPモックです。
+                </div>
+              </details>
+            </div>
+
+            <div style={{ height: 24 }} />
+
+            <div className="cta-final">
               <div>
-                <h3 className="text-xl font-semibold">Recent High-Quality Picks</h3>
-                <p className="text-muted-foreground text-sm">
-                  過去7〜30日にリリースまたは注目を集めた高評価タイトル。
+                <div className="cta-final-title">START DIGGING GEMS.</div>
+                <p className="cta-final-sub">
+                  もしこのコンセプトが実装されたら、あなたはどんなゲームを真っ先に探しますか？
+                  <br />
+                  「とりあえず積みゲーを整理したい」「次の神ゲーを一本だけ見つけたい」——そんなときに使うツールを目指しています。
                 </p>
               </div>
-              <span className="text-[11px] text-muted-foreground">
-                {recentHighQualityGems.length} titles
-              </span>
-            </div>
-
-            <div className="relative">
-              <div
-                className="
-                  flex gap-3 overflow-x-auto pb-2 -mx-4 px-4
-                  [scrollbar-width:none] [-ms-overflow-style:none]
-                  [&::-webkit-scrollbar]:hidden
-                "
-              >
-                {recentHighQualityGems.map((game) =>
-                  renderCompactGameCard(game),
-                )}
+              <div className="cta-final-actions">
+                <button
+                  type="button"
+                  className="btn-main"
+                  onClick={() => navigate("/search")}
+                >
+                  ベータ版に参加したい
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => navigate("/wishlist")}
+                >
+                  プロジェクトの続報を受け取る
+                </button>
               </div>
-              {/* 右端フェード */}
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
             </div>
-          </section>
-        )}
+          </div>
+        </section>
+      </main>
 
-
-
-        {/* 🔶 3rd Fold: Today’s Hidden Gems（横スクロールタイル） */}
-        {(featuredHiddenGems.length > 0 || otherHiddenGems.length > 0) && (
-          <section className="space-y-4">
-            <div className="flex items-baseline justify-between">
-              <div>
-                <h3 className="text-xl font-semibold">Today's Hidden Gems</h3>
-                <p className="text-sm text-muted-foreground">
-                  全期間の隠れた高評価タイトルから毎日ランダムにセレクト。
-                </p>
-              </div>
-              <span className="text-[11px] text-muted-foreground">
-                {todaysHiddenGems.length} titles
-              </span>
-            </div>
-
-            <div className="relative">
-              <div
-                className="
-                  flex gap-3 overflow-x-auto pb-2 -mx-4 px-4
-                  [scrollbar-width:none] [-ms-overflow-style:none]
-                  [&::-webkit-scrollbar]:hidden
-                "
-              >
-                {todaysHiddenGems.map((game) =>
-                  renderCompactGameCard(game),
-                )}
-              </div>
-              {/* 右端フェード */}
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent" />
-            </div>
-          </section>
-        )}
-
-
-      </div>
-
+      <footer>
+        Hidden Gems for Steam – Concept Mock Page. <br />
+        これはデザイン・構成のモックであり、Valve / Steam とは無関係の非公式コンセプトです。
+      </footer>
     </div>
   );
 };

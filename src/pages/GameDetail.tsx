@@ -400,12 +400,12 @@ export default function GameDetail() {
   };
 
 
-  return (
-    <div className="min-h-screen bg-background">
+    return (
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_45%,_#020008_100%)] text-slate-50">
       {/* === Hero Header Image (Full-width) ======================== */}
-      <div className="w-full border-b border-primary/20 bg-black/40">
+      <div className="w-full border-b border-white/5 bg-gradient-to-b from-black/70 via-black/40 to-transparent">
         <div className="max-w-5xl mx-auto">
-          <div className="relative w-full h-[260px] md:h-[320px] overflow-hidden">
+          <div className="relative w-full h-[260px] md:h-[320px] overflow-hidden rounded-b-[32px] border-x border-b border-white/10 shadow-[0_32px_80px_rgba(0,0,0,0.85)] bg-black">
             <img
               src={headerImageUrl}
               alt={title}
@@ -416,16 +416,21 @@ export default function GameDetail() {
                 e.currentTarget.style.display = "none";
               }}
             />
-            {/* 将来的にトレーラー動画やオーバーレイを載せるための relative コンテナ */}
+            {/* 上から薄いグラデをかけて LP の Hero っぽく */}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           </div>
         </div>
       </div>
 
       {/* === Main Content ========================================= */}
-      <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 pb-10 pt-6 md:px-8 md:pb-16 md:pt-10 space-y-6 -mt-6 md:-mt-10">
         {/* Header Navigation */}
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={handleBack}>
+          <Button
+            variant="outline"
+            onClick={handleBack}
+            className="rounded-full border-white/20 bg-black/40 text-slate-100 hover:bg-black/70 hover:border-white/40"
+          >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
@@ -436,19 +441,25 @@ export default function GameDetail() {
           )}
         </div>
 
-
         {/* Title & Hero Section */}
-        <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
+        <Card className="mt-2 rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#151326_45%,_#050509_100%)] shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
           <CardHeader>
             <div className="space-y-6 min-w-0">
               {/* タイトル */}
-              <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
+              <div className="space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Hidden Gem Analyzer
+                </p>
+                <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  {title}
+                </CardTitle>
+              </div>
 
               {/* ギャラリー：メインメディア（画像 or 動画）＋下にミニサムネ */}
               {hasMedia && activeMediaSrc && (
                 <div className="space-y-3">
                   {/* メインメディア（カード横幅いっぱい） */}
-                  <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-primary/20 bg-muted">
+                  <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-[#050711]">
                     {activeMedia?.type === "video" ? (
                       <video
                         key={activeMediaSrc}
@@ -494,6 +505,8 @@ export default function GameDetail() {
                         }}
                       />
                     )}
+                    {/* 上にちょっとしたグラデ */}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
                   </div>
 
                   {/* ミニサムネ行（Steam風：動画も含む） */}
@@ -510,16 +523,17 @@ export default function GameDetail() {
                           key={`${thumbSrc}-${index}`}
                           type="button"
                           onClick={() => setActiveScreenshotIndex(index)}
-                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-md overflow-hidden border ${isActive
-                            ? "border-primary ring-2 ring-primary/60"
-                            : "border-border"
-                            } bg-muted`}
+                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-xl overflow-hidden border bg-[#050711] ${
+                            isActive
+                              ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                              : "border-white/10"
+                          }`}
                         >
-                                                   <img
+                          <img
                             src={thumbSrc}
                             alt={`${title} thumbnail ${index + 1}`}
                             loading="lazy"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-cover group-hover:brightness-110"
                             onError={(e) => {
                               // 壊れたサムネは非表示
                               const parent = e.currentTarget.parentElement;
@@ -536,11 +550,10 @@ export default function GameDetail() {
                             }}
                           />
 
-
                           {/* 動画の場合は再生アイコンを重ねる */}
                           {isVideo && (
                             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                              <div className="rounded-full bg-black/60 p-2">
+                              <div className="rounded-full bg-black/70 p-2">
                                 <Play className="w-4 h-4 text-white" />
                               </div>
                             </div>
@@ -548,7 +561,7 @@ export default function GameDetail() {
 
                           {/* アクティブ時の枠オーバーレイ */}
                           {isActive && (
-                            <div className="pointer-events-none absolute inset-0 ring-2 ring-primary/70" />
+                            <div className="pointer-events-none absolute inset-0 ring-2 ring-cyan-400/70" />
                           )}
                         </button>
                       );
@@ -557,28 +570,28 @@ export default function GameDetail() {
                 </div>
               )}
 
-
               {/* ギャラリーの下で左右2カラム：左に情報ブロック、右に AI Gem Score */}
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 pt-2">
                 {/* 左：Release / バッジ / 評価テキスト / タグ */}
-                <div className="flex-1 space-y-2 min-w-0">
+                <div className="flex-1 space-y-3 min-w-0">
                   {formattedReleaseDate && (
-                    <p className="text-sm text-muted-foreground">
-                      Release: {formattedReleaseDate}
+                    <p className="text-xs md:text-sm text-slate-300">
+                      <span className="text-slate-400/80">Release:</span>{" "}
+                      {formattedReleaseDate}
                     </p>
                   )}
 
                   {/* 安定度ステータスバッジ */}
                   {stabilityBadge && (
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       <Badge
                         variant="outline"
-                        className={`text-xs font-semibold border ${stabilityBadge.className}`}
+                        className={`text-[11px] font-semibold rounded-full border px-3 py-1 ${stabilityBadge.className}`}
                       >
                         {stabilityBadge.label}
                       </Badge>
                       {stabilityBadge.description && (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-slate-300/80">
                           {stabilityBadge.description}
                         </span>
                       )}
@@ -586,13 +599,19 @@ export default function GameDetail() {
                   )}
 
                   {reviewScoreDesc && (
-                    <p className="text-muted-foreground">{reviewScoreDesc}</p>
+                    <p className="text-sm text-slate-200/90">
+                      {reviewScoreDesc}
+                    </p>
                   )}
 
                   {displayTags.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-2">
                       {displayTags.map((tag, idx) => (
-                        <Badge key={`${tag}-${idx}`} variant="secondary">
+                        <Badge
+                          key={`${tag}-${idx}`}
+                          variant="secondary"
+                          className="rounded-full bg-[#120f28] border border-white/10 text-[11px] px-3 py-1"
+                        >
                           {tag}
                         </Badge>
                       ))}
@@ -601,31 +620,33 @@ export default function GameDetail() {
                 </div>
 
                 {/* 右：AI Gem Score（md 以上で左と横並び） */}
-                <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-background/50 p-6 rounded-lg border border-primary/30">
-                  <div className="text-sm text-muted-foreground mb-2">
+                <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-[#050713]/90 p-6 rounded-2xl border border-white/15 shadow-lg">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-2">
                     AI Gem Score
                   </div>
                   <div className="flex items-baseline justify-center gap-1 mb-2">
-                    <span className="text-5xl font-bold text-primary">
+                    <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
                       {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
                     </span>
-                    <span className="text-2xl text-muted-foreground">/10</span>
+                    <span className="text-2xl text-slate-400">/10</span>
                   </div>
 
                   {gemLabel && (
                     <div className="flex items-center justify-center gap-2 mb-1">
                       {gemLabel === "Hidden Gem" ? (
-                        <CheckCircle2 className="w-5 h-5 text-success" />
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                       ) : gemLabel === "Highly rated but not hidden" ? (
-                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                        <CheckCircle2 className="w-5 h-5 text-sky-400" />
                       ) : (
-                        <XCircle className="w-5 h-5 text-muted-foreground" />
+                        <XCircle className="w-5 h-5 text-slate-500" />
                       )}
-                      <span className="font-semibold">{gemLabel}</span>
+                      <span className="font-semibold text-sm">
+                        {gemLabel}
+                      </span>
                     </div>
                   )}
 
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-[11px] text-slate-300/90 mt-2 leading-relaxed">
                     AI verdict:&nbsp;
                     {hiddenGemVerdict === "Yes" &&
                       "かなり安心しておすすめできる隠れた良作です。"}
@@ -642,14 +663,13 @@ export default function GameDetail() {
           </CardHeader>
         </Card>
 
-
         {/* Summary */}
-        <Card>
+        <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl">Analysis Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground leading-relaxed whitespace-pre-line">
+            <p className="text-sm md:text-base text-slate-200/90 leading-relaxed whitespace-pre-line">
               {summary}
             </p>
           </CardContent>
@@ -657,9 +677,9 @@ export default function GameDetail() {
 
         {/* Pros & Cons */}
         <div className="grid md:grid-cols-2 gap-6">
-          <Card className="border-success/20">
+          <Card className="rounded-[24px] border-emerald-500/30 bg-[#041510]/95 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2 text-success">
+              <CardTitle className="text-xl flex items-center gap-2 text-emerald-400">
                 <ThumbsUp className="w-5 h-5" />
                 Strengths
               </CardTitle>
@@ -669,22 +689,22 @@ export default function GameDetail() {
                 <ul className="space-y-3">
                   {pros.map((pro, idx) => (
                     <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-success mt-0.5">●</span>
-                      <span className="text-muted-foreground">{pro}</span>
+                      <span className="text-emerald-400 mt-0.5">●</span>
+                      <span className="text-slate-200/90">{pro}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-slate-300/80">
                   レビューから特徴的な「良い点」はまだ抽出されていません。
                 </p>
               )}
             </CardContent>
           </Card>
 
-          <Card className="border-destructive/20">
+          <Card className="rounded-[24px] border-rose-500/40 bg-[#190711]/95 shadow-lg">
             <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2 text-destructive">
+              <CardTitle className="text-xl flex items-center gap-2 text-rose-400">
                 <ThumbsDown className="w-5 h-5" />
                 Weaknesses
               </CardTitle>
@@ -694,13 +714,13 @@ export default function GameDetail() {
                 <ul className="space-y-3">
                   {cons.map((con, idx) => (
                     <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-destructive mt-0.5">●</span>
-                      <span className="text-muted-foreground">{con}</span>
+                      <span className="text-rose-400 mt-0.5">●</span>
+                      <span className="text-slate-200/90">{con}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-slate-300/80">
                   目立った「弱点」についてのレビューはまだ少ないようです。
                 </p>
               )}
@@ -711,28 +731,28 @@ export default function GameDetail() {
         {/* 「今」と「昔」を分けて表示 */}
         {(currentStateSummary || historicalIssuesSummary) && (
           <div className="grid md:grid-cols-2 gap-6">
-            <Card>
+            <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-lg">
                   現在の状態（Current state）
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                <p className="text-sm text-slate-200/90 whitespace-pre-line">
                   {currentStateSummary ||
                     "最近のレビュー傾向についての詳細な分析はまだ十分ではありません。"}
                 </p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-lg">
                   過去の問題・初期評価（Historical issues）
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground whitespace-pre-line">
+                <p className="text-sm text-slate-200/90 whitespace-pre-line">
                   {historicalIssuesSummary ||
                     "リリース初期の問題点や評価の推移についての情報はまだ十分ではありません。"}
                 </p>
@@ -742,7 +762,7 @@ export default function GameDetail() {
         )}
 
         {/* Key Insights */}
-        <Card>
+        <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl">Key Insights</CardTitle>
           </CardHeader>
@@ -753,36 +773,38 @@ export default function GameDetail() {
                   <Badge
                     key={`${label}-${idx}`}
                     variant="secondary"
-                    className="text-sm py-1.5"
+                    className="rounded-full bg-[#13122c] border border-white/10 text-xs py-1.5 px-3"
                   >
                     {label}
                   </Badge>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-slate-300/80">
                 まだ特徴的なキーワードは抽出されていません。
               </p>
             )}
           </CardContent>
         </Card>
 
-
-
         {/* Metrics & Scores */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Quality & Risk Scores */}
-          <Card>
+          <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl">
-                Quality & Risk Assessment
+                Quality &amp; Risk Assessment
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Bug Risk</span>
-                  <span className={`font-semibold ${getScoreColor(bugRisk)}`}>
+                  <span className="text-slate-200/90">Bug Risk</span>
+                  <span
+                    className={`font-semibold ${getScoreColor(
+                      bugRisk
+                    )} text-sm`}
+                  >
                     {bugRisk !== null ? `${bugRisk}/10` : "N/A"}
                   </span>
                 </div>
@@ -791,11 +813,11 @@ export default function GameDetail() {
 
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Refund Mentions</span>
+                  <span className="text-slate-200/90">Refund Mentions</span>
                   <span
                     className={`font-semibold ${getScoreColor(
                       refundMentions
-                    )}`}
+                    )} text-sm`}
                   >
                     {refundMentions !== null ? `${refundMentions}/10` : "N/A"}
                   </span>
@@ -808,8 +830,12 @@ export default function GameDetail() {
 
               <div>
                 <div className="flex justify-between text-sm mb-2">
-                  <span>Overall Risk</span>
-                  <span className={`font-semibold ${getScoreColor(riskScore)}`}>
+                  <span className="text-slate-200/90">Overall Risk</span>
+                  <span
+                    className={`font-semibold ${getScoreColor(
+                      riskScore
+                    )} text-sm`}
+                  >
                     {riskScore !== null ? `${riskScore}/10` : "N/A"}
                   </span>
                 </div>
@@ -819,22 +845,22 @@ export default function GameDetail() {
           </Card>
 
           {/* Game Stats */}
-          <Card>
+          <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
             <CardHeader>
               <CardTitle className="text-xl">Game Statistics</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">
+                  <div className="text-sm text-slate-300/80 mb-1">
                     Positive Reviews
                   </div>
-                  <div className="text-2xl font-bold text-primary">
+                  <div className="text-2xl font-bold text-cyan-300">
                     {positiveRatioDisplay}%
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">
+                  <div className="text-sm text-slate-300/80 mb-1">
                     Total Reviews
                   </div>
                   <div className="text-2xl font-bold">
@@ -842,16 +868,14 @@ export default function GameDetail() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">
-                    Price
-                  </div>
-                  <div className="text-2xl font-bold text-success">
+                  <div className="text-sm text-slate-300/80 mb-1">Price</div>
+                  <div className="text-2xl font-bold text-emerald-300">
                     {priceDisplay}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">
+                  <div className="text-sm text-slate-300/80 mb-1">
                     Avg Playtime
                   </div>
                   <div className="text-2xl font-bold">
@@ -862,7 +886,7 @@ export default function GameDetail() {
                 </div>
               </div>
               <div className="pt-2">
-                <div className="text-sm text-muted-foreground mb-1">
+                <div className="text-sm text-slate-300/80 mb-1">
                   Estimated Owners
                 </div>
                 <div className="text-xl font-semibold">
@@ -875,12 +899,15 @@ export default function GameDetail() {
 
         {/* CTA */}
         {steamUrl && (
-          <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30">
-            <CardContent className="py-8 text-center">
+          <Card className="rounded-[28px] border border-white/10 bg-gradient-to-r from-[#3b2bff]/20 via-[#ff4fd8]/20 to-[#ffb86b]/20 shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
+            <CardContent className="py-8 text-center space-y-3">
+              <p className="text-sm text-slate-200/90">
+                気になったら、実際の Steam ストアページで細かい情報もチェックしてみてください。
+              </p>
               <Button
                 asChild
                 size="lg"
-                className="bg-primary hover:bg-primary/90"
+                className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-8 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.7)] hover:brightness-105"
               >
                 <a href={steamUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-5 h-5 mr-2" />
@@ -905,5 +932,6 @@ export default function GameDetail() {
       </div>
     </div>
   );
+
 
 }
