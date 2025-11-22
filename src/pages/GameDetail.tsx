@@ -86,6 +86,7 @@ interface GameDetailState {
     screenshots?: SteamScreenshot[];
     releaseDate?: string | null;
     releaseYear?: number | null;
+    headerImage?: string | null;
   };
   analysisData?: AnalysisData;
   // Legacy props for backward compatibility
@@ -110,6 +111,8 @@ interface GameDetailState {
   screenshots?: SteamScreenshot[];
   releaseDate?: string | null;
   releaseYear?: number | null;
+  // ★ 追加: レガシー経由で headerImage を直接持たせる場合用
+  headerImage?: string | null;
   // レガシー経由でも拾えるようにしておく
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
@@ -183,6 +186,8 @@ export default function GameDetail() {
       screenshots: game.screenshots as GameData["screenshots"],
       releaseDate: game.releaseDate ?? null,
       releaseYear: game.releaseYear ?? null,
+      // ★ 追加: レガシー経路なら top-level の headerImage を拾う
+      headerImage: game.headerImage ?? null,
     } as GameData);
 
   // Steam から取得した最新情報があれば優先する
@@ -295,7 +300,22 @@ export default function GameDetail() {
 
   const effectiveAppId = baseGame.appId || game.appId || 0;
   const appIdStr = String(effectiveAppId);
-  const headerImageUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+  // ★ 追加: DB や navigation state から渡ってきた header_image を優先
+  const explicitHeaderImage =
+    liveGameData?.headerImage ??
+    baseGame.headerImage ??
+    game.headerImage ??
+    null;
+
+  // 従来の appId ベースの header.jpg（フォールバック用）
+  const fallbackHeaderImageUrl =
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+
+  // 最終的に <img src> に渡す URL
+  const headerImageUrl =
+    explicitHeaderImage && explicitHeaderImage.trim() !== ""
+      ? explicitHeaderImage
+      : fallbackHeaderImageUrl;
 
   const screenshots: SteamScreenshot[] =
     (liveGameData?.screenshots ??

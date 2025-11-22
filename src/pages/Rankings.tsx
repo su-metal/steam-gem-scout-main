@@ -832,6 +832,7 @@ export default function Rankings() {
                     gameData={game}
                     analysisData={game.analysis}
                     screenshots={game.screenshots}
+                    headerImage={game.headerImage}   
                   />
                 </div>
               );

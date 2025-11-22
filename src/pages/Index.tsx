@@ -50,6 +50,7 @@ interface RankingGame {
     full?: string;
     thumbnail?: string;
   }[];
+  headerImage?: string | null;
 }
 
 /** Hidden Gem 判定ロジック（2つ目のファイルからコピー） */
@@ -415,8 +416,14 @@ const Index: React.FC = () => {
                     game.analysis?.summary ||
                     "Steamレビューから抽出されたHidden Gem候補です。";
 
-                  // ★ カバー画像URL（2つ目のファイルと同じ作り方）
-                  const headerUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
+                  // ★ カバー画像URL
+                  // 1. search-games 経由で渡ってきた headerImage を優先
+                  // 2. なければ従来通り appId から header.jpg を組み立ててフォールバック
+                  const headerUrl =
+                    game.headerImage && game.headerImage.trim() !== ""
+                      ? game.headerImage
+                      : `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appId}/header.jpg`;
+
 
                   // ★ GameDetail への遷移ハンドラ
                   const openDetail = () =>

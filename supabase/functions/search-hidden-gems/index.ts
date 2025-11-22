@@ -61,6 +61,7 @@ interface RankingGameData {
   releaseDate: string;
   releaseYear: number;
   isAvailableInStore: boolean;
+  headerImage: string | null;
 }
 
 async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
@@ -77,6 +78,7 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
       average_playtime: rankingGame.averagePlaytime,
       tags: rankingGame.tags,
       screenshots: rankingGame.screenshots ?? null,
+      header_image: rankingGame.headerImage,
       steam_url: rankingGame.steamUrl,
       review_score_desc: rankingGame.reviewScoreDesc,
 
@@ -198,6 +200,8 @@ async function updateGameRankingsCacheFromRanking(
   // 既存 data を維持しつつ analysis / gemLabel だけ上書き
   const mergedData = {
     ...(row.data || {}),
+    // ★ headerImage をキャッシュにも反映
+    headerImage: rankingGame.headerImage ?? row.data?.headerImage ?? null,
     analysis: rankingGame.analysis,
     gemLabel: rankingGame.gemLabel,
     lastUpdated: rankingGame.lastUpdated ?? new Date().toISOString(),
@@ -523,7 +527,7 @@ async function fetchAndBuildRankingGame(
   }
 
   const data = wrapper.data;
-
+  const headerImage: string | null = data?.header_image ?? null;
   const title: string = data.name ?? `App ${appId}`;
 
   // 🔹 price_overview.final は「セント」なので /100 してドルに統一
@@ -841,6 +845,7 @@ async function fetchAndBuildRankingGame(
     releaseDate: releaseDateStr,
     releaseYear,
     isAvailableInStore: true,
+    headerImage,
   };
 
   console.log("Built rankingGame with real Steam ratio", appId, {

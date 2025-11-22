@@ -70,6 +70,8 @@ interface GameCardProps {
     full?: string;
     thumbnail?: string;
   }[];
+  /** DB から渡ってくるカバー画像 URL（game_rankings_cache.data.headerImage） */
+  headerImage?: string | null;
 }
 
 
@@ -100,6 +102,7 @@ export const GameCard = ({
   releaseDate,
   releaseYear,
   screenshots,
+  headerImage,
 }: GameCardProps) => {
   const navigate = useNavigate();
   const isFeatured = variant === "featured";
@@ -108,8 +111,19 @@ export const GameCard = ({
   const { isWished, toggle } = useWishlist();
   const isInWishlist = isWished(appIdStr);
 
-  // Steam header image URL (using appId)
-  const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+  // フォールバック用（従来の appId ベース header.jpg）
+  const fallbackHeaderImageUrl =
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+
+  // gameData 経由 or props 経由で来る headerImage を優先
+  const explicitHeaderImage =
+    (gameData as any)?.headerImage ??
+    (headerImage && headerImage.trim() !== "" ? headerImage : null);
+
+  const effectiveImageUrl =
+    explicitHeaderImage && explicitHeaderImage.trim() !== ""
+      ? explicitHeaderImage
+      : fallbackHeaderImageUrl;
 
   const safeSummary =
     summary || "AI could not generate a summary for this title, but it looks like a promising hidden gem.";
@@ -303,6 +317,11 @@ export const GameCard = ({
 
 
   const handleViewDetails = () => {
+     // GameDetail 側で使うための headerImage（さっき計算した explicitHeaderImage を再利用してもOK）
+    const headerForDetail =
+      explicitHeaderImage && explicitHeaderImage.trim() !== ""
+        ? explicitHeaderImage
+        : undefined;
     navigate(`/game/${appId}`, {
       state:
         gameData && analysisData
@@ -331,6 +350,7 @@ export const GameCard = ({
             tags,
             steamUrl,
             screenshots,
+            headerImage: headerForDetail,
           },
     });
   };
@@ -362,7 +382,7 @@ export const GameCard = ({
         {/* Left: Header Image */}
         <div className="flex-shrink-0">
           <img
-            src={headerImageUrl}
+            src={effectiveImageUrl}
             alt={title}
             loading="lazy"
             className="w-full sm:w-40 h-24 sm:h-auto object-cover rounded"
