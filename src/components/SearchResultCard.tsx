@@ -41,6 +41,7 @@ interface SearchResultCardProps {
     full?: string;
     thumbnail?: string;
   }[];
+  headerImage?: string | null;
 }
 
 export const SearchResultCard = ({
@@ -57,6 +58,7 @@ export const SearchResultCard = ({
   analysisData,
   tags,
   screenshots,
+  headerImage,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
@@ -70,7 +72,16 @@ export const SearchResultCard = ({
     });
   };
 
-  const headerImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+  const explicitHeaderImage =
+    (gameData as any)?.headerImage ??
+    (headerImage && headerImage.trim() !== "" ? headerImage : null);
+
+  const fallbackHeaderImageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
+
+  const headerImageUrl =
+    explicitHeaderImage && explicitHeaderImage.trim() !== ""
+      ? explicitHeaderImage
+      : fallbackHeaderImageUrl;
   const safeSummary =
     summary || "AI could not generate a summary for this title, but it looks like a promising hidden gem.";
 

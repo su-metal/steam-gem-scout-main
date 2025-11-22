@@ -61,9 +61,7 @@ const parseGameDate = (value: unknown): Date | null => {
 
 const getReferenceDate = (game: any): Date | null => {
   return (
-    parseGameDate(game.releaseDate) ??
-    parseGameDate(game.lastUpdated) ??
-    null
+    parseGameDate(game.releaseDate) ?? parseGameDate(game.lastUpdated) ?? null
   );
 };
 
@@ -248,6 +246,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         steamUrl: g.steamUrl ?? `https://store.steampowered.com/app/${g.appId}`,
         screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         reviewScoreDesc: g.reviewScoreDesc ?? "",
+        // ★ 追加：game_rankings_cache.data.headerImage をそのまま返す
+        headerImage:
+          typeof g.headerImage === "string" && g.headerImage.trim() !== ""
+            ? g.headerImage
+            : null,
         analysis: {
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
           summary: analysisRaw.summary ?? "",
@@ -321,8 +324,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         typeof analysis.statGemScore === "number"
           ? analysis.statGemScore
           : typeof analysis.reviewQualityScore === "number"
-            ? analysis.reviewQualityScore
-            : 5;
+          ? analysis.reviewQualityScore
+          : 5;
 
       let aiScore = rawReviewQuality / 10; // 0.1〜1.0 くらい
 

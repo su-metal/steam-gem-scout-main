@@ -36,6 +36,7 @@ interface RankingGame {
   isAvailableInStore?: boolean;
   similarityScore?: number;
   sharedTags?: string[];
+  headerImage?: string | null;
 }
 
 interface SimilarGemsSectionProps {
@@ -116,6 +117,7 @@ export const SimilarGemsSection = ({ game }: SimilarGemsSectionProps) => {
                   appId={similarGame.appId}
                   gameData={similarGame}
                   analysisData={similarGame.analysis}
+                  headerImage={similarGame.headerImage}
                 />
                 <div className="px-2 space-y-2">
                   <div className="flex items-center gap-2 text-sm">

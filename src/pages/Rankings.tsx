@@ -54,6 +54,7 @@ interface RankingGame {
     full?: string;
     thumbnail?: string;
   }[];
+  headerImage?: string | null;
 }
 
 // -----------------------------
@@ -832,7 +833,7 @@ export default function Rankings() {
                     gameData={game}
                     analysisData={game.analysis}
                     screenshots={game.screenshots}
-                    
+                    headerImage={game.headerImage}
                   />
                 </div>
               );
