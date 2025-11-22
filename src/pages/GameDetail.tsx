@@ -124,6 +124,7 @@ export default function GameDetail() {
   // Steam 側の最新情報で上書きするための state
   const [liveGameData, setLiveGameData] = useState<GameData | null>(null);
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
+  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0); // 追加
 
 
   useEffect(() => {
@@ -398,123 +399,157 @@ export default function GameDetail() {
           )}
         </div>
 
-      
 
-        {/* Title & Hero Section */}
+               {/* Title & Hero Section */}
         <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
           <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-              <div className="flex-1 space-y-2">
-                <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
-                        {/* Screenshot Gallery */}
-        {screenshotUrls.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {screenshotUrls.map((url, index) => (
-                <div
-                  key={url}
-                  className="relative flex-none h-40 md:h-48 aspect-video rounded-lg overflow-hidden border border-primary/20 bg-muted"
-                >
-                  <img
-                    src={url}
-                    alt={`${title} screenshot ${index + 1}`}
-                    loading="lazy"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // 画像が存在しない場合はカードごと非表示にする
-                      const card = e.currentTarget.parentElement;
-                      if (card) {
-                        card.style.display = "none";
+            <div className="space-y-6 min-w-0">
+              {/* タイトル */}
+              <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
+
+              {/* ギャラリー：メイン画像＋下にミニサムネ */}
+              {screenshotUrls.length > 0 && (
+                <div className="space-y-3">
+                  {/* メイン画像（カード横幅いっぱい） */}
+                  <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-primary/20 bg-muted">
+                    <img
+                      src={
+                        screenshotUrls[activeScreenshotIndex] ??
+                        screenshotUrls[0]
                       }
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-                {formattedReleaseDate && (
-                  <p className="text-sm text-muted-foreground">
-                    Release: {formattedReleaseDate}
-                  </p>
-                )}
-
-        
-
-                {/* 安定度ステータスバッジ（今と昔） */}
-                {stabilityBadge && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <Badge
-                      variant="outline"
-                      className={`text-xs font-semibold border ${stabilityBadge.className}`}
-                    >
-                      {stabilityBadge.label}
-                    </Badge>
-                    {stabilityBadge.description && (
-                      <span className="text-xs text-muted-foreground">
-                        {stabilityBadge.description}
-                      </span>
-                    )}
+                      alt={`${title} screenshot ${
+                        (activeScreenshotIndex ?? 0) + 1
+                      }`}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // メイン画像が壊れている場合はいったん非表示
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
                   </div>
-                )}
 
-                {reviewScoreDesc && (
-                  <p className="text-muted-foreground">{reviewScoreDesc}</p>
-                )}
+                  {/* ミニサムネ行（Steam風） */}
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {screenshotUrls.map((url, index) => {
+                      const isActive = index === activeScreenshotIndex;
+                      return (
+                        <button
+                          key={`${url}-${index}`}
+                          type="button"
+                          onClick={() => setActiveScreenshotIndex(index)}
+                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-md overflow-hidden border ${
+                            isActive
+                              ? "border-primary ring-2 ring-primary/60"
+                              : "border-border"
+                          } bg-muted`}
+                        >
+                          <img
+                            src={url}
+                            alt={`${title} thumbnail ${index + 1}`}
+                            loading="lazy"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // 壊れたサムネは非表示
+                              e.currentTarget.parentElement!.style.display =
+                                "none";
+                            }}
+                          />
+                          {/* アクティブ時の薄いオーバーレイ */}
+                          {isActive && (
+                            <div className="pointer-events-none absolute inset-0 ring-2 ring-primary/70" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                {displayTags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    {displayTags.map((tag, idx) => (
-                      <Badge key={`${tag}-${idx}`} variant="secondary">
-                        {tag}
+              {/* ギャラリーの下で左右2カラム：左に情報ブロック、右に AI Gem Score */}
+              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                {/* 左：Release / バッジ / 評価テキスト / タグ */}
+                <div className="flex-1 space-y-2 min-w-0">
+                  {formattedReleaseDate && (
+                    <p className="text-sm text-muted-foreground">
+                      Release: {formattedReleaseDate}
+                    </p>
+                  )}
+
+                  {/* 安定度ステータスバッジ */}
+                  {stabilityBadge && (
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <Badge
+                        variant="outline"
+                        className={`text-xs font-semibold border ${stabilityBadge.className}`}
+                      >
+                        {stabilityBadge.label}
                       </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      {stabilityBadge.description && (
+                        <span className="text-xs text-muted-foreground">
+                          {stabilityBadge.description}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
-              {/* AI Gem Score ブロック（位置そのまま / 後続タスクでデザイン合わせ） */}
-              <div className="text-center bg-background/50 p-6 rounded-lg border border-primary/30">
-                <div className="text-sm text-muted-foreground mb-2">
-                  AI Gem Score
+                  {reviewScoreDesc && (
+                    <p className="text-muted-foreground">{reviewScoreDesc}</p>
+                  )}
+
+                  {displayTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      {displayTags.map((tag, idx) => (
+                        <Badge key={`${tag}-${idx}`} variant="secondary">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-baseline justify-center gap-1 mb-2">
-                  <span className="text-5xl font-bold text-primary">
-                    {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
-                  </span>
-                  <span className="text-2xl text-muted-foreground">/10</span>
-                </div>
 
-                {/* バックエンドで判定した gemLabel を表示 */}
-                {gemLabel && (
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    {gemLabel === "Hidden Gem" ? (
-                      <CheckCircle2 className="w-5 h-5 text-success" />
-                    ) : gemLabel === "Highly rated but not hidden" ? (
-                      <CheckCircle2 className="w-5 h-5 text-primary" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-muted-foreground" />
-                    )}
-                    <span className="font-semibold">{gemLabel}</span>
+                {/* 右：AI Gem Score（md 以上で左と横並び） */}
+                <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-background/50 p-6 rounded-lg border border-primary/30">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    AI Gem Score
                   </div>
-                )}
+                  <div className="flex items-baseline justify-center gap-1 mb-2">
+                    <span className="text-5xl font-bold text-primary">
+                      {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
+                    </span>
+                    <span className="text-2xl text-muted-foreground">/10</span>
+                  </div>
 
-                {/* AI の hiddenGemVerdict を補足コメントとして表示 */}
-                <p className="text-xs text-muted-foreground mt-1">
-                  AI verdict:&nbsp;
-                  {hiddenGemVerdict === "Yes" &&
-                    "かなり安心しておすすめできる隠れた良作です。"}
-                  {hiddenGemVerdict === "Unknown" &&
-                    "良作の可能性は高そうですが、まだ慎重に見たほうがよさそうです。"}
-                  {hiddenGemVerdict === "No" &&
-                    "レビュー内容から見ると、好みを選ぶ／注意が必要なタイトルです。"}
-                  {!hiddenGemVerdict &&
-                    "AIの判定情報はまだ十分ではありません。"}
-                </p>
+                  {gemLabel && (
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      {gemLabel === "Hidden Gem" ? (
+                        <CheckCircle2 className="w-5 h-5 text-success" />
+                      ) : gemLabel === "Highly rated but not hidden" ? (
+                        <CheckCircle2 className="w-5 h-5 text-primary" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-muted-foreground" />
+                      )}
+                      <span className="font-semibold">{gemLabel}</span>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground mt-1">
+                    AI verdict:&nbsp;
+                    {hiddenGemVerdict === "Yes" &&
+                      "かなり安心しておすすめできる隠れた良作です。"}
+                    {hiddenGemVerdict === "Unknown" &&
+                      "良作の可能性は高そうですが、まだ慎重に見たほうがよさそうです。"}
+                    {hiddenGemVerdict === "No" &&
+                      "レビュー内容から見ると、好みを選ぶ／注意が必要なタイトルです。"}
+                    {!hiddenGemVerdict &&
+                      "AIの判定情報はまだ十分ではありません。"}
+                  </p>
+                </div>
               </div>
             </div>
           </CardHeader>
         </Card>
+
 
         {/* Summary */}
         <Card>
@@ -528,7 +563,7 @@ export default function GameDetail() {
           </CardContent>
         </Card>
 
-         {/* Pros & Cons */}
+        {/* Pros & Cons */}
         <div className="grid md:grid-cols-2 gap-6">
           <Card className="border-success/20">
             <CardHeader>
@@ -640,7 +675,7 @@ export default function GameDetail() {
           </CardContent>
         </Card>
 
-       
+
 
         {/* Metrics & Scores */}
         <div className="grid md:grid-cols-2 gap-6">
