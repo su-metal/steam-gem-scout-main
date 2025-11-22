@@ -45,7 +45,7 @@ export function ImportSteamGamesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
 
-    // ★ ここから AI 解析オプション用の state を追加
+  // ★ ここから AI 解析オプション用の state を追加
   const [runAiAfterImport, setRunAiAfterImport] = useState(false);
   const [maxAiCount, setMaxAiCount] = useState("20");
   const [isAiRunning, setIsAiRunning] = useState(false);
@@ -71,6 +71,12 @@ export function ImportSteamGamesPage() {
   } | null>(null);
 
   const { toast } = useToast();
+
+  const [selectedAppIds, setSelectedAppIds] = useState<number[]>([]);
+
+  const allFilterCandidatesSelected =
+    previewCandidates.length > 0 &&
+    previewCandidates.every((c) => selectedAppIds.includes(c.appId));
 
   // 文字列から AppID の配列を作る（カンマ / 改行 / 空白区切り）
   const parseAppIds = (input: string): number[] => {
@@ -258,12 +264,17 @@ export function ImportSteamGamesPage() {
         return;
       }
 
-      setPreviewCandidates(data.candidates ?? []);
+      const candidates = data.candidates ?? [];
+      setPreviewCandidates(candidates);
+      // プレビュー結果をデフォルトで「全選択」にする
+      setSelectedAppIds(candidates.map((c) => c.appId));
+
       setFilterStats({
         totalCandidates: data.totalCandidates,
         inserted: data.inserted,
         skippedExisting: data.skippedExisting,
       });
+
 
       toast({
         title: "Preview completed",
@@ -275,58 +286,81 @@ export function ImportSteamGamesPage() {
   };
 
   const runAiAnalysisForCandidates = async () => {
-  if (previewCandidates.length === 0) {
-    toast({
-      title: "No candidates to analyze",
-      description:
-        'まず "Preview candidates" を実行して候補を表示してください。',
-      variant: "destructive",
-    });
-    return;
-  }
-
-  const max = Number(maxAiCount);
-  const limit =
-    Number.isFinite(max) && max > 0
-      ? Math.min(max, previewCandidates.length)
-      : previewCandidates.length;
-
-  const targets = previewCandidates.slice(0, limit);
-
-  setIsAiRunning(true);
-  try {
-    for (let i = 0; i < targets.length; i++) {
-      const appId = targets[i].appId;
-
-      const { data, error } = await supabase.functions.invoke(
-        "search-hidden-gems",
-        {
-          body: { appId },
-        }
-      );
-
-      console.log("search-hidden-gems result", { appId, data, error });
-
-      if (error) {
-        console.error("AI analysis error for appId", appId, error);
-        // 全体は止めず、次へ
-      }
+    if (previewCandidates.length === 0) {
+      toast({
+        title: "No candidates to analyze",
+        description:
+          'まず "Preview candidates" を実行して候補を表示してください。',
+        variant: "destructive",
+      });
+      return;
     }
 
-    toast({
-      title: "AI analysis completed",
-      description: `Ran analysis for ${targets.length} games via search-hidden-gems.`,
-    });
-  } finally {
-    setIsAiRunning(false);
-  }
-};
+    const max = Number(maxAiCount);
+    const limit =
+      Number.isFinite(max) && max > 0
+        ? Math.min(max, previewCandidates.length)
+        : previewCandidates.length;
+
+    const targets = previewCandidates.slice(0, limit);
+
+    setIsAiRunning(true);
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const appId = targets[i].appId;
+
+        const { data, error } = await supabase.functions.invoke(
+          "search-hidden-gems",
+          {
+            body: { appId },
+          }
+        );
+
+        console.log("search-hidden-gems result", { appId, data, error });
+
+        if (error) {
+          console.error("AI analysis error for appId", appId, error);
+          // 全体は止めず、次へ
+        }
+      }
+
+      toast({
+        title: "AI analysis completed",
+        description: `Ran analysis for ${targets.length} games via search-hidden-gems.`,
+      });
+    } finally {
+      setIsAiRunning(false);
+    }
+  };
 
 
 
 
   const handleRunFilterImport = async () => {
-    const payload = buildFilterPayload(false);
+    if (previewCandidates.length === 0) {
+      toast({
+        title: "No preview",
+        description:
+          'まず "Preview candidates" を実行して候補を表示してください。',
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedAppIds.length === 0) {
+      toast({
+        title: "No games selected",
+        description:
+          "インポートするゲームにチェックを入れてください。",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const payload = {
+      ...buildFilterPayload(false),
+      selectedAppIds,
+    };
 
     setIsFilterImporting(true);
     try {
@@ -547,7 +581,7 @@ export function ImportSteamGamesPage() {
             </div>
           </div>
 
-                    {/* AI 解析オプション */}
+          {/* AI 解析オプション */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mt-2">
             <label className="flex items-center gap-2 text-xs">
               <input
@@ -587,9 +621,17 @@ export function ImportSteamGamesPage() {
             </Button>
             <Button
               onClick={handleRunFilterImport}
-              disabled={isPreviewLoading || isFilterImporting || isAiRunning}
+              disabled={
+                isPreviewLoading ||
+                isFilterImporting ||
+                isAiRunning ||
+                previewCandidates.length === 0 ||
+                selectedAppIds.length === 0
+              }
             >
-              {isFilterImporting ? "Importing..." : "Import filtered games"}
+              {isFilterImporting
+                ? "Importing..."
+                : "Import selected games"}
             </Button>
           </div>
 
@@ -606,6 +648,22 @@ export function ImportSteamGamesPage() {
               <table className="w-full text-xs">
                 <thead className="bg-muted">
                   <tr className="text-left">
+                    <th className="px-2 py-1">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={allFilterCandidatesSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAppIds(
+                              previewCandidates.map((c) => c.appId)
+                            );
+                          } else {
+                            setSelectedAppIds([]);
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="px-2 py-1">AppID</th>
                     <th className="px-2 py-1">Title</th>
                     <th className="px-2 py-1">Pos%</th>
@@ -618,6 +676,20 @@ export function ImportSteamGamesPage() {
                 <tbody>
                   {previewCandidates.map((c) => (
                     <tr key={c.appId} className="border-t">
+                      <td className="px-2 py-1">
+                        +                       <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={selectedAppIds.includes(c.appId)}
+                          onChange={(e) => {
+                            setSelectedAppIds((prev) =>
+                              e.target.checked
+                                ? Array.from(new Set([...prev, c.appId]))
+                                : prev.filter((id) => id !== c.appId)
+                            );
+                          }}
+                        />
+                      </td>
                       <td className="px-2 py-1 font-mono">{c.appId}</td>
                       <td className="px-2 py-1">{c.title}</td>
                       <td className="px-2 py-1">
@@ -679,8 +751,8 @@ export function ImportSteamGamesPage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
 

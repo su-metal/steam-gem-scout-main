@@ -50,6 +50,11 @@ type ImportSteamGamesRequest =
       tags?: string[];
       limit?: number;
       dryRun?: boolean;
+      // ★ 既存の発売年月フィルタ
+      releaseFrom?: string; // "YYYY-MM"
+      releaseTo?: string; // "YYYY-MM"
+      // ★ 追加: フィルタ結果の中からフロントで選択された AppID 群
+      selectedAppIds?: number[];
     };
 
 type ImportCandidate = {
@@ -150,9 +155,11 @@ Deno.serve(async (req) => {
       tags,
       limit,
       dryRun,
-      // ★ 追加: 発売年月フィルタ
+      // ★ 発売年月フィルタ
       releaseFrom,
       releaseTo,
+      // ★ フロントで選択された AppID 一覧（任意）
+      selectedAppIds,
     } = body as any;
 
     if (
@@ -189,7 +196,21 @@ Deno.serve(async (req) => {
       releaseTo,
     });
 
+    // ★ フロントから selectedAppIds が送られてきている場合、
+    //    フィルタ結果の中から、その AppID だけをさらに絞り込む。
+    const hasSelection =
+      Array.isArray(selectedAppIds) && selectedAppIds.length > 0;
+
+    const selectedSet = hasSelection
+      ? new Set(selectedAppIds.map((id: number) => Number(id)))
+      : null;
+
+    const filteredCandidates = hasSelection
+      ? candidates.filter((c) => selectedSet!.has(Number(c.appId)))
+      : candidates;
+
     // dryRun: true → プレビュー用。DB には書かない
+    // プレビュー時は「元のフィルタ結果」をそのまま返す（UI 側でチェック制御）
     if (dryRun) {
       const response: ImportSteamGamesResult = {
         totalCandidates,
@@ -204,14 +225,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // dryRun でなければ、候補を game_rankings_cache に流し込む
-    const appIds = candidates.map((c) => c.appId);
+    // dryRun でなければ、絞り込み済みの候補だけを game_rankings_cache に流し込む
+    const appIds = filteredCandidates.map((c) => c.appId);
+
+    if (appIds.length === 0) {
+      // 選択された AppID がフィルタ結果に含まれていなかったケース
+      const response: ImportSteamGamesResult = {
+        totalCandidates: 0,
+        inserted: 0,
+        skippedExisting: 0,
+        candidates: undefined,
+      };
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: corsHeaders,
+      });
+    }
+
     const { inserted, skippedExisting } = await upsertGamesToRankingsCache(
       appIds
     );
 
     const response: ImportSteamGamesResult = {
-      totalCandidates,
+      // ★ selectedAppIds が指定されている場合は「実際に対象となった件数」を返す
+      totalCandidates: hasSelection
+        ? filteredCandidates.length
+        : totalCandidates,
       inserted,
       skippedExisting,
       candidates: undefined,
@@ -245,6 +284,21 @@ type FilterParams = {
   releaseFrom?: string; // 例: "2017-01"
   releaseTo?: string; // 例: "2017-12"
 };
+
+// 日付文字列から「年」だけ安全に抜き出すヘルパー
+function parseReleaseYear(dateStr?: string | null): number {
+  if (!dateStr) return 0;
+
+  // まずは Date としてパースしてみる
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.getUTCFullYear();
+  }
+
+  // うまくパースできない形式の場合は、文字列中の4桁の数字を拾う
+  const m = String(dateStr).match(/(\d{4})/);
+  return m ? Number(m[1]) : 0;
+}
 
 function buildRankingGameFromSteamRow(row: any): RankingGame {
   const appId: number = row.app_id;
@@ -591,10 +645,3 @@ const corsHeaders: HeadersInit = {
 };
 
 // ▼ 日付文字列からリリース年を抽出するユーティリティ
-function parseReleaseYear(releaseDate: string): number {
-  if (!releaseDate) return 0;
-  // 例: "30 Aug, 2024" / "2023" など、ざっくり年だけ抜き出す
-  const yearMatch = releaseDate.match(/\d{4}/);
-  if (!yearMatch) return 0;
-  return Number(yearMatch[0]) || 0;
-}

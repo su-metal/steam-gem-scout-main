@@ -11,6 +11,7 @@ import {
   ThumbsDown,
   CheckCircle2,
   XCircle,
+  Play,
 } from "lucide-react";
 import { SimilarGemsSection } from "@/components/SimilarGemsSection";
 import { supabase } from "@/integrations/supabase/client";
@@ -61,6 +62,7 @@ interface AnalysisData {
 }
 
 interface SteamScreenshot {
+  type?: "image" | "video"; // search-hidden-gems から "video" が来る想定。省略時は image 扱い
   thumbnail?: string;
   full?: string;
 }
@@ -125,6 +127,7 @@ export default function GameDetail() {
   const [liveGameData, setLiveGameData] = useState<GameData | null>(null);
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
   const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0); // 追加
+  const [invalidMediaSrcs, setInvalidMediaSrcs] = useState<string[]>([]);
 
 
   useEffect(() => {
@@ -294,19 +297,33 @@ export default function GameDetail() {
   const appIdStr = String(effectiveAppId);
   const headerImageUrl = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appIdStr}/header.jpg`;
 
-  // Edge Function / DB から渡ってくるスクリーンショット配列を優先的に使う
   const screenshots: SteamScreenshot[] =
     (liveGameData?.screenshots ??
       baseGame.screenshots ??
       game.screenshots ??
       []) as SteamScreenshot[];
 
-  // 表示用に URL のみの配列へ変換（full が無ければ thumbnail を使用）
-  const screenshotUrls = screenshots
-    .map((shot) => shot.full || shot.thumbnail)
-    .filter((url): url is string => Boolean(url));
+  // ギャラリー用メディアリスト（画像＋動画）
+  // 無効扱いになった URL (full / thumbnail) はここで除外する
+  const mediaItems: SteamScreenshot[] = screenshots.filter((item) => {
+    const fullSrc = item?.full;
+    const thumbSrc = item?.thumbnail;
+    if (!fullSrc && !thumbSrc) return false;
+    if (fullSrc && invalidMediaSrcs.includes(fullSrc)) return false;
+    if (thumbSrc && invalidMediaSrcs.includes(thumbSrc)) return false;
+    return true;
+  });
 
+  const hasMedia = mediaItems.length > 0;
 
+  // activeScreenshotIndex をメディア数の範囲に収める
+  const clampedActiveIndex = hasMedia
+    ? Math.min(Math.max(activeScreenshotIndex, 0), mediaItems.length - 1)
+    : 0;
+
+  const activeMedia = hasMedia ? mediaItems[clampedActiveIndex] : undefined;
+  const activeMediaSrc =
+    activeMedia?.full || activeMedia?.thumbnail || undefined;
 
 
   const gemLabel: GemLabel | undefined =
@@ -363,6 +380,26 @@ export default function GameDetail() {
 
   const stabilityBadge = getStabilityBadge();
 
+  // 現在表示中のメディア（動画）の full / thumbnail をまとめて無効扱いにする
+  const markActiveMediaInvalid = () => {
+    if (!activeMedia) return;
+    const srcs = [activeMedia.full, activeMedia.thumbnail].filter(
+      (s): s is string => !!s
+    );
+    if (srcs.length === 0) return;
+
+    setInvalidMediaSrcs((prev) => {
+      const next = [...prev];
+      for (const s of srcs) {
+        if (!next.includes(s)) {
+          next.push(s);
+        }
+      }
+      return next;
+    });
+  };
+
+
   return (
     <div className="min-h-screen bg-background">
       {/* === Hero Header Image (Full-width) ======================== */}
@@ -400,62 +437,116 @@ export default function GameDetail() {
         </div>
 
 
-               {/* Title & Hero Section */}
+        {/* Title & Hero Section */}
         <Card className="bg-gradient-to-r from-card/80 to-secondary/50 border-primary/20">
           <CardHeader>
             <div className="space-y-6 min-w-0">
               {/* タイトル */}
               <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
 
-              {/* ギャラリー：メイン画像＋下にミニサムネ */}
-              {screenshotUrls.length > 0 && (
+              {/* ギャラリー：メインメディア（画像 or 動画）＋下にミニサムネ */}
+              {hasMedia && activeMediaSrc && (
                 <div className="space-y-3">
-                  {/* メイン画像（カード横幅いっぱい） */}
+                  {/* メインメディア（カード横幅いっぱい） */}
                   <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-primary/20 bg-muted">
-                    <img
-                      src={
-                        screenshotUrls[activeScreenshotIndex] ??
-                        screenshotUrls[0]
-                      }
-                      alt={`${title} screenshot ${
-                        (activeScreenshotIndex ?? 0) + 1
-                      }`}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // メイン画像が壊れている場合はいったん非表示
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
+                    {activeMedia?.type === "video" ? (
+                      <video
+                        key={activeMediaSrc}
+                        src={activeMediaSrc}
+                        controls
+                        className="w-full h-full object-cover"
+                        // メタデータが読めた段階で duration をチェックして 0 秒付近の動画は無効扱い
+                        onLoadedMetadata={(e) => {
+                          const duration = e.currentTarget.duration;
+                          if (!duration || duration < 1) {
+                            // 今表示中の動画を無効扱いにして、次のメディアへ
+                            markActiveMediaInvalid();
+                            const nextIndex =
+                              mediaItems.length > 1
+                                ? (clampedActiveIndex + 1) % mediaItems.length
+                                : clampedActiveIndex;
+                            if (nextIndex !== clampedActiveIndex) {
+                              setActiveScreenshotIndex(nextIndex);
+                            }
+                          }
+                        }}
+                        // ネットワークエラー等でも同様に無効扱いしてスキップ
+                        onError={() => {
+                          markActiveMediaInvalid();
+                          const nextIndex =
+                            mediaItems.length > 1
+                              ? (clampedActiveIndex + 1) % mediaItems.length
+                              : clampedActiveIndex;
+                          if (nextIndex !== clampedActiveIndex) {
+                            setActiveScreenshotIndex(nextIndex);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={activeMediaSrc}
+                        alt={`${title} screenshot ${clampedActiveIndex + 1}`}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // メイン画像が壊れている場合はいったん非表示
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
                   </div>
 
-                  {/* ミニサムネ行（Steam風） */}
+                  {/* ミニサムネ行（Steam風：動画も含む） */}
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {screenshotUrls.map((url, index) => {
-                      const isActive = index === activeScreenshotIndex;
+                    {mediaItems.map((item, index) => {
+                      const isActive = index === clampedActiveIndex;
+                      const isVideo = item.type === "video";
+                      const thumbSrc = item.thumbnail || item.full;
+
+                      if (!thumbSrc) return null;
+
                       return (
                         <button
-                          key={`${url}-${index}`}
+                          key={`${thumbSrc}-${index}`}
                           type="button"
                           onClick={() => setActiveScreenshotIndex(index)}
-                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-md overflow-hidden border ${
-                            isActive
-                              ? "border-primary ring-2 ring-primary/60"
-                              : "border-border"
-                          } bg-muted`}
+                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-md overflow-hidden border ${isActive
+                            ? "border-primary ring-2 ring-primary/60"
+                            : "border-border"
+                            } bg-muted`}
                         >
-                          <img
-                            src={url}
+                                                   <img
+                            src={thumbSrc}
                             alt={`${title} thumbnail ${index + 1}`}
                             loading="lazy"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               // 壊れたサムネは非表示
-                              e.currentTarget.parentElement!.style.display =
-                                "none";
+                              const parent = e.currentTarget.parentElement;
+                              if (parent) parent.style.display = "none";
+
+                              // このサムネに対応するメディアを無効扱いにする
+                              if (thumbSrc) {
+                                setInvalidMediaSrcs((prev) =>
+                                  prev.includes(thumbSrc)
+                                    ? prev
+                                    : [...prev, thumbSrc]
+                                );
+                              }
                             }}
                           />
-                          {/* アクティブ時の薄いオーバーレイ */}
+
+
+                          {/* 動画の場合は再生アイコンを重ねる */}
+                          {isVideo && (
+                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                              <div className="rounded-full bg-black/60 p-2">
+                                <Play className="w-4 h-4 text-white" />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* アクティブ時の枠オーバーレイ */}
                           {isActive && (
                             <div className="pointer-events-none absolute inset-0 ring-2 ring-primary/70" />
                           )}
@@ -465,6 +556,7 @@ export default function GameDetail() {
                   </div>
                 </div>
               )}
+
 
               {/* ギャラリーの下で左右2カラム：左に情報ブロック、右に AI Gem Score */}
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
