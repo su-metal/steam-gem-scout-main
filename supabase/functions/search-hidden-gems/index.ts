@@ -45,7 +45,11 @@ interface RankingGameData {
   tags: string[];
   steamUrl: string;
   reviewScoreDesc: string;
-  screenshots?: { thumbnail: string; full: string }[];
+  screenshots?: {
+    type?: "image" | "video"; // 省略時は image として扱う想定
+    thumbnail: string;
+    full: string;
+  }[];
   analysis: GameAnalysis;
   gemLabel:
     | "Hidden Gem"
@@ -536,14 +540,38 @@ async function fetchAndBuildRankingGame(
     }
   }
 
-    const screenshots =
-    Array.isArray(data.screenshots)
-      ? data.screenshots.map((shot: any) => ({
-          thumbnail: shot.path_thumbnail,
-          full: shot.path_full,
-        }))
-      : [];
+  // ▼ スクリーンショット（静止画）
+  const imageScreenshots = Array.isArray(data.screenshots)
+    ? data.screenshots.map((shot: any) => ({
+        type: "image" as const,
+        thumbnail: shot.path_thumbnail,
+        full: shot.path_full,
+      }))
+    : [];
 
+  // ▼ 動画（Steam ストアの movies 情報）
+  //   - Steam の appdetails には data.movies があり、
+  //     thumbnail / mp4 / webm などが含まれる想定
+  const videoScreenshots = Array.isArray(data.movies)
+    ? data.movies.map((movie: any) => {
+        const thumbnail: string = movie.thumbnail ?? "";
+        const mp4Max: string | undefined = movie.mp4?.max ?? movie.mp4?.["480"];
+        const webmMax: string | undefined =
+          movie.webm?.max ?? movie.webm?.["480"];
+
+        // 再生に使う URL（mp4 → webm → サムネの順でフォールバック）
+        const full: string = mp4Max ?? webmMax ?? thumbnail ?? "";
+
+        return {
+          type: "video" as const,
+          thumbnail,
+          full,
+        };
+      })
+    : [];
+
+  // ▼ ギャラリー用メディア配列（動画 → 画像の順で並べる）
+  const screenshots = [...videoScreenshots, ...imageScreenshots];
 
   const descriptionSources = [
     data.short_description,
