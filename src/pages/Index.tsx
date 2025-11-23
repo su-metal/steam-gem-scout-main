@@ -88,10 +88,51 @@ const getDisplayTags = (
   return baseTags.slice(0, limit);
 };
 
-/* ====== ここまで: 流用部分 ====== */
+// 気分スライダーの定義
+const VIBE_SLIDERS = [
+  {
+    id: "story",
+    title: "ストーリー重視 ←→ ライト",
+    leftLabel: "ストーリー重視",
+    rightLabel: "ライト",
+  },
+  {
+    id: "healing",
+    title: "癒し ←→ 緊張感",
+    leftLabel: "癒し",
+    rightLabel: "緊張感",
+  },
+  {
+    id: "sessionLength",
+    title: "短時間で遊びたい ←→ 長時間没入",
+    leftLabel: "短時間で遊びたい",
+    rightLabel: "長時間没入",
+  },
+ 
+  {
+    id: "pace",
+    title: "アクション ←→ まったり",
+    leftLabel: "アクション",
+    rightLabel: "まったり",
+  },
+] as const;
+
+type VibeId = (typeof VIBE_SLIDERS)[number]["id"];
+type VibeState = Record<VibeId, number>;
+
 
 const Index: React.FC = () => {
   const navigate = useNavigate();
+
+    const [vibes, setVibes] = useState<VibeState>(() => {
+    const initial: Partial<VibeState> = {};
+    VIBE_SLIDERS.forEach((v) => {
+      // 0〜100 の真ん中あたりからスタート
+      initial[v.id] = 50;
+    });
+    return initial as VibeState;
+  });
+
 
   // 「今週の隠れた名作 TOP 6」に表示するゲーム
   const [weeklyGems, setWeeklyGems] = useState<RankingGame[]>([]);
@@ -318,67 +359,59 @@ const Index: React.FC = () => {
           </div>
         </section>
 
-        {/* Features */}
-        <section id="features">
+                {/* 今日の気分スライダー */}
+        <section id="vibe" className="vibe-section">
           <div className="container">
-            <p className="section-label">features</p>
-            <h2 className="section-title">隠れた神ゲーを掘り当てる3つの仕組み</h2>
-            <p className="section-sub">
-              全員が同じ「おすすめ」を見る時代は終わり。
-              <br />
-              あなたのプレイスタイルとレビューの“行間”から、まだバズっていない名作だけを抽出します。
-            </p>
-
-            <div className="features-grid">
-              <article className="feature-card">
-                <div className="feature-tag">
-                  <div className="feature-tag-dot" />
-                  <span>01 / AI REVIEW MINING</span>
-                </div>
-                <h3 className="feature-title">
-                  AIが膨大なSteamレビューを解析
-                </h3>
-                <p className="feature-text">
-                  単純な★評価ではなく、レビュー本文の「熱量」「不満ポイント」「プレイ時間」などをAIが分析。
+            <div className="vibe-card">
+              <div className="vibe-card-header">
+                <div className="vibe-card-title">今日の気分をざっくり調整</div>
+                <p className="vibe-card-sub">
+                  右に寄せれば寄せるほど、その要素が強いゲームを優先。
                   <br />
-                  <strong>“コア層だけに刺さっているタイトル”</strong>
-                  を浮かび上がらせます。
+                  実際のアプリでは、この入力をもとに AI がレビュー本文の「温度感」や
+                  ワード傾向を解析してスコアリングします。
                 </p>
-                <div className="feature-emoji">🧠</div>
-              </article>
+              </div>
 
-              <article className="feature-card">
-                <div className="feature-tag">
-                  <div className="feature-tag-dot" />
-                  <span>02 / VIBE SLIDER</span>
-                </div>
-                <h3 className="feature-title">気分で決める「Vibeスライダー」</h3>
-                <p className="feature-text">
-                  Action / Story / Chill / Horror / Solo / Co-op …。
-                  <br />
-                  スライダーを動かすだけで、
-                  <strong>今の気分に合う“空気感”のゲーム</strong>を瞬時に提案します。
-                </p>
-                <div className="feature-emoji">🎚️</div>
-              </article>
+              <div className="vibe-sliders">
+                {VIBE_SLIDERS.map((slider) => (
+                  <div className="vibe-slider-row" key={slider.id}>
+                    <div className="vibe-slider-title">{slider.title}</div>
+                    <div className="vibe-slider-bar">
+                      <span className="vibe-slider-label vibe-slider-label-left">
+                        {slider.leftLabel}
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={vibes[slider.id]}
+                        onChange={(e) =>
+                          setVibes((prev) => ({
+                            ...prev,
+                            [slider.id]: Number(e.target.value),
+                          }))
+                        }
+                      />
+                      <span className="vibe-slider-label vibe-slider-label-right">
+                        {slider.rightLabel}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-              <article className="feature-card">
-                <div className="feature-tag">
-                  <div className="feature-tag-dot" />
-                  <span>03 / GEM LIST</span>
-                </div>
-                <h3 className="feature-title">フレンドと共有できる「Gemリスト」</h3>
-                <p className="feature-text">
-                  見つけた隠れた名作は、カテゴリ別に「Gemリスト」として保存。
-                  <br />
-                  URLひとつでフレンドにシェアして、
-                  <strong>自分だけのレコメンドページ</strong>として使えます。
-                </p>
-                <div className="feature-emoji">💎</div>
-              </article>
+              <div className="vibe-footer">
+                <span className="vibe-footer-pill">
+                  🎮 今日の気分プリセット（後で検索条件に連動させる想定）
+                </span>
+              </div>
             </div>
           </div>
         </section>
+
+
+       
 
         {/* Gems list */}
         {/* Gems list（ここからが「今週の隠れた名作 TOP 6」の動的化部分） */}
@@ -475,25 +508,26 @@ const Index: React.FC = () => {
 
                         <p className="gem-desc">{summary}</p>
 
-                        <div className="gem-footer">
-                          <span>
-                            レビュー数：
-                            {game.totalReviews.toLocaleString("en-US")} / 好意的：
-                            {Math.round(game.positiveRatio ?? 0)}%
-                          </span>
+                     <div className="gem-footer">
+  {/* 左側：Hidden Gem バッジ（ラベルがあればそれを表示） */}
+  <div className="gem-badge">
+    <span className="dot" />
+    <span>{game.gemLabel ?? "Hidden Gem"}</span>
+  </div>
 
-                          {/* GameDetail へのリンクボタン */}
-                          <button
-                            type="button"
-                            className="gem-link"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDetail();
-                            }}
-                          >
-                            詳細を見る <span>↗</span>
-                          </button>
-                        </div>
+  {/* 右側：詳細リンク */}
+  <button
+    type="button"
+    className="gem-link"
+    onClick={(e) => {
+      e.stopPropagation();
+      openDetail();
+    }}
+  >
+    詳細を見る <span className="icon">↗</span>
+  </button>
+</div>
+
                       </div>
                     </article>
                   );
@@ -502,6 +536,68 @@ const Index: React.FC = () => {
             )}
 
 
+          </div>
+        </section>
+
+         {/* Features */}
+        <section id="features">
+          <div className="container">
+            <p className="section-label">features</p>
+            <h2 className="section-title">隠れた神ゲーを掘り当てる3つの仕組み</h2>
+            <p className="section-sub">
+              全員が同じ「おすすめ」を見る時代は終わり。
+              <br />
+              あなたのプレイスタイルとレビューの“行間”から、まだバズっていない名作だけを抽出します。
+            </p>
+
+            <div className="features-grid">
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>01 / AI REVIEW MINING</span>
+                </div>
+                <h3 className="feature-title">
+                  AIが膨大なSteamレビューを解析
+                </h3>
+                <p className="feature-text">
+                  単純な★評価ではなく、レビュー本文の「熱量」「不満ポイント」「プレイ時間」などをAIが分析。
+                  <br />
+                  <strong>“コア層だけに刺さっているタイトル”</strong>
+                  を浮かび上がらせます。
+                </p>
+                <div className="feature-emoji">🧠</div>
+              </article>
+
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>02 / VIBE SLIDER</span>
+                </div>
+                <h3 className="feature-title">気分で決める「Vibeスライダー」</h3>
+                <p className="feature-text">
+                  Action / Story / Chill / Horror / Solo / Co-op …。
+                  <br />
+                  スライダーを動かすだけで、
+                  <strong>今の気分に合う“空気感”のゲーム</strong>を瞬時に提案します。
+                </p>
+                <div className="feature-emoji">🎚️</div>
+              </article>
+
+              <article className="feature-card">
+                <div className="feature-tag">
+                  <div className="feature-tag-dot" />
+                  <span>03 / GEM LIST</span>
+                </div>
+                <h3 className="feature-title">フレンドと共有できる「Gemリスト」</h3>
+                <p className="feature-text">
+                  見つけた隠れた名作は、カテゴリ別に「Gemリスト」として保存。
+                  <br />
+                  URLひとつでフレンドにシェアして、
+                  <strong>自分だけのレコメンドページ</strong>として使えます。
+                </p>
+                <div className="feature-emoji">💎</div>
+              </article>
+            </div>
           </div>
         </section>
 

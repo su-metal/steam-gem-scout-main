@@ -59,6 +59,10 @@ interface AnalysisData {
   historicalIssuesSummary?: string;
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
   hasImprovedSinceLaunch?: boolean;
+
+  // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-hidden-gem から来る）
+  currentStateReliability?: "high" | "medium" | "low";
+  historicalIssuesReliability?: "high" | "medium" | "low";
 }
 
 interface SteamScreenshot {
@@ -139,12 +143,6 @@ export default function GameDetail() {
 
 
   const game = location.state as GameDetailState;
-
-  // ★ これを追加
-  useEffect(() => {
-    console.log("GameDetail location.state =", location.state);
-    console.log("GameDetail game =", game);
-  }, [location.state, game]);
 
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -233,6 +231,21 @@ export default function GameDetail() {
   const historicalIssuesSummary = analysisData.historicalIssuesSummary;
   const stabilityTrend = analysisData.stabilityTrend;
   const hasImprovedSinceLaunch = analysisData.hasImprovedSinceLaunch;
+
+  // 「今と昔」セクションの信頼度
+  const currentStateReliability =
+    analysisData.currentStateReliability ?? "medium";
+  const historicalIssuesReliability =
+    analysisData.historicalIssuesReliability ?? "medium";
+
+  // 表示するかどうかのフラグ：
+  // - テキストがある
+  // - かつ reliability が "low" ではない
+  const shouldShowCurrentState =
+    !!currentStateSummary && currentStateReliability !== "low";
+  const shouldShowHistoricalIssues =
+    !!historicalIssuesSummary && historicalIssuesReliability !== "low";
+
 
   // 数値スコアは「number なら採用、それ以外は null（N/A）」にする
   const reviewQualityScore =
@@ -399,6 +412,8 @@ export default function GameDetail() {
   };
 
   const stabilityBadge = getStabilityBadge();
+  const shouldShowStabilityBadge =
+    stabilityBadge && historicalIssuesReliability !== "low";
 
   // 現在表示中のメディア（動画）の full / thumbnail をまとめて無効扱いにする
   const markActiveMediaInvalid = () => {
@@ -420,7 +435,7 @@ export default function GameDetail() {
   };
 
 
-    return (
+  return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_45%,_#020008_100%)] text-slate-50">
       {/* === Hero Header Image (Full-width) ======================== */}
       <div className="w-full border-b border-white/5 bg-gradient-to-b from-black/70 via-black/40 to-transparent">
@@ -543,11 +558,10 @@ export default function GameDetail() {
                           key={`${thumbSrc}-${index}`}
                           type="button"
                           onClick={() => setActiveScreenshotIndex(index)}
-                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-xl overflow-hidden border bg-[#050711] ${
-                            isActive
-                              ? "border-cyan-400 ring-2 ring-cyan-400/60"
-                              : "border-white/10"
-                          }`}
+                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-xl overflow-hidden border bg-[#050711] ${isActive
+                            ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                            : "border-white/10"
+                            }`}
                         >
                           <img
                             src={thumbSrc}
@@ -749,37 +763,42 @@ export default function GameDetail() {
         </div>
 
         {/* 「今」と「昔」を分けて表示 */}
-        {(currentStateSummary || historicalIssuesSummary) && (
+        {(shouldShowCurrentState || shouldShowHistoricalIssues) && (
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  現在の状態（Current state）
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                  {currentStateSummary ||
-                    "最近のレビュー傾向についての詳細な分析はまだ十分ではありません。"}
-                </p>
-              </CardContent>
-            </Card>
+            {/* 現在の状態 */}
+            {shouldShowCurrentState && (
+              <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    現在の状態（Current state）
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-200/90 whitespace-pre-line">
+                    {currentStateSummary}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  過去の問題・初期評価（Historical issues）
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                  {historicalIssuesSummary ||
-                    "リリース初期の問題点や評価の推移についての情報はまだ十分ではありません。"}
-                </p>
-              </CardContent>
-            </Card>
+            {/* 過去の問題・初期評価 */}
+            {shouldShowHistoricalIssues && (
+              <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-lg">
+                    過去の問題・初期評価（Historical issues）
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-200/90 whitespace-pre-line">
+                    {historicalIssuesSummary}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
+
 
         {/* Key Insights */}
         <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">

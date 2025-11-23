@@ -30,6 +30,10 @@ type RankingGame = {
   steamUrl: string;
   reviewScoreDesc: string;
   screenshots?: { thumbnail?: string; full?: string }[];
+  // ★ ヘッダー画像（UI から参照される）
+  headerImage?: string;
+  // ★ 互換用：旧キー
+  header_image?: string;
   analysis: Analysis | null;
   gemLabel: string;
   isStatisticallyHidden: boolean;
@@ -317,6 +321,13 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   // steam_games 側に既に入っている screenshots JSON をそのまま使う
   const screenshots = Array.isArray(row.screenshots) ? row.screenshots : [];
 
+  // headerImage は DB 側に既に保存されている値を優先し、
+  // 無い場合は appId から Steam の標準ヘッダー URL を組み立てる
+  const headerImage: string =
+    (row.headerImage as string | undefined) ??
+    (row.header_image as string | undefined) ??
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+
   const steamUrl: string =
     row.steam_url ?? `https://store.steampowered.com/app/${appId}`;
 
@@ -371,6 +382,10 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     steamUrl,
     reviewScoreDesc,
     screenshots,
+    // ★ ヘッダー画像（検索・一覧カードで使用）
+    headerImage,
+    // 旧キーも一応揃えておく
+    header_image: headerImage,
     // ランキング生成時点では AI 解析は未実行なので null
     analysis: null,
     // gemLabel は後から AI/別処理で更新
@@ -460,10 +475,13 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
       const appIdStr = String(appId);
 
+      // 既存の analysis / gemLabel がある場合は保持するためのプレースホルダ
+      let rankingGameForUpdate = rankingGame;
+
       // 既に同じ appId の行があれば UPDATE、なければ INSERT
       const { data: existing, error: selectError } = await supabase
         .from("game_rankings_cache")
-        .select("id")
+        .select("id, data") // ★ 元は "id" だけだった所を変更
         .eq("data->>appId", appIdStr)
         .maybeSingle();
 
@@ -477,10 +495,42 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         continue;
       }
 
+      // 既存行がある場合は、analysis / gemLabel / headerImage を引き継ぐ
+      if (existing && existing.data && typeof existing.data === "object") {
+        const previousData = existing.data as any;
+
+        rankingGameForUpdate = {
+          ...rankingGame,
+          analysis:
+            previousData.analysis !== undefined
+              ? previousData.analysis
+              : rankingGame.analysis,
+          gemLabel:
+            previousData.gemLabel !== undefined
+              ? previousData.gemLabel
+              : rankingGame.gemLabel,
+          // headerImage は既存があれば優先し、無い場合は今回計算したものを使う
+          headerImage:
+            previousData.headerImage ??
+            previousData.header_image ??
+            (rankingGame as any).headerImage ??
+            (rankingGame as any).header_image,
+          header_image:
+            previousData.header_image ??
+            previousData.headerImage ??
+            (rankingGame as any).header_image ??
+            (rankingGame as any).headerImage,
+        };
+      }
+
       if (existing) {
         const { error: updateError } = await supabase
           .from("game_rankings_cache")
-          .update({ data: rankingGame })
+          .update({
+            app_id: appId, // ← 追加
+            title: rankingGameForUpdate.title, // ← 追加
+            data: rankingGameForUpdate, // 既存 JSON も更新
+          })
           .eq("id", existing.id);
 
         if (updateError) {
@@ -499,7 +549,11 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       } else {
         const { error: insertError } = await supabase
           .from("game_rankings_cache")
-          .insert({ data: rankingGame });
+          .insert({
+            app_id: appId, // ← 追加
+            title: rankingGame.title, // ← 追加
+            data: rankingGame, // 既存 JSON
+          });
 
         if (insertError) {
           console.error("Insert error in game_rankings_cache", insertError);

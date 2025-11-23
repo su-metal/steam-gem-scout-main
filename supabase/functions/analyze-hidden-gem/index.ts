@@ -1,10 +1,19 @@
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+// Supabase Edge Functions 用の型定義。
+// ローカルの TypeScript では解決できずエラーになるためコメントアウト。
+// /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+interface ReviewWindowStats {
+  /** 対象期間内のレビュー件数 */
+  reviewCount: number;
+  /** 対象期間内のポジティブ率（0-100） */
+  positiveRatio: number;
+}
 
 interface GameData {
   title: string;
@@ -15,7 +24,27 @@ interface GameData {
   price: number;
   averagePlaytime: number;
   lastUpdated: string;
+  /** 任意：リリース日（ISO 形式など）。履歴判定に使用。 */
+  releaseDate?: string;
+
+  /** 全期間のレビュー（互換用。既存実装から渡しているもの） */
   reviews: string[];
+
+  /**
+   * 任意：発売初期〜中期あたりのレビュー。
+   * あれば current/historical 判定の信頼度に使う。
+   */
+  earlyReviews?: string[];
+
+  /**
+   * 任意：直近のレビュー。
+   * あれば current/historical 判定の信頼度に使う。
+   */
+  recentReviews?: string[];
+
+  /** 任意：期間別の集計値（レビュー数・ポジ率など）。あれば優先して使用。 */
+  earlyWindowStats?: ReviewWindowStats;
+  recentWindowStats?: ReviewWindowStats;
 }
 
 interface HiddenGemAnalysis {
@@ -55,6 +84,17 @@ interface HiddenGemAnalysis {
    */
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating";
 
+  /**
+   * 「現在の状態」に関する分析の信頼度。
+   * early/recent どちらにも十分なレビューがある場合は "high"。
+   */
+  currentStateReliability?: "high" | "medium" | "low";
+
+  /**
+   * 「過去の問題」に関する分析の信頼度。
+   */
+  historicalIssuesReliability?: "high" | "medium" | "low";
+
   aiError?: boolean;
 }
 
@@ -62,6 +102,12 @@ interface HiddenGemAnalysis {
 const MAX_REVIEWS = 15;
 const MAX_REVIEW_CHARS = 500;
 const MAX_TOTAL_REVIEW_CHARS = 12000;
+
+// 「過去」と「現在」を分けて評価するために必要な最低レビュー数
+const MIN_REVIEWS_FOR_HISTORY = 10;
+
+// 「過去/現在」の履歴を信頼するために必要な最低経過日数（単位: 日）
+const MIN_DAYS_FOR_HISTORY = 21;
 
 // Fallback object used when AI analysis fails
 function buildFallbackAnalysis(errorMessage?: string): HiddenGemAnalysis {
@@ -111,6 +157,89 @@ Deno.serve(async (req) => {
   try {
     const gameData: GameData = await req.json();
     console.log("Analyzing game:", gameData.title);
+
+    // ゲームの経過日数を計算（releaseDate が渡されている場合のみ）
+    let gameAgeDays: number | null = null;
+    if (gameData.releaseDate) {
+      const release = new Date(gameData.releaseDate);
+      if (!Number.isNaN(release.getTime())) {
+        gameAgeDays = (Date.now() - release.getTime()) / (1000 * 60 * 60 * 24);
+      }
+    }
+
+    // 期間別のレビュー件数（あれば）を取得
+    const earlyReviewCountFromStats =
+      gameData.earlyWindowStats?.reviewCount ??
+      gameData.earlyReviews?.length ??
+      0;
+    const recentReviewCountFromStats =
+      gameData.recentWindowStats?.reviewCount ??
+      gameData.recentReviews?.length ??
+      0;
+
+    // early/recent のどちらかでも入っているか
+    const hasWindowData =
+      earlyReviewCountFromStats > 0 || recentReviewCountFromStats > 0;
+
+    // -------------------------------
+    // 「履歴が十分かどうか」の判定
+    // -------------------------------
+
+    let hasEnoughHistorySignal: boolean;
+
+    if (!hasWindowData) {
+      // 期間別レビューが無い場合は、従来どおり「十分」とみなす
+      hasEnoughHistorySignal = true;
+    } else if (gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY) {
+      // ★ 新作（リリースから一定日数未満）の場合だけ、
+      //    「最近のレビュー数がしきい値以上あるか」を条件にする
+      const meetsRecentThreshold =
+        recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
+      hasEnoughHistorySignal = meetsRecentThreshold;
+    } else {
+      // ★ それ以外（十分古いタイトル）は、
+      //    評価の履歴が蓄積されているとみなし、常に true
+      hasEnoughHistorySignal = true;
+    }
+
+    // -------------------------------
+    // 「現在」と「過去」の信頼度
+    // -------------------------------
+
+    let currentStateReliability: "high" | "medium" | "low" = "medium";
+    let historicalIssuesReliability: "high" | "medium" | "low" = "medium";
+
+    if (hasWindowData) {
+      if (gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY) {
+        // 新作：慎重に。recent が少ないうちはどちらも低めに。
+        currentStateReliability =
+          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
+            ? "medium"
+            : "low";
+        historicalIssuesReliability = "low";
+      } else {
+        // 古いタイトル：recent が十分なら現在は high、
+        // early が十分なら過去も high、足りなければ medium。
+        currentStateReliability =
+          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
+            ? "high"
+            : "medium";
+        historicalIssuesReliability =
+          earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
+            ? "high"
+            : "medium";
+      }
+    }
+
+    console.log("History signal stats:", {
+      earlyReviewCount: earlyReviewCountFromStats,
+      recentReviewCount: recentReviewCountFromStats,
+      hasWindowData,
+      hasEnoughHistorySignal,
+      currentStateReliability,
+      historicalIssuesReliability,
+      gameAgeDays,
+    });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -326,6 +455,45 @@ Return ONLY the JSON response, no other text.`;
             : JSON.stringify(content);
 
         analysis = JSON.parse(jsonStr.trim());
+
+        // 期間別レビュー情報から算出した信頼度を埋める
+        analysis.currentStateReliability = currentStateReliability;
+        analysis.historicalIssuesReliability = historicalIssuesReliability;
+
+        // -------------------------------
+        // 「過去の問題」要約のフォールバック生成
+        // -------------------------------
+        const isLongRunningTitle =
+          gameAgeDays === null || gameAgeDays >= MIN_DAYS_FOR_HISTORY;
+        const looksLikeImproved =
+          analysis.hasImprovedSinceLaunch === true ||
+          analysis.stabilityTrend === "Improving";
+
+        if (
+          hasWindowData &&
+          hasEnoughHistorySignal && // 履歴は十分
+          isLongRunningTitle && // 古いタイトル
+          looksLikeImproved && // 「改善された」傾向がある
+          (!analysis.historicalIssuesSummary ||
+            !analysis.historicalIssuesSummary.trim())
+        ) {
+          // AI が historicalIssuesSummary を埋めてこなかった場合は、
+          // cons から簡易的な「過去の問題」サマリを作る
+          if (Array.isArray(analysis.cons) && analysis.cons.length > 0) {
+            const fallbackIssues = analysis.cons.slice(0, 3).join(" / ");
+            analysis.historicalIssuesSummary = fallbackIssues;
+          }
+        }
+
+        // early/recent が渡されていて、かつ十分な履歴が無い場合は
+        // 「過去の問題」系の情報は UI に出さないようクリアしておく
+        if (hasWindowData && !hasEnoughHistorySignal) {
+          analysis.historicalIssuesSummary = "";
+          analysis.hasImprovedSinceLaunch = false;
+          if (!analysis.stabilityTrend) {
+            analysis.stabilityTrend = "Stable";
+          }
+        }
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,

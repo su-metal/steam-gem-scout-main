@@ -25,12 +25,22 @@ interface GameAnalysis {
   refundMentions: number;
   reviewQualityScore: number;
 
-  // ★ アップデ前後の変化情報（analyze-hidden-gem で追加したやつ）
+  // ★ アップデ前後の変化情報
   currentStateSummary?: string;
   historicalIssuesSummary?: string;
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
   hasImprovedSinceLaunch?: boolean;
+
+  // ★ 「今と昔」セクションの信頼度
+  currentStateReliability?: "high" | "medium" | "low";
+  historicalIssuesReliability?: "high" | "medium" | "low";
 }
+
+// 「過去」と「現在」を分けて評価するために必要な最低レビュー数
+const MIN_REVIEWS_FOR_HISTORY = 10;
+
+// 「過去/現在」の履歴を信頼するために必要な最低経過日数（単位: 日）
+const MIN_DAYS_FOR_HISTORY = 21;
 
 interface RankingGameData {
   appId: number;
@@ -335,6 +345,11 @@ async function analyzeGameWithAI(params: {
   sampleReviews: string[];
   reviewScoreDesc?: string;
   contextNotes?: string[];
+
+  // ★ 追加：リリース日と期間別レビュー統計
+  releaseDate?: string;
+  earlyWindowStats?: { reviewCount: number; positiveRatio: number } | null;
+  recentWindowStats?: { reviewCount: number; positiveRatio: number } | null;
 }): Promise<GameAnalysis> {
   const {
     appId,
@@ -346,7 +361,67 @@ async function analyzeGameWithAI(params: {
     sampleReviews,
     reviewScoreDesc = "",
     contextNotes = [],
+    releaseDate,
+    earlyWindowStats,
+    recentWindowStats,
   } = params;
+
+  // --- 「今と昔」をどこまで信頼できるかの判定ロジック ---
+
+  const earlyReviewCountFromStats = earlyWindowStats?.reviewCount ?? 0;
+  const recentReviewCountFromStats = recentWindowStats?.reviewCount ?? 0;
+
+  const hasWindowData =
+    earlyReviewCountFromStats > 0 || recentReviewCountFromStats > 0;
+
+  // ゲームの経過日数（日）
+  let gameAgeDays: number | null = null;
+  if (releaseDate) {
+    const release = new Date(releaseDate);
+    if (!Number.isNaN(release.getTime())) {
+      gameAgeDays = (Date.now() - release.getTime()) / (1000 * 60 * 60 * 24);
+    }
+  }
+
+  const meetsReviewThreshold =
+    earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY &&
+    recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
+
+  // releaseDate が無ければ日数条件はスキップ（従来どおり）
+  const meetsAgeThreshold =
+    gameAgeDays === null || gameAgeDays >= MIN_DAYS_FOR_HISTORY;
+
+  const hasEnoughHistorySignal = hasWindowData
+    ? meetsReviewThreshold && meetsAgeThreshold
+    : true;
+
+  let currentStateReliability: "high" | "medium" | "low" = "medium";
+  let historicalIssuesReliability: "high" | "medium" | "low" = "medium";
+
+  if (hasWindowData) {
+    if (hasEnoughHistorySignal) {
+      currentStateReliability = "high";
+      historicalIssuesReliability = "high";
+    } else {
+      currentStateReliability =
+        recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
+          ? "medium"
+          : "low";
+      historicalIssuesReliability =
+        earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY ? "medium" : "low";
+    }
+  }
+
+  console.log("History signal (search-hidden-gems)", {
+    appId,
+    earlyReviewCount: earlyReviewCountFromStats,
+    recentReviewCount: recentReviewCountFromStats,
+    hasWindowData,
+    gameAgeDays,
+    hasEnoughHistorySignal,
+    currentStateReliability,
+    historicalIssuesReliability,
+  });
 
   // デフォルト値（エラーやAPI失敗時の保険）
   const defaultAnalysis: GameAnalysis = {
@@ -451,17 +526,39 @@ ${reviewsSection}
     positiveRatio,
     totalReviews,
     price,
-    hasReviews: sampleReviews.length > 0 || contextNotes.length > 0,
+    reviewScoreDesc,
   });
 
+  // 「今と昔」テキストの正規化
+  const currentStateSummary =
+    typeof parsed?.currentStateSummary === "string"
+      ? parsed.currentStateSummary.trim()
+      : "";
+
+  let historicalIssuesSummary =
+    typeof parsed?.historicalIssuesSummary === "string"
+      ? parsed.historicalIssuesSummary.trim()
+      : "";
+
+  let hasImprovedSinceLaunch =
+    parsed?.hasImprovedSinceLaunch ?? defaultAnalysis.hasImprovedSinceLaunch;
+  let stabilityTrend = parsed?.stabilityTrend ?? defaultAnalysis.stabilityTrend;
+
+  // 履歴が不足している場合は「過去の問題」は抑制する
+  if (hasWindowData && !hasEnoughHistorySignal) {
+    historicalIssuesSummary = "";
+    hasImprovedSinceLaunch = false;
+    if (!stabilityTrend) {
+      stabilityTrend = "Stable";
+    }
+  }
+
   const finalAnalysis: GameAnalysis = {
+    ...defaultAnalysis,
     hiddenGemVerdict:
       parsed?.hiddenGemVerdict ?? defaultAnalysis.hiddenGemVerdict,
     summary: parsed?.summary?.trim() || fallbackSummary,
-    labels:
-      normalizedLabels.length > 0
-        ? normalizedLabels
-        : buildFallbackLabels(tags, totalReviews),
+    labels: normalizedLabels.length > 0 ? normalizedLabels : [],
     pros:
       normalizedPros.length > 0
         ? normalizedPros
@@ -482,12 +579,15 @@ ${reviewsSection}
       1,
       10
     ),
-    // 今と昔系はまだAIから返していないので、一旦 undefined のまま
-    currentStateSummary: parsed?.currentStateSummary?.trim(),
-    historicalIssuesSummary: parsed?.historicalIssuesSummary?.trim(),
-    hasImprovedSinceLaunch:
-      parsed?.hasImprovedSinceLaunch ?? defaultAnalysis.hasImprovedSinceLaunch,
-    stabilityTrend: parsed?.stabilityTrend ?? defaultAnalysis.stabilityTrend,
+
+    currentStateSummary,
+    historicalIssuesSummary,
+    hasImprovedSinceLaunch,
+    stabilityTrend,
+
+    // ★ ここで信頼度フラグを渡す
+    currentStateReliability,
+    historicalIssuesReliability,
   };
 
   return finalAnalysis;
@@ -586,6 +686,9 @@ async function fetchAndBuildRankingGame(
   const descriptionSnippets = splitIntoParagraphs(descriptionSources);
   const contextNotes = descriptionSnippets.slice(0, 5);
 
+  // ★ このゲーム用のレビュー時刻リスト（グローバルではなくローカルに持つ）
+  const reviewTimestamps: { createdAt: Date; votedUp: boolean }[] = [];
+
   const maxSampleReviews = 20;
   const sampleReviewPool: string[] = [];
   const seenReviews = new Set<string>();
@@ -605,6 +708,12 @@ async function fetchAndBuildRankingGame(
   let averagePlaytime = 0;
   let totalPlaytimeMinutes = 0;
   let playtimeSamples = 0;
+
+  // ★ early / recent のレビュー統計（あとで AI に渡す）
+  let earlyWindowStats: { reviewCount: number; positiveRatio: number } | null =
+    null;
+  let recentWindowStats: { reviewCount: number; positiveRatio: number } | null =
+    null;
 
   // REVIEW FETCH：複数パターンの filter で試す
   for (const config of reviewFetchConfigs) {
@@ -660,6 +769,16 @@ async function fetchAndBuildRankingGame(
         seenReviews.add(normalized);
         sampleReviewPool.push(normalized);
 
+        // ★ レビュー投稿日時（秒→ミリ秒）を取得して保存
+        const createdAtSec = reviewItem.timestamp_created;
+        const createdAt = createdAtSec ? new Date(createdAtSec * 1000) : null;
+        if (createdAt) {
+          reviewTimestamps.push({
+            createdAt,
+            votedUp: reviewItem.voted_up === true,
+          });
+        }
+
         // ▼ レビュー投稿者のプレイ時間（分）を集計
         const playtime = Number(reviewItem?.author?.playtime_forever ?? 0);
         if (Number.isFinite(playtime) && playtime > 0) {
@@ -673,6 +792,52 @@ async function fetchAndBuildRankingGame(
       }
     } catch (e) {
       console.error("Error while fetching appreviews", appId, config, e);
+    }
+  }
+
+  // ------------------------------------------------------------
+  // ★ early / recent のレビュー期間を分割し集計（ループの外）
+  // ------------------------------------------------------------
+  if (releaseDateStr && reviewTimestamps.length > 0) {
+    const release = new Date(releaseDateStr);
+    if (!Number.isNaN(release.getTime())) {
+      // early: 発売〜発売30日後
+      const earlyEnd = new Date(release.getTime() + 30 * 24 * 3600 * 1000);
+      // recent: 直近30日
+      const recentStart = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+
+      let earlyCount = 0;
+      let earlyPositive = 0;
+      let recentCount = 0;
+      let recentPositive = 0;
+
+      for (const item of reviewTimestamps) {
+        const t = item.createdAt;
+
+        if (t >= release && t <= earlyEnd) {
+          earlyCount++;
+          if (item.votedUp) earlyPositive++;
+        }
+
+        if (t >= recentStart) {
+          recentCount++;
+          if (item.votedUp) recentPositive++;
+        }
+      }
+
+      if (earlyCount > 0) {
+        earlyWindowStats = {
+          reviewCount: earlyCount,
+          positiveRatio: Math.round((earlyPositive / earlyCount) * 100),
+        };
+      }
+
+      if (recentCount > 0) {
+        recentWindowStats = {
+          reviewCount: recentCount,
+          positiveRatio: Math.round((recentPositive / recentCount) * 100),
+        };
+      }
     }
   }
 
@@ -737,6 +902,11 @@ async function fetchAndBuildRankingGame(
     sampleReviews,
     contextNotes,
     reviewScoreDesc,
+
+    // ★ リリース日と過去/最近レビュー統計
+    releaseDate: releaseDateStr,
+    earlyWindowStats,
+    recentWindowStats,
   });
 
   console.log("AI analysis finished", appId, {

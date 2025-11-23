@@ -54,7 +54,6 @@ interface RankingGame {
     full?: string;
     thumbnail?: string;
   }[];
-  headerImage?: string | null;
 }
 
 // -----------------------------
@@ -119,6 +118,8 @@ const STORAGE_KEYS = {
 
 export default function Rankings() {
   const [games, setGames] = useState<RankingGame[]>([]);
+  const [showDetails, setShowDetails] = useState(false);
+
   const [loading, setLoading] = useState(true);
 
   // ---- フィルター state（localStorage から復元） ----
@@ -367,8 +368,61 @@ export default function Rankings() {
             </Button>
           </div>
         </div>
+{/* === Simple Filter Header (気分プリセット / 今日の気分) === */}
+<div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4 flex flex-col gap-3">
+  <div className="flex flex-wrap gap-2 items-center">
+    <span className="text-xs text-slate-300/90">Quick filters:</span>
 
-        {/* === Filter Panel ====================================== */}
+    <button
+      onClick={() => setSelectedSort("recommended")}
+      className="px-3 py-1 rounded-full text-xs bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
+    >
+      人気の隠れた名作
+    </button>
+
+    <button
+      onClick={() => setSelectedGenre("Relaxing")}
+      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+    >
+      まったり
+    </button>
+
+    <button
+      onClick={() => setSelectedGenre("Horror")}
+      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+    >
+      緊張感
+    </button>
+
+    <button
+      onClick={() => setSelectedGenre("RPG")}
+      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+    >
+      ストーリー
+    </button>
+  </div>
+
+  <p className="text-[11px] text-slate-400">
+    詳しく絞り込みたい場合は、下の「詳細フィルタを開く」から設定できます。
+  </p>
+</div>
+
+        {/* === Detailed Filters (折りたたみ) ===================== */}
+<div className="rounded-2xl border border-white/10 bg-black/20 shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+
+  {/* トグルボタン */}
+  <button
+    onClick={() => setShowDetails((prev) => !prev)}
+    className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
+  >
+    <span>詳細フィルタを{showDetails ? "閉じる" : "開く"}</span>
+    <span>{showDetails ? "▲" : "▼"}</span>
+  </button>
+
+  {/* 折りたたみ内容 */}
+  {showDetails && (
+    <div className="px-4 py-5 md:px-6 md:py-6 space-y-6">
+       {/* === Filter Panel ====================================== */}
         <div className="space-y-4 rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#141327_45%,_#050509_100%)] px-4 py-5 md:px-6 md:py-6 shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
           {/* Top row: genre / period / sort */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -659,6 +713,12 @@ export default function Rankings() {
             </Button>
           </div>
         </div>
+    </div>
+  )}
+</div>
+
+
+       
 
         {/* === Active Filter Chips ================================ */}
         {hasActiveFilters && !loading && (
@@ -833,7 +893,6 @@ export default function Rankings() {
                     gameData={game}
                     analysisData={game.analysis}
                     screenshots={game.screenshots}
-                    headerImage={game.headerImage}
                   />
                 </div>
               );

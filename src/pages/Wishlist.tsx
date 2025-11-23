@@ -40,6 +40,7 @@ interface RankingGame {
   isStatisticallyHidden: boolean;
   releaseYear?: number;
   releaseDate?: string;
+  headerImage?: string | null;
 }
 
 export default function Wishlist() {
@@ -151,6 +152,7 @@ export default function Wishlist() {
                 averagePlaytime={game.averagePlaytime}
                 gameData={game}
                 analysisData={game.analysis}
+                headerImage={game.headerImage}
               />
             ))}
           </div>

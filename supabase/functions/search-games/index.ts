@@ -232,6 +232,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         releaseYear,
       });
 
+      const normalizedHeaderImage =
+        typeof g.headerImage === "string" && g.headerImage.trim() !== ""
+          ? g.headerImage
+          : typeof g.header_image === "string" &&
+            g.header_image.trim() !== ""
+          ? g.header_image
+          : null;
+
       return {
         appId: toNumber(g.appId, 0),
         title: g.title ?? `App ${g.appId}`,
@@ -247,10 +255,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         reviewScoreDesc: g.reviewScoreDesc ?? "",
         // ★ 追加：game_rankings_cache.data.headerImage をそのまま返す
-        headerImage:
-          typeof g.headerImage === "string" && g.headerImage.trim() !== ""
-            ? g.headerImage
-            : null,
+        headerImage: normalizedHeaderImage,
         analysis: {
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
           summary: analysisRaw.summary ?? "",

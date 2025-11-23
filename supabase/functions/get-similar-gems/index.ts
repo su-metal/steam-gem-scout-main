@@ -36,7 +36,47 @@ interface RankingGame {
   releaseYear: number;
   isAvailableInStore?: boolean;
   similarityScore?: number;
+  headerImage?: string | null;
 }
+
+const normalizeCacheRow = (row: any): RankingGame => {
+  const payload = row?.data ?? row ?? {};
+
+  const headerImageRaw =
+    typeof payload.headerImage === "string" && payload.headerImage.trim() !== ""
+      ? payload.headerImage
+      : typeof payload.header_image === "string" &&
+        payload.header_image.trim() !== ""
+      ? payload.header_image
+      : null;
+
+  return {
+    appId: payload.appId ?? row?.app_id ?? 0,
+    title: payload.title ?? "Unknown title",
+    positiveRatio: payload.positiveRatio ?? 0,
+    totalReviews: payload.totalReviews ?? 0,
+    estimatedOwners: payload.estimatedOwners ?? 0,
+    recentPlayers: payload.recentPlayers ?? 0,
+    price: payload.price ?? 0,
+    averagePlaytime: payload.averagePlaytime ?? 0,
+    lastUpdated: payload.lastUpdated ?? row?.updated_at ?? "",
+    tags: payload.tags ?? [],
+    steamUrl:
+      payload.steamUrl ??
+      (payload.appId
+        ? `https://store.steampowered.com/app/${payload.appId}`
+        : ""),
+    reviewScoreDesc: payload.reviewScoreDesc ?? "",
+    analysis: payload.analysis ?? {},
+    gemLabel: payload.gemLabel ?? "",
+    isStatisticallyHidden: payload.isStatisticallyHidden ?? false,
+    releaseDate: payload.releaseDate ?? "",
+    releaseYear: payload.releaseYear ?? 0,
+    isAvailableInStore: payload.isAvailableInStore ?? true,
+    similarityScore: payload.similarityScore ?? row?.similarityScore ?? 0,
+    headerImage: headerImageRaw,
+  };
+};
 
 serve(async (req) => {
   // CORS
@@ -74,11 +114,11 @@ serve(async (req) => {
     }
 
     // 1. 対象ゲーム取得
-    const { data: target, error: targetError } = await supabase
+    const { data: targetRow, error: targetError } = await supabase
       .from("game_rankings_cache")
       .select("*")
       .eq("app_id", appId)
-      .maybeSingle<RankingGame>();
+      .maybeSingle();
 
     if (targetError) {
       console.error("Error fetching target game:", targetError);
@@ -90,7 +130,7 @@ serve(async (req) => {
 
     // ✅ 対象がキャッシュに無い場合は「正常系」として扱う
     //    → 404 にしない。空配列を 200 で返す。
-    if (!target) {
+    if (!targetRow) {
       console.warn("[get-similar-gems] target game not found in cache. appId=", appId);
       return new Response(JSON.stringify({ data: [] }), {
         status: 200,
@@ -102,7 +142,9 @@ serve(async (req) => {
     }
 
     // 2. 候補ゲーム取得
-    const { data: candidates, error: candidatesError } = await supabase
+    const target = normalizeCacheRow(targetRow);
+
+    const { data: candidateRows, error: candidatesError } = await supabase
       .from("game_rankings_cache")
       .select("*")
       .neq("app_id", appId)
@@ -117,19 +159,18 @@ serve(async (req) => {
       });
     }
 
-    const targetTags = (target.tags || []).map((t) => t.toLowerCase());
-    const targetPlaytime = target.averagePlaytime || 0;
-    const targetPrice = target.price || 0;
+    const targetTags = (target.tags ?? []).map((t) => t.toLowerCase());
+    const targetPlaytime = target.averagePlaytime ?? 0;
+    const targetPrice = target.price ?? 0;
 
-    const scored = (candidates || [])
-      .filter((raw) => {
-        const game = raw as RankingGame;
+    const scored = (candidateRows || [])
+      .map((raw) => normalizeCacheRow(raw))
+      .filter((game) => {
         if (game.isAvailableInStore === false) return false;
         if (!game.tags || game.tags.length === 0) return false;
         return true;
       })
-      .map((raw) => {
-        const game = raw as RankingGame;
+      .map((game) => {
 
         // Tag similarity
         const tags = (game.tags || []).map((t) => t.toLowerCase());
