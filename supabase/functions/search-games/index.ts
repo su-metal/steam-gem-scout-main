@@ -65,6 +65,39 @@ const getReferenceDate = (game: any): Date | null => {
   );
 };
 
+const VALID_TRENDS = ["Improving", "Stable", "Deteriorating", "Unknown"];
+const RELIABILITY_VALUES = ["high", "medium", "low"];
+
+const normalizeSectionText = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  return value.trim();
+};
+
+const normalizeReliability = (
+  value: unknown
+): "high" | "medium" | "low" | null => {
+  if (typeof value !== "string") return null;
+  return RELIABILITY_VALUES.includes(value as string)
+    ? (value as "high" | "medium" | "low")
+    : null;
+};
+
+const normalizeStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+};
+
 // ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
 //   指標: positive_ratio / reviews / owners / price / playtime / release_year
 //   重み: 40 / 20 / 15 / 10 / 10 / 5
@@ -240,6 +273,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ? g.header_image
           : null;
 
+      const summaryText =
+        typeof analysisRaw.summary === "string" ? analysisRaw.summary.trim() : "";
+      const stabilityTrend =
+        typeof analysisRaw.stabilityTrend === "string" &&
+        VALID_TRENDS.includes(analysisRaw.stabilityTrend)
+          ? analysisRaw.stabilityTrend
+          : "Unknown";
+      const hasImprovedSinceLaunch =
+        typeof analysisRaw.hasImprovedSinceLaunch === "boolean"
+          ? analysisRaw.hasImprovedSinceLaunch
+          : null;
+
       return {
         appId: toNumber(g.appId, 0),
         title: g.title ?? `App ${g.appId}`,
@@ -258,21 +303,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
         headerImage: normalizedHeaderImage,
         analysis: {
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
-          summary: analysisRaw.summary ?? "",
-          labels: analysisRaw.labels ?? [],
-          pros: analysisRaw.pros ?? [],
-          cons: analysisRaw.cons ?? [],
+          summary: summaryText,
+          labels: normalizeStringArray(analysisRaw.labels),
+          pros: normalizeStringArray(analysisRaw.pros),
+          cons: normalizeStringArray(analysisRaw.cons),
           riskScore: toNumber(analysisRaw.riskScore, 0),
           bugRisk: toNumber(analysisRaw.bugRisk, 0),
           refundMentions: toNumber(analysisRaw.refundMentions, 0),
           statGemScore: toNumberOrUndefined(analysisRaw.statGemScore),
           reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
-          // ★ ここから追加：「今と昔」関連
-          currentStateSummary: analysisRaw.currentStateSummary ?? "",
-          historicalIssuesSummary: analysisRaw.historicalIssuesSummary ?? "",
-          stabilityTrend: analysisRaw.stabilityTrend ?? "Unknown",
-          hasImprovedSinceLaunch: analysisRaw.hasImprovedSinceLaunch ?? false,
-          // ★ ここまで
+          currentStateSummary: normalizeSectionText(analysisRaw.currentStateSummary),
+          historicalIssuesSummary: normalizeSectionText(analysisRaw.historicalIssuesSummary),
+          stabilityTrend,
+          hasImprovedSinceLaunch,
+          currentStateReliability: normalizeReliability(analysisRaw.currentStateReliability),
+          historicalIssuesReliability: normalizeReliability(analysisRaw.historicalIssuesReliability),
         },
         gemLabel: g.gemLabel ?? "",
         isStatisticallyHidden: g.isStatisticallyHidden ?? false,

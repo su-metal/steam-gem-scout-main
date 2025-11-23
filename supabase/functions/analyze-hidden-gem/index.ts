@@ -17,6 +17,8 @@ interface ReviewWindowStats {
 
 interface GameData {
   title: string;
+  /** Steam app id (early review fetch 用) */
+  appId?: number;
   positiveRatio: number;
   totalReviews: number;
   estimatedOwners: number;
@@ -26,6 +28,7 @@ interface GameData {
   lastUpdated: string;
   /** 任意：リリース日（ISO 形式など）。履歴判定に使用。 */
   releaseDate?: string;
+  tags?: string[];
 
   /** 全期間のレビュー（互換用。既存実装から渡しているもの） */
   reviews: string[];
@@ -47,6 +50,17 @@ interface GameData {
   recentWindowStats?: ReviewWindowStats;
 }
 
+interface EarlyRecentBlocks {
+  historicalReviews: string[];
+  recentReviews: string[];
+  meta: {
+    historicalSource: "earlyReviews" | "allReviewsHead" | "empty";
+    recentSource: "recentReviews" | "allReviewsTail" | "empty";
+    historicalCount: number;
+    recentCount: number;
+  };
+}
+
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
   summary: string;
@@ -62,19 +76,19 @@ interface HiddenGemAnalysis {
    * 現在のバージョン（最近のレビューから推測した状態）の要約。
    * 例: 「最近のパッチ以降、安定性が大きく改善され高評価が増えている」
    */
-  currentStateSummary?: string;
+  currentStateSummary?: string | null;
 
   /**
    * 過去のバージョンで多かった問題の要約。
    * 例: 「ローンチ直後はクラッシュや最適化不足への不満が多かった」
    */
-  historicalIssuesSummary?: string;
+  historicalIssuesSummary?: string | null;
 
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
    * 例: true のとき「昔は微妙だったが今は良くなった」系タイトル。
    */
-  hasImprovedSinceLaunch?: boolean;
+  hasImprovedSinceLaunch?: boolean | null;
 
   /**
    * 安定性や全体評価のトレンド。
@@ -82,18 +96,18 @@ interface HiddenGemAnalysis {
    * - "Stable": 大きな変化はなく安定
    * - "Deteriorating": アプデ後に悪化している
    */
-  stabilityTrend?: "Improving" | "Stable" | "Deteriorating";
+  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown" | null;
 
   /**
    * 「現在の状態」に関する分析の信頼度。
    * early/recent どちらにも十分なレビューがある場合は "high"。
    */
-  currentStateReliability?: "high" | "medium" | "low";
+  currentStateReliability?: "high" | "medium" | "low" | null;
 
   /**
    * 「過去の問題」に関する分析の信頼度。
    */
-  historicalIssuesReliability?: "high" | "medium" | "low";
+  historicalIssuesReliability?: "high" | "medium" | "low" | null;
 
   aiError?: boolean;
 }
@@ -103,14 +117,28 @@ const MAX_REVIEWS = 15;
 const MAX_REVIEW_CHARS = 500;
 const MAX_TOTAL_REVIEW_CHARS = 12000;
 
+// 早期レビュー用の設定
+const EARLY_REVIEW_WINDOW_DAYS = 30; // 発売日から何日までを「初期」とみなすか
+const MAX_EARLY_REVIEW_PAGES = 5; // Steam API を何ページまで遡るか（負荷制御用）
+const MIN_EARLY_REVIEW_SAMPLES = 5; // これ未満なら「初期レビューが薄い」とみなす
+
 // 「過去」と「現在」を分けて評価するために必要な最低レビュー数
-const MIN_REVIEWS_FOR_HISTORY = 10;
 
 // 「過去/現在」の履歴を信頼するために必要な最低経過日数（単位: 日）
-const MIN_DAYS_FOR_HISTORY = 21;
 
 // Fallback object used when AI analysis fails
-function buildFallbackAnalysis(errorMessage?: string): HiddenGemAnalysis {
+function buildFallbackAnalysis(
+  errorMessage?: string,
+  opts?: {
+    title?: string;
+    currentStateReliability?: "high" | "medium" | "low";
+    historicalIssuesReliability?: "high" | "medium" | "low";
+  }
+): HiddenGemAnalysis {
+  const title = opts?.title ?? "this game";
+  const currentRel = opts?.currentStateReliability ?? null;
+  const historicalRel = opts?.historicalIssuesReliability ?? null;
+
   return {
     hiddenGemVerdict: "Unknown",
     summary:
@@ -122,31 +150,258 @@ function buildFallbackAnalysis(errorMessage?: string): HiddenGemAnalysis {
     bugRisk: 5,
     refundMentions: 5,
     reviewQualityScore: 5,
+    currentStateSummary: null,
+    historicalIssuesSummary: null,
+    hasImprovedSinceLaunch: null,
+    stabilityTrend: "Unknown",
+    currentStateReliability: currentRel,
+    historicalIssuesReliability: historicalRel,
     aiError: true,
   };
 }
 
+const RECENT_REVIEW_LIMIT = 40;
+const HISTORICAL_REVIEW_LIMIT = 40;
+
 // Reduce and sanitize review text to avoid oversized prompts
-function prepareReviews(rawReviews: string[]): string[] {
+function prepareReviews(
+  rawReviews: string[],
+  maxItems = MAX_REVIEWS
+): string[] {
   if (!rawReviews || rawReviews.length === 0) return [];
 
-  const sampled = rawReviews.slice(0, MAX_REVIEWS).map((r) => {
+  const sampled = rawReviews.slice(0, maxItems).map((r) => {
     if (!r) return "";
     // Truncate each review to the per-review max length
     return r.slice(0, MAX_REVIEW_CHARS);
   });
 
   const finalReviews: string[] = [];
+  const seen = new Set<string>();
   let totalChars = 0;
 
   for (const r of sampled) {
     const len = r.length;
     if (totalChars + len > MAX_TOTAL_REVIEW_CHARS) break;
-    finalReviews.push(r);
+    if (!r.trim()) continue;
+    if (seen.has(r)) continue;
+    seen.add(r);
+    finalReviews.push(r.trim());
     totalChars += len;
   }
 
   return finalReviews;
+}
+
+function buildEarlyRecentBlocksFromLocal(
+  gameData: GameData
+): EarlyRecentBlocks {
+  const baseAll = prepareReviews(gameData.reviews ?? [], 80);
+
+  let historicalReviews: string[] = [];
+  let recentReviews: string[] = [];
+  let historicalSource: EarlyRecentBlocks["meta"]["historicalSource"] = "empty";
+  let recentSource: EarlyRecentBlocks["meta"]["recentSource"] = "empty";
+
+  // 1) まず earlyReviews / recentReviews を優先して使う
+  if (
+    Array.isArray(gameData.earlyReviews) &&
+    gameData.earlyReviews.length > 0
+  ) {
+    historicalReviews = prepareReviews(
+      gameData.earlyReviews,
+      HISTORICAL_REVIEW_LIMIT
+    );
+    historicalSource = "earlyReviews";
+  }
+
+  if (
+    Array.isArray(gameData.recentReviews) &&
+    gameData.recentReviews.length > 0
+  ) {
+    recentReviews = prepareReviews(gameData.recentReviews, RECENT_REVIEW_LIMIT);
+    recentSource = "recentReviews";
+  }
+
+  // 2) 足りない場合は baseAll の head/tail で補完
+  if (historicalReviews.length === 0 && baseAll.length > 0) {
+    historicalReviews = baseAll.slice(0, HISTORICAL_REVIEW_LIMIT);
+    historicalSource = "allReviewsHead";
+  }
+
+  if (recentReviews.length === 0 && baseAll.length > 0) {
+    recentReviews = baseAll.slice(-RECENT_REVIEW_LIMIT);
+    recentSource = "allReviewsTail";
+  }
+
+  // 3) historical と recent が被っている場合は recent から重複を削除
+  if (historicalReviews.length && recentReviews.length) {
+    const historicalSet = new Set(historicalReviews);
+    const filteredRecent = recentReviews.filter(
+      (review) => !historicalSet.has(review)
+    );
+    if (filteredRecent.length > 0) {
+      recentReviews = filteredRecent;
+    }
+  }
+
+  return {
+    historicalReviews,
+    recentReviews,
+    meta: {
+      historicalSource,
+      recentSource,
+      historicalCount: historicalReviews.length,
+      recentCount: recentReviews.length,
+    },
+  };
+}
+
+async function fetchEarlyReviewsFromSteam(
+  appId: number,
+  releaseDateIso: string
+): Promise<string[]> {
+  const releaseDate = new Date(releaseDateIso);
+  if (!releaseDateIso || Number.isNaN(releaseDate.getTime())) {
+    return [];
+  }
+
+  const earlyWindowEnd = new Date(
+    releaseDate.getTime() + EARLY_REVIEW_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  const collected: string[] = [];
+  let cursor = "*";
+
+  for (let page = 0; page < MAX_EARLY_REVIEW_PAGES; page++) {
+    const url =
+      `https://store.steampowered.com/appreviews/${appId}` +
+      `?json=1&language=all&review_type=all&purchase_type=all` +
+      `&filter=recent&num_per_page=100&cursor=${encodeURIComponent(cursor)}`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn("Early review fetch failed:", {
+        appId,
+        status: res.status,
+      });
+      break;
+    }
+
+    const json = (await res.json()) as any;
+    const reviews = Array.isArray(json?.reviews) ? json.reviews : [];
+    if (reviews.length === 0) {
+      break;
+    }
+
+    let reachedBeforeRelease = false;
+
+    for (const item of reviews) {
+      const text = typeof item?.review === "string" ? item.review.trim() : "";
+      const ts =
+        typeof item?.timestamp_created === "number"
+          ? item.timestamp_created
+          : undefined;
+
+      if (!text || !ts) continue;
+
+      const createdAt = new Date(ts * 1000);
+      if (createdAt < releaseDate) {
+        // 発売日より前まで来たら、それ以降のページは見る必要なし
+        reachedBeforeRelease = true;
+        continue;
+      }
+
+      // 発売〜EARLY_REVIEW_WINDOW_DAYS 日のレビューだけを拾う
+      if (createdAt <= earlyWindowEnd) {
+        collected.push(text);
+      }
+    }
+
+    if (collected.length >= MIN_EARLY_REVIEW_SAMPLES || reachedBeforeRelease) {
+      break;
+    }
+
+    const nextCursor = typeof json?.cursor === "string" ? json.cursor : null;
+    if (!nextCursor || nextCursor === cursor) {
+      break;
+    }
+    cursor = nextCursor;
+  }
+
+  // 既存のトークン制御ロジックに合わせて圧縮／重複除去
+  return prepareReviews(collected, HISTORICAL_REVIEW_LIMIT);
+}
+
+async function buildEarlyRecentBlocks(
+  gameData: GameData
+): Promise<EarlyRecentBlocks> {
+  // まずは既存ロジックだけで組み立てる
+  const localBlocks = buildEarlyRecentBlocksFromLocal(gameData);
+
+  // appId or releaseDate が無ければ、Steam には取りに行けない
+  if (!gameData.appId || !gameData.releaseDate) {
+    return localBlocks;
+  }
+
+  // すでに初期レビューが十分あるなら、わざわざ取りに行かない
+  if (localBlocks.meta.historicalCount >= MIN_EARLY_REVIEW_SAMPLES) {
+    return localBlocks;
+  }
+
+  // 環境変数で ON/OFF できるようにしておく（必要なければ常に true でもOK）
+  const enableEarlyFetch =
+    Deno.env.get("ENABLE_STEAM_EARLY_REVIEWS") === "true";
+  if (!enableEarlyFetch) {
+    return localBlocks;
+  }
+
+  try {
+    const earlyFromSteam = await fetchEarlyReviewsFromSteam(
+      gameData.appId,
+      gameData.releaseDate
+    );
+
+    if (!earlyFromSteam.length) {
+      return localBlocks;
+    }
+
+    return {
+      historicalReviews: earlyFromSteam,
+      recentReviews: localBlocks.recentReviews,
+      meta: {
+        ...localBlocks.meta,
+        historicalCount: earlyFromSteam.length,
+      },
+    };
+  } catch (e) {
+    console.error("Failed to fetch early reviews from Steam:", e);
+    return localBlocks;
+  }
+}
+
+async function buildReviewSections(gameData: GameData): Promise<{
+  recentReviews: string[];
+  historicalReviews: string[];
+}> {
+  const blocks = await buildEarlyRecentBlocks(gameData);
+  return {
+    recentReviews: blocks.recentReviews,
+    historicalReviews: blocks.historicalReviews,
+  };
+}
+
+function formatReviewBlock(
+  label: string,
+  reviews: string[],
+  emptyInstruction: string
+): string {
+  if (!reviews.length) {
+    return `${label}:\n${emptyInstruction}`;
+  }
+
+  const lines = reviews.map((review, index) => `${index + 1}. ${review}`);
+  return `${label}:\n${lines.join("\n")}`;
 }
 
 Deno.serve(async (req) => {
@@ -154,231 +409,136 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let fallbackTitle = "Unknown Game";
+
   try {
     const gameData: GameData = await req.json();
     console.log("Analyzing game:", gameData.title);
+    fallbackTitle = gameData.title || fallbackTitle;
 
-    // ゲームの経過日数を計算（releaseDate が渡されている場合のみ）
-    let gameAgeDays: number | null = null;
-    if (gameData.releaseDate) {
-      const release = new Date(gameData.releaseDate);
-      if (!Number.isNaN(release.getTime())) {
-        gameAgeDays = (Date.now() - release.getTime()) / (1000 * 60 * 60 * 24);
-      }
-    }
+    const totalReviewCount =
+      typeof gameData.totalReviews === "number"
+        ? gameData.totalReviews
+        : Array.isArray(gameData.reviews)
+        ? gameData.reviews.length
+        : 0;
 
-    // 期間別のレビュー件数（あれば）を取得
-    const earlyReviewCountFromStats =
-      gameData.earlyWindowStats?.reviewCount ??
-      gameData.earlyReviews?.length ??
-      0;
-    const recentReviewCountFromStats =
-      gameData.recentWindowStats?.reviewCount ??
-      gameData.recentReviews?.length ??
-      0;
+    const { recentReviews, historicalReviews } = await buildReviewSections(
+      gameData
+    );
 
-    let totalReviewCount = 0;
-
-    // totalReviews が number ならそのまま
-    if (typeof gameData.totalReviews === "number") {
-      totalReviewCount = gameData.totalReviews;
-    } else if (typeof gameData.totalReviews === "string") {
-      // string の場合は数値にパースして使う
-      const parsed = Number.parseInt(gameData.totalReviews, 10);
-      if (!Number.isNaN(parsed)) {
-        totalReviewCount = parsed;
-      }
-    } else if (Array.isArray(gameData.reviews)) {
-      // totalReviews が無い場合は reviews 配列の長さを fallback にする
-      totalReviewCount = gameData.reviews.length;
-    }
-
-    const combinedWindowReviews =
-      earlyReviewCountFromStats + recentReviewCountFromStats;
-
-    const releaseIsRecent =
-      gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY;
-
-    let isNewRelease: boolean;
-    if (releaseIsRecent) {
-      // 明確に「発売から日が浅い」タイトルは新作扱い
-      isNewRelease = true;
-    } else if (gameAgeDays === null) {
-      // リリース日が不明な場合だけ、レビュー履歴が極端に少なければ新作扱いにする
-      const sparseReviewHistory =
-        combinedWindowReviews < MIN_REVIEWS_FOR_HISTORY &&
-        totalReviewCount < MIN_REVIEWS_FOR_HISTORY * 2;
-      isNewRelease = sparseReviewHistory;
-    } else {
-      // リリースから十分日数が経っているタイトルは新作扱いしない
-      isNewRelease = false;
-    }
-
-    const isLongRunningTitle = !isNewRelease;
-
-    // early/recent �̂ǂ��炩�ł������Ă��邩
-    const hasWindowData =
-      earlyReviewCountFromStats > 0 || recentReviewCountFromStats > 0;
-
-    // -------------------------------
-    // 「履歴が十分かどうか」の判定
-    // -------------------------------
-
-    let hasEnoughHistorySignal: boolean;
-
-    if (!hasWindowData) {
-      // Without window data we only trust long-running titles
-      hasEnoughHistorySignal = !isNewRelease;
-    } else if (isNewRelease) {
-      // Require both early and recent history for fresh releases
-      const meetsEarlyThreshold =
-        earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
-      const meetsRecentThreshold =
-        recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
-      hasEnoughHistorySignal = meetsEarlyThreshold && meetsRecentThreshold;
-    } else {
-      // Older titles are considered trustworthy even with sparse windows
-      hasEnoughHistorySignal = true;
-    }
-
-    // -------------------------------
-    // 「現在」と「過去」の信頼度
-    // -------------------------------
-
-    let currentStateReliability: "high" | "medium" | "low" = "medium";
-    let historicalIssuesReliability: "high" | "medium" | "low" = "medium";
-
-    if (hasWindowData) {
-      if (isNewRelease) {
-        const meetsRecentThreshold =
-          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
-        const meetsEarlyThreshold =
-          earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
-        currentStateReliability = meetsRecentThreshold ? "medium" : "low";
-        historicalIssuesReliability = meetsEarlyThreshold ? "medium" : "low";
-      } else {
-        currentStateReliability =
-          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
-            ? "high"
-            : "medium";
-        historicalIssuesReliability =
-          earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
-            ? "high"
-            : "medium";
-      }
-    } else {
-      currentStateReliability = isNewRelease ? "low" : "medium";
-      historicalIssuesReliability = isNewRelease ? "low" : "medium";
-    }
-
-    console.log("History signal stats:", {
-      earlyReviewCount: earlyReviewCountFromStats,
-      recentReviewCount: recentReviewCountFromStats,
+    console.log("Review blocks prepared:", {
       totalReviewCount,
-      hasWindowData,
-      hasEnoughHistorySignal,
-      currentStateReliability,
-      historicalIssuesReliability,
-      isNewRelease,
-      gameAgeDays,
+
+      recentSamples: recentReviews.length,
+
+      historicalSamples: historicalReviews.length,
     });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    // Prepare reviews to keep the prompt size under control
-    const preparedReviews = prepareReviews(gameData.reviews || []);
-    console.log("Review stats:", {
-      originalCount: gameData.reviews?.length ?? 0,
-      usedCount: preparedReviews.length,
-      totalChars: preparedReviews.reduce((sum, r) => sum + r.length, 0),
-    });
+    const recentReviewsText = formatReviewBlock(
+      "Recent reviews (reflect the current build)",
 
-    const systemPrompt = `You are an AI system that evaluates Steam games and explains why each game may qualify as a "Hidden Gem."
+      recentReviews,
 
-Hidden Gem Definition:
-A game is considered a "Hidden Gem" if it satisfies both:
-1. High player satisfaction (positive reviews, quality content, low bugs, good value)
-2. Low visibility (under 200 reviews OR under 50,000 estimated owners)
+      "No reliable recent reviews were supplied. Describe the currentStateSummary only if other metadata makes it clear."
+    );
 
-Very important:
-Many Steam games change significantly over time due to patches and major updates.
-Older reviews may describe a broken or unpolished version, while newer reviews may describe a much better experience.
-You MUST pay attention to wording like:
-- "after the update"
-- "since the latest patch"
-- "at launch it was bad, but now..."
-and distinguish between early-version issues and current-version quality.
+    const historicalReviewsText = formatReviewBlock(
+      "Historical / early reviews",
+      historicalReviews,
+        "No trustworthy early-launch reviews were provided. If this block is empty, you should still infer any clear launch or early-version problems from other evidence when possible (such as the overall review tone, pros/cons, and metadata) and describe that trajectory directly inside currentStateSummary. historicalIssuesSummary is deprecated and should normally remain an empty string."
+    );
 
-Your task: Analyze the game data and return ONLY valid JSON in this exact format:
+    const systemPrompt = `You are an AI analyst who evaluates Steam games and contrasts their CURRENT experience with their HISTORICAL launch/early issues.
+
+
+Return ONLY valid JSON using this schema:
 
 {
-  "hiddenGemVerdict": "Yes" or "No" or "Unknown",
-  "summary": "One-sentence high-level explanation of whether this is a hidden gem and why.",
-  "labels": ["label1", "label2", ...],
-  "pros": ["pro1", "pro2", ...],
-  "cons": ["con1", "con2", ...],
-  "riskScore": 0-10,
-  "bugRisk": 0-10,
-  "refundMentions": 0-10,
-  "reviewQualityScore": 0-10,
 
-  "currentStateSummary": "Short description of how the game feels in its CURRENT version, focusing on recent patches if mentioned.",
-  "historicalIssuesSummary": "Short description of major problems mentioned in OLDER or pre-patch reviews, if any.",
-  "hasImprovedSinceLaunch": true or false,
-  "stabilityTrend": "Improving" or "Stable" or "Deteriorating"
+  "hiddenGemVerdict": "Yes" | "No" | "Unknown",
+
+  "summary": "One or two concise sentences explaining the overall evaluation",
+
+  "labels": ["short label", ...],
+
+  "pros": ["strength 1", ...],
+
+  "cons": ["weakness 1", ...],
+
+  "riskScore": 1-10,
+
+  "bugRisk": 1-10,
+
+  "refundMentions": 0-10,
+
+  "reviewQualityScore": 1-10,
+
+    "currentStateSummary": string | "" | null,
+
+  // historicalIssuesSummary is deprecated for the UI.
+  // Always return this as an empty string or null; any important launch/early
+  // issues and their resolution should be folded into currentStateSummary instead.
+  "historicalIssuesSummary": "" | null,
+
+  "hasImprovedSinceLaunch": true | false | null,
+
+  "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
+
+  "currentStateReliability": "high" | "medium" | "low" | null,
+
+  "historicalIssuesReliability": "high" | "medium" | "low" | null
+
 }
 
-Field guidelines:
-- Use concise language.
-- summary: 1–2 short sentences.
-- pros: up to 5 bullet points, each under 120 characters.
-- cons: up to 5 bullet points, each under 120 characters.
-- labels: 3–6 short tags (e.g. "underrated", "polished", "buggy-at-launch", "short-and-sweet").
-- riskScore: overall risk that the game will feel like a "bad purchase" (0 = no risk, 10 = very risky).
-- bugRisk: how often players report crashes, softlocks or serious technical issues (0 = rock-solid, 10 = extremely buggy).
-- refundMentions: how often refunds or regret are mentioned in reviews (0 = almost never, 10 = extremely often).
-- reviewQualityScore: how informative, specific and trustworthy the review corpus feels (0 = low quality, 10 = very high quality).
-- currentStateSummary: focus on the present experience; weigh recent reviews more heavily if they clearly reference patches.
-- historicalIssuesSummary: capture early-version problems that may no longer apply (you can leave this empty if there is no sign of historical issues).
-- hasImprovedSinceLaunch: true if the game appears to have significantly improved compared to older reviews.
-- stabilityTrend:
-  - "Improving" = problems were more common in older reviews than in newer ones.
-  - "Stable" = roughly consistent quality over time.
-  - "Deteriorating" = newer reviews are noticeably more negative or report new issues.
 
-Important:
-- If you cannot clearly detect time-based differences, you may still fill currentStateSummary using the overall review tone and set hasImprovedSinceLaunch to false and stabilityTrend to "Stable".
-- Respond with JSON only, no explanation text or markdown.`;
 
-    const userPrompt = `Analyze this game:
+Rules:
 
-Title: ${gameData.title}
-Positive Ratio: ${gameData.positiveRatio}%
-Total Reviews: ${gameData.totalReviews}
-Estimated Owners: ${gameData.estimatedOwners}
-Recent Players: ${gameData.recentPlayers}
-Price: $${gameData.price}
-Average Playtime: ${gameData.averagePlaytime} hours
-Last Updated: ${gameData.lastUpdated}
+1. Base currentStateSummary ONLY on the recent/current review block. Mention stability, polish, standout positives, or new issues that affect players now.
 
-User Reviews:
-${preparedReviews.map((r, i) => `${i + 1}. ${r}`).join("\n\n")}
+2. historicalIssuesSummary is deprecated for the UI. In normal cases you should return this as an empty string and not place any important information there. When the data shows clear launch/early issues and later improvement, describe that history directly in currentStateSummary instead of using historicalIssuesSummary.
 
-Return ONLY the JSON response, no other text.`;
+3. Set hasImprovedSinceLaunch to true/false only when the difference between historical and recent reviews is obvious. Otherwise, use null.
 
-    const approxPromptChars = systemPrompt.length + userPrompt.length;
-    const approxPromptTokens = Math.round(approxPromptChars / 4);
-    console.log("Prompt size:", {
-      chars: approxPromptChars,
-      approxTokens: approxPromptTokens,
-    });
+4. stabilityTrend must be one of the allowed strings above. Use "Unknown" when the direction is unclear.
 
-    // Separate try/catch for the AI call to avoid returning 500 for AI failures
+5. Never fabricate statements like "not enough data" inside the summaries. Prefer empty strings or null values when evidence is missing.
+
+6. Keep sentences concise (under 3 sentences per field) and avoid markdown or bullet formatting.
+
+
+
+Always respond with raw JSON only.`;
+
+    const userPrompt = `
+Game metadata:
+- Title: ${gameData.title}
+- Tags: ${(gameData.tags ?? []).join(", ")}
+- Positive ratio: ${gameData.positiveRatio}
+- Total reviews: ${totalReviewCount}
+- Price: ${gameData.price}
+- Estimated owners: ${gameData.estimatedOwners}
+- Average playtime (minutes): ${gameData.averagePlaytime}
+
+Recent review evidence:
+${recentReviewsText}
+
+Historical / early review evidence:
+${historicalReviewsText}
+
+IMPORTANT:
+- When the data clearly shows that the game has changed over time (for example: a very rough or buggy launch that later improved after patches), briefly describe that trajectory directly inside currentStateSummary.
+- historicalIssuesSummary is deprecated for the UI and should normally be returned as an empty string. Do not move important information into historicalIssuesSummary; instead, fold notable launch/early issues and their resolution into currentStateSummary.
+`.trim();
+    const controller = new AbortController();
     try {
-      const controller = new AbortController();
       const timeoutMs = 25000;
       const timeoutId = setTimeout(() => {
         controller.abort("AI request timeout");
@@ -453,7 +613,10 @@ Return ONLY the JSON response, no other text.`;
         // For all other error codes (including 500), return a safe fallback
         console.log("Returning fallback analysis due to AI Gateway error");
         const fallback = buildFallbackAnalysis(
-          `AI Gateway returned ${response.status}`
+          `AI Gateway returned ${response.status}`,
+          {
+            title: fallbackTitle,
+          }
         );
         return new Response(JSON.stringify(fallback), {
           status: 200,
@@ -469,7 +632,9 @@ Return ONLY the JSON response, no other text.`;
 
       if (!content) {
         console.error("No content in AI response:", data);
-        const fallback = buildFallbackAnalysis("No content in AI response");
+        const fallback = buildFallbackAnalysis("No content in AI response", {
+          title: fallbackTitle,
+        });
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
@@ -484,7 +649,6 @@ Return ONLY the JSON response, no other text.`;
       // Parse JSON from AI response
       let analysis: HiddenGemAnalysis;
       try {
-        // Handle both raw JSON and Markdown-style ```json blocks
         const jsonMatch =
           typeof content === "string"
             ? content.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
@@ -496,60 +660,18 @@ Return ONLY the JSON response, no other text.`;
             ? content
             : JSON.stringify(content);
 
-        analysis = JSON.parse(jsonStr.trim());
-
-        // 期間別レビュー情報から算出した信頼度を埋める
-        analysis.currentStateReliability = currentStateReliability;
-        analysis.historicalIssuesReliability = historicalIssuesReliability;
-
-        // -------------------------------
-        // 「過去の問題」要約のフォールバック生成
-        // -------------------------------
-        const looksLikeImproved =
-          analysis.hasImprovedSinceLaunch === true ||
-          analysis.stabilityTrend === "Improving";
-        if (isLongRunningTitle && analysis.stabilityTrend === "Improving" && analysis.hasImprovedSinceLaunch !== true) {
-          analysis.hasImprovedSinceLaunch = true;
-        }
-
-
-        const historicalSummaryMissing =
-          !analysis.historicalIssuesSummary ||
-          !analysis.historicalIssuesSummary.trim();
-
-        const shouldSuppressHistorical =
-          isNewRelease && hasWindowData && !hasEnoughHistorySignal;
-
-        if (shouldSuppressHistorical) {
-          analysis.historicalIssuesSummary = "";
-          analysis.hasImprovedSinceLaunch = false;
-          if (!analysis.stabilityTrend) {
-            analysis.stabilityTrend = "Stable";
-          }
-          analysis.historicalIssuesReliability = "low";
-        } else if (isLongRunningTitle && historicalSummaryMissing) {
-          if (Array.isArray(analysis.cons) && analysis.cons.length > 0) {
-            const fallbackIssues = analysis.cons.slice(0, 3).join(" / ");
-            analysis.historicalIssuesSummary = fallbackIssues;
-          } else if (analysis.summary && analysis.summary.trim()) {
-            analysis.historicalIssuesSummary =
-              "Earlier versions reportedly faced issues before recent fixes.";
-          } else {
-            analysis.historicalIssuesSummary =
-              "Early adopters mentioned problems, though details were scarce.";
-          }
-          if (
-            looksLikeImproved &&
-            analysis.historicalIssuesReliability === "medium"
-          ) {
-            analysis.historicalIssuesReliability = "high";
-          }
-        }
+        const parsed = JSON.parse(jsonStr.trim());
+        analysis = normalizeAnalysisPayload(parsed);
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
         });
-        const fallback = buildFallbackAnalysis("Invalid JSON response from AI");
+        const fallback = buildFallbackAnalysis(
+          "Invalid JSON response from AI",
+          {
+            title: fallbackTitle,
+          }
+        );
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
@@ -560,6 +682,7 @@ Return ONLY the JSON response, no other text.`;
       }
 
       return new Response(JSON.stringify(analysis), {
+        status: 200,
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
@@ -574,7 +697,10 @@ Return ONLY the JSON response, no other text.`;
       });
 
       const fallback = buildFallbackAnalysis(
-        aiError?.message || "AI analysis error"
+        aiError?.message || "AI analysis error",
+        {
+          title: fallbackTitle,
+        }
       );
       return new Response(JSON.stringify(fallback), {
         status: 200,
@@ -601,4 +727,117 @@ Return ONLY the JSON response, no other text.`;
       }
     );
   }
+
+  // 型システム対策用のフォールバック（ここには通常到達しない）
+  return new Response(
+    JSON.stringify({ error: "Unhandled request in analyze-hidden-gem" }),
+    {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    }
+  );
 });
+
+function normalizeStringArray(input?: any[]): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of input) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return min;
+  }
+  const rounded = Math.round(value);
+  if (rounded < min) return min;
+  if (rounded > max) return max;
+  return rounded;
+}
+
+const VALID_VERDICTS = new Set(["Yes", "No", "Unknown"]);
+const VALID_TRENDS = new Set([
+  "Improving",
+  "Stable",
+  "Deteriorating",
+  "Unknown",
+]);
+const VALID_RELIABILITIES = new Set(["high", "medium", "low"]);
+
+function normalizeOptionalString(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim();
+}
+
+function normalizeVerdict(value: unknown): "Yes" | "No" | "Unknown" {
+  return typeof value === "string" && VALID_VERDICTS.has(value)
+    ? (value as "Yes" | "No" | "Unknown")
+    : "Unknown";
+}
+
+function normalizeTrend(
+  value: unknown
+): "Improving" | "Stable" | "Deteriorating" | "Unknown" {
+  return typeof value === "string" && VALID_TRENDS.has(value)
+    ? (value as "Improving" | "Stable" | "Deteriorating" | "Unknown")
+    : "Unknown";
+}
+
+function normalizeReliability(
+  value: unknown
+): "high" | "medium" | "low" | null {
+  return typeof value === "string" && VALID_RELIABILITIES.has(value)
+    ? (value as "high" | "medium" | "low")
+    : null;
+}
+
+function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
+  const normalized: HiddenGemAnalysis = {
+    hiddenGemVerdict: normalizeVerdict(parsed?.hiddenGemVerdict),
+    summary: normalizeOptionalString(parsed?.summary),
+    labels: normalizeStringArray(parsed?.labels),
+    pros: normalizeStringArray(parsed?.pros),
+    cons: normalizeStringArray(parsed?.cons),
+    riskScore: clampInt(parsed?.riskScore ?? 5, 0, 10),
+    bugRisk: clampInt(parsed?.bugRisk ?? 5, 0, 10),
+    refundMentions: clampInt(parsed?.refundMentions ?? 0, 0, 20),
+    reviewQualityScore: clampInt(parsed?.reviewQualityScore ?? 5, 0, 10),
+    currentStateSummary: normalizeOptionalString(parsed?.currentStateSummary),
+    historicalIssuesSummary: normalizeOptionalString(
+      parsed?.historicalIssuesSummary
+    ),
+    hasImprovedSinceLaunch:
+      typeof parsed?.hasImprovedSinceLaunch === "boolean"
+        ? parsed.hasImprovedSinceLaunch
+        : null,
+    stabilityTrend: normalizeTrend(parsed?.stabilityTrend),
+    currentStateReliability: normalizeReliability(
+      parsed?.currentStateReliability
+    ),
+    historicalIssuesReliability: normalizeReliability(
+      parsed?.historicalIssuesReliability
+    ),
+  };
+
+  if (typeof parsed?.statGemScore === "number") {
+    (normalized as any).statGemScore = parsed.statGemScore;
+  }
+
+  if (typeof parsed?.aiError === "boolean") {
+    normalized.aiError = parsed.aiError;
+  }
+
+  return normalized;
+}

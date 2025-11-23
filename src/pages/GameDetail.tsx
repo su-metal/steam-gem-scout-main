@@ -55,14 +55,19 @@ interface AnalysisData {
   // ★ 追加: 統計ベースの「隠れた名作度」スコア
   statGemScore?: number;
   // 追加: 「今と昔」系の情報
-  currentStateSummary?: string;
-  historicalIssuesSummary?: string;
-  stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown";
-  hasImprovedSinceLaunch?: boolean;
+  currentStateSummary?: string | null;
+  historicalIssuesSummary?: string | null;
+  stabilityTrend?:
+    | "Improving"
+    | "Stable"
+    | "Deteriorating"
+    | "Unknown"
+    | null;
+  hasImprovedSinceLaunch?: boolean | null;
 
   // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-hidden-gem から来る）
-  currentStateReliability?: "high" | "medium" | "low";
-  historicalIssuesReliability?: "high" | "medium" | "low";
+  currentStateReliability?: "high" | "medium" | "low" | null;
+  historicalIssuesReliability?: "high" | "medium" | "low" | null;
 }
 
 interface SteamScreenshot {
@@ -226,28 +231,29 @@ export default function GameDetail() {
 
   const hiddenGemVerdict = analysisData.hiddenGemVerdict ?? "Unknown";
 
-  // 「今と昔」のテキスト
-  const currentStateSummary = analysisData.currentStateSummary;
-  const historicalIssuesSummary = analysisData.historicalIssuesSummary;
-  const stabilityTrend = analysisData.stabilityTrend;
-  const hasImprovedSinceLaunch = analysisData.hasImprovedSinceLaunch;
+  const normalizeSectionText = (value?: string | null) =>
+    typeof value === "string" ? value.trim() : "";
 
-  // 「今と昔」セクションの信頼度
-  const currentStateReliability =
-    analysisData.currentStateReliability ?? "medium";
-  const historicalIssuesReliability =
-    analysisData.historicalIssuesReliability ?? "medium";
+  const currentStateText = normalizeSectionText(
+    analysisData.currentStateSummary
+  );
+  const historicalIssuesText = normalizeSectionText(
+    analysisData.historicalIssuesSummary
+  );
+  const SECTION_MIN_CHARS = 12;
 
-  // 表示するかどうかのフラグ：
-  // - テキストがある
-  // - かつ reliability が "low" ではない
   const shouldShowCurrentState =
-    !!currentStateSummary && currentStateReliability !== "low";
+    currentStateText.length >= SECTION_MIN_CHARS;
   const shouldShowHistoricalIssues =
-    !!historicalIssuesSummary && historicalIssuesReliability !== "low";
+    historicalIssuesText.length >= SECTION_MIN_CHARS;
+
+  const stabilityTrend =
+    typeof analysisData.stabilityTrend === "string"
+      ? analysisData.stabilityTrend
+      : "Unknown";
+  const hasImprovedSinceLaunch = analysisData.hasImprovedSinceLaunch ?? null;
 
 
-  // 数値スコアは「number なら採用、それ以外は null（N/A）」にする
   const reviewQualityScore =
     typeof analysisData.reviewQualityScore === "number"
       ? analysisData.reviewQualityScore
@@ -412,8 +418,7 @@ export default function GameDetail() {
   };
 
   const stabilityBadge = getStabilityBadge();
-  const shouldShowStabilityBadge =
-    stabilityBadge && historicalIssuesReliability !== "low";
+  const shouldShowStabilityBadge = Boolean(stabilityBadge);
 
   // 現在表示中のメディア（動画）の full / thumbnail をまとめて無効扱いにする
   const markActiveMediaInvalid = () => {
@@ -775,7 +780,7 @@ export default function GameDetail() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                    {currentStateSummary}
+                    {currentStateText}
                   </p>
                 </CardContent>
               </Card>
@@ -791,7 +796,7 @@ export default function GameDetail() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                    {historicalIssuesSummary}
+                    {historicalIssuesText}
                   </p>
                 </CardContent>
               </Card>
