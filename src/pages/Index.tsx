@@ -92,27 +92,27 @@ const getDisplayTags = (
 const VIBE_SLIDERS = [
   {
     id: "story",
-    title: "ストーリー重視 ←→ ライト",
-    leftLabel: "ストーリー重視",
-    rightLabel: "ライト",
+    mainLabel: "Story ＋ Character",
+    leftLabel: "ライト",
+    rightLabel: "ヘビー",
   },
   {
     id: "healing",
-    title: "癒し ←→ 緊張感",
+    mainLabel: "癒し ←→ 緊張感",
     leftLabel: "癒し",
     rightLabel: "緊張感",
   },
   {
     id: "sessionLength",
-    title: "短時間で遊びたい ←→ 長時間没入",
-    leftLabel: "短時間で遊びたい",
-    rightLabel: "長時間没入",
+    mainLabel: "Shoet ←→ Long",
+    leftLabel: "サクっと",
+    rightLabel: "がっつり",
   },
- 
+
   {
     id: "pace",
-    title: "アクション ←→ まったり",
-    leftLabel: "アクション",
+    mainLabel: "Chill ←→ Cozy",
+    leftLabel: "刺激的",
     rightLabel: "まったり",
   },
 ] as const;
@@ -124,7 +124,7 @@ type VibeState = Record<VibeId, number>;
 const Index: React.FC = () => {
   const navigate = useNavigate();
 
-    const [vibes, setVibes] = useState<VibeState>(() => {
+  const [vibes, setVibes] = useState<VibeState>(() => {
     const initial: Partial<VibeState> = {};
     VIBE_SLIDERS.forEach((v) => {
       // 0〜100 の真ん中あたりからスタート
@@ -359,28 +359,42 @@ const Index: React.FC = () => {
           </div>
         </section>
 
-                {/* 今日の気分スライダー */}
+        {/* 今日の気分スライダー（index(1).html 準拠） */}
         <section id="vibe" className="vibe-section">
           <div className="container">
+            <p className="section-label">vibe match</p>
+            <h2 className="section-title">
+              スライダーを動かすだけで、今の“気分”に合う一本を。
+            </h2>
+            <p className="section-sub">
+              難しい条件入力は不要です。
+              <br />
+              ストーリー重視か、アクション重視か、今日はまったりしたいのか——
+              3つのVibeスライダーを動かすだけで、AIが数千本のレビューから候補を絞り込みます。
+            </p>
+
             <div className="vibe-card">
-              <div className="vibe-card-header">
-                <div className="vibe-card-title">今日の気分をざっくり調整</div>
-                <p className="vibe-card-sub">
+              <div className="vibe-row">
+                {/* 左側：説明テキスト */}
+                <div className="vibe-explain">
+                  <strong>今日の気分を3つだけ調整</strong>
+                  <br />
+                  <br />
                   右に寄せれば寄せるほど、その要素が強いゲームを優先。
                   <br />
-                  実際のアプリでは、この入力をもとに AI がレビュー本文の「温度感」や
-                  ワード傾向を解析してスコアリングします。
-                </p>
-              </div>
+                  実際のアプリでは、この入力をもとにAIがレビュー本文の「温度感」「ワード傾向」を解析してスコアリングします。
+                </div>
 
-              <div className="vibe-sliders">
-                {VIBE_SLIDERS.map((slider) => (
-                  <div className="vibe-slider-row" key={slider.id}>
-                    <div className="vibe-slider-title">{slider.title}</div>
-                    <div className="vibe-slider-bar">
-                      <span className="vibe-slider-label vibe-slider-label-left">
-                        {slider.leftLabel}
-                      </span>
+                {/* 右側：スライダー群 */}
+                <div className="vibe-sliders">
+                  {VIBE_SLIDERS.map((slider) => (
+                    <div className="slider-item" key={slider.id}>
+                      <div className="slider-label-row">
+                        <span className="key">{slider.mainLabel}</span>
+                        <span>
+                          {slider.leftLabel} ← → {slider.rightLabel}
+                        </span>
+                      </div>
                       <input
                         type="range"
                         min={0}
@@ -393,25 +407,14 @@ const Index: React.FC = () => {
                           }))
                         }
                       />
-                      <span className="vibe-slider-label vibe-slider-label-right">
-                        {slider.rightLabel}
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="vibe-footer">
-                <span className="vibe-footer-pill">
-                  🎮 今日の気分プリセット（後で検索条件に連動させる想定）
-                </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-
-       
 
         {/* Gems list */}
         {/* Gems list（ここからが「今週の隠れた名作 TOP 6」の動的化部分） */}
@@ -508,25 +511,25 @@ const Index: React.FC = () => {
 
                         <p className="gem-desc">{summary}</p>
 
-                     <div className="gem-footer">
-  {/* 左側：Hidden Gem バッジ（ラベルがあればそれを表示） */}
-  <div className="gem-badge">
-    <span className="dot" />
-    <span>{game.gemLabel ?? "Hidden Gem"}</span>
-  </div>
+                        <div className="gem-footer">
+                          {/* 左側：Hidden Gem バッジ（ラベルがあればそれを表示） */}
+                          <div className="gem-badge">
+                            <span className="dot" />
+                            <span>{game.gemLabel ?? "Hidden Gem"}</span>
+                          </div>
 
-  {/* 右側：詳細リンク */}
-  <button
-    type="button"
-    className="gem-link"
-    onClick={(e) => {
-      e.stopPropagation();
-      openDetail();
-    }}
-  >
-    詳細を見る <span className="icon">↗</span>
-  </button>
-</div>
+                          {/* 右側：詳細リンク */}
+                          <button
+                            type="button"
+                            className="gem-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDetail();
+                            }}
+                          >
+                            詳細を見る <span className="icon">↗</span>
+                          </button>
+                        </div>
 
                       </div>
                     </article>
@@ -539,7 +542,7 @@ const Index: React.FC = () => {
           </div>
         </section>
 
-         {/* Features */}
+        {/* Features */}
         <section id="features">
           <div className="container">
             <p className="section-label">features</p>

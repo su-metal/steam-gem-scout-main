@@ -42,6 +42,10 @@ const MIN_REVIEWS_FOR_HISTORY = 10;
 // 「過去/現在」の履歴を信頼するために必要な最低経過日数（単位: 日）
 const MIN_DAYS_FOR_HISTORY = 21;
 
+// ★ 追加: 「復活」「安定した評価」に必要な最低経過日数（単位: 日）
+const MIN_DAYS_SINCE_RELEASE_FOR_IMPROVEMENT = 90;
+const MIN_DAYS_SINCE_RELEASE_FOR_STABLE = 180;
+
 interface RankingGameData {
   appId: number;
   title: string;
@@ -549,8 +553,27 @@ ${reviewsSection}
     historicalIssuesSummary = "";
     hasImprovedSinceLaunch = false;
     if (!stabilityTrend) {
-      stabilityTrend = "Stable";
+      // ★ ここを Stable → Unknown に変更
+      stabilityTrend = "Unknown";
     }
+  }
+
+  // ★ 追加: リリースからの日数に応じて「復活」「安定した評価」を制限する
+  if (
+    gameAgeDays !== null &&
+    gameAgeDays < MIN_DAYS_SINCE_RELEASE_FOR_IMPROVEMENT
+  ) {
+    // まだ発売直後なので「復活した」とはみなさない
+    hasImprovedSinceLaunch = false;
+  }
+
+  if (
+    gameAgeDays !== null &&
+    gameAgeDays < MIN_DAYS_SINCE_RELEASE_FOR_STABLE &&
+    stabilityTrend === "Stable"
+  ) {
+    // 長期的な履歴がないので Stable 扱いは避ける
+    stabilityTrend = "Unknown";
   }
 
   const finalAnalysis: GameAnalysis = {
@@ -1016,7 +1039,9 @@ async function fetchAndBuildRankingGame(
     } else if (gemLabel === "Hidden Gem") {
       // 統計的には Hidden ではないタイトルには Hidden Gem ラベルを付けない
       gemLabel =
-        positiveRatio >= 85 ? "Highly rated but not hidden" : "Not a hidden gem";
+        positiveRatio >= 85
+          ? "Highly rated but not hidden"
+          : "Not a hidden gem";
     }
   }
 

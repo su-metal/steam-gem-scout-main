@@ -327,7 +327,7 @@ export default function Rankings() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_50%,_#020008_100%)] text-slate-50">
-      <div className="max-w-6xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-8">
         {/* === Page Header ======================================= */}
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-2">
@@ -368,357 +368,354 @@ export default function Rankings() {
             </Button>
           </div>
         </div>
-{/* === Simple Filter Header (気分プリセット / 今日の気分) === */}
-<div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4 flex flex-col gap-3">
-  <div className="flex flex-wrap gap-2 items-center">
-    <span className="text-xs text-slate-300/90">Quick filters:</span>
+        {/* === Simple Filter Header (気分プリセット / 今日の気分) === */}
+        <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-4 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-slate-300/90">Quick filters:</span>
 
-    <button
-      onClick={() => setSelectedSort("recommended")}
-      className="px-3 py-1 rounded-full text-xs bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
-    >
-      人気の隠れた名作
-    </button>
+            <button
+              onClick={() => setSelectedSort("recommended")}
+              className="px-3 py-1 rounded-full text-xs bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
+            >
+              人気の隠れた名作
+            </button>
 
-    <button
-      onClick={() => setSelectedGenre("Relaxing")}
-      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-    >
-      まったり
-    </button>
+            <button
+              onClick={() => setSelectedGenre("Relaxing")}
+              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+            >
+              まったり
+            </button>
 
-    <button
-      onClick={() => setSelectedGenre("Horror")}
-      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-    >
-      緊張感
-    </button>
+            <button
+              onClick={() => setSelectedGenre("Horror")}
+              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+            >
+              緊張感
+            </button>
 
-    <button
-      onClick={() => setSelectedGenre("RPG")}
-      className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-    >
-      ストーリー
-    </button>
-  </div>
+            <button
+              onClick={() => setSelectedGenre("RPG")}
+              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+            >
+              ストーリー
+            </button>
+          </div>
 
-  <p className="text-[11px] text-slate-400">
-    詳しく絞り込みたい場合は、下の「詳細フィルタを開く」から設定できます。
-  </p>
-</div>
+          <p className="text-[11px] text-slate-400">
+            詳しく絞り込みたい場合は、下の「詳細フィルタを開く」から設定できます。
+          </p>
+        </div>
 
         {/* === Detailed Filters (折りたたみ) ===================== */}
-<div className="rounded-2xl border border-white/10 bg-black/20 shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+        <div className="rounded-2xl border border-white/10 bg-black/20 shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
 
-  {/* トグルボタン */}
-  <button
-    onClick={() => setShowDetails((prev) => !prev)}
-    className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
-  >
-    <span>詳細フィルタを{showDetails ? "閉じる" : "開く"}</span>
-    <span>{showDetails ? "▲" : "▼"}</span>
-  </button>
+          {/* トグルボタン */}
+          <button
+            onClick={() => setShowDetails((prev) => !prev)}
+            className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-slate-200 hover:bg-white/10"
+          >
+            <span>詳細フィルタを{showDetails ? "閉じる" : "開く"}</span>
+            <span>{showDetails ? "▲" : "▼"}</span>
+          </button>
 
-  {/* 折りたたみ内容 */}
-  {showDetails && (
-    <div className="px-4 py-5 md:px-6 md:py-6 space-y-6">
-       {/* === Filter Panel ====================================== */}
-        <div className="space-y-4 rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#141327_45%,_#050509_100%)] px-4 py-5 md:px-6 md:py-6 shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
-          {/* Top row: genre / period / sort */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {/* Genre */}
-            <div className="space-y-2">
-              <label
-                htmlFor="genre"
-                className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
-              >
-                Genre
-              </label>
-              <select
-                id="genre"
-                value={selectedGenre}
-                onChange={(e) => setSelectedGenre(e.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
-              >
-                <option value="">All genres</option>
-                {GENRE_OPTIONS.map((genre) => (
-                  <option key={genre} value={genre}>
-                    {genre}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* 折りたたみ内容 */}
+          {showDetails && (
+            <div className="px-4 py-5 md:px-6 md:py-6 space-y-6">
+              {/* === Filter Panel ====================================== */}
+              <div className="space-y-4 rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#141327_45%,_#050509_100%)] px-4 py-5 md:px-6 md:py-6 shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
+                {/* Top row: genre / period / sort */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  {/* Genre */}
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="genre"
+                      className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
+                    >
+                      Genre
+                    </label>
+                    <select
+                      id="genre"
+                      value={selectedGenre}
+                      onChange={(e) => setSelectedGenre(e.target.value)}
+                      className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
+                    >
+                      <option value="">All genres</option>
+                      {GENRE_OPTIONS.map((genre) => (
+                        <option key={genre} value={genre}>
+                          {genre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Period */}
-            <div className="space-y-2">
-              <label
-                htmlFor="period"
-                className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
-              >
-                Released within
-              </label>
-              <select
-                id="period"
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
-              >
-                {PERIOD_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+                  {/* Period */}
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="period"
+                      className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
+                    >
+                      Released within
+                    </label>
+                    <select
+                      id="period"
+                      value={selectedPeriod}
+                      onChange={(e) => setSelectedPeriod(e.target.value)}
+                      className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
+                    >
+                      {PERIOD_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            {/* Sort */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-                Sort by
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {SORT_OPTIONS.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={
-                      selectedSort === option.value ? "default" : "outline"
-                    }
-                    size="sm"
-                    className={
-                      selectedSort === option.value
-                        ? "rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 border-none text-slate-950 shadow-[0_10px_25px_rgba(0,0,0,0.7)]"
-                        : "rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
-                    }
-                    onClick={() => setSelectedSort(option.value)}
+                  {/* Sort */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                      Sort by
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {SORT_OPTIONS.map((option) => (
+                        <Button
+                          key={option.value}
+                          variant={
+                            selectedSort === option.value ? "default" : "outline"
+                          }
+                          size="sm"
+                          className={
+                            selectedSort === option.value
+                              ? "rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 border-none text-slate-950 shadow-[0_10px_25px_rgba(0,0,0,0.7)]"
+                              : "rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
+                          }
+                          onClick={() => setSelectedSort(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gem Score Weights (Custom Sort) */}
+                <div className="border-t border-white/10 pt-4 mt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                      Gem Score Weights
+                    </h3>
+                    <button
+                      type="button"
+                      className="text-[11px] underline text-slate-300/80"
+                      onClick={() => setGemWeights(DEFAULT_WEIGHTS)}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <p className="mb-3 text-xs text-slate-300/80">
+                    {isCustomSort
+                      ? "「Custom Gem Score」選択時、下記の重みづけで並び替えを行います。"
+                      : "重み設定は「Custom Gem Score」を選択すると有効になります。"}
+                  </p>
+
+                  <div
+                    className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${!isCustomSort ? "opacity-60 pointer-events-none" : ""
+                      }`}
                   >
-                    {option.label}
+                    {/* AI Score */}
+                    <div className="space-y-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                          AI Score
+                        </Label>
+                        <span className="text-xs text-slate-300/80">
+                          {gemWeights.aiScore}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[gemWeights.aiScore]}
+                        onValueChange={([value]) =>
+                          setGemWeights((prev) => ({ ...prev, aiScore: value }))
+                        }
+                      />
+                    </div>
+
+                    {/* Positive Ratio */}
+                    <div className="space-y-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                          Positive Ratio
+                        </Label>
+                        <span className="text-xs text-slate-300/80">
+                          {gemWeights.positiveRatio}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[gemWeights.positiveRatio]}
+                        onValueChange={([value]) =>
+                          setGemWeights((prev) => ({
+                            ...prev,
+                            positiveRatio: value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Review Count */}
+                    <div className="space-y-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                          Review Count
+                        </Label>
+                        <span className="text-xs text-slate-300/80">
+                          {gemWeights.reviewCount}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[gemWeights.reviewCount]}
+                        onValueChange={([value]) =>
+                          setGemWeights((prev) => ({
+                            ...prev,
+                            reviewCount: value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Recency */}
+                    <div className="space-y-2">
+                      <div className="mb-1 flex items-center justify-between">
+                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
+                          Recency
+                        </Label>
+                        <span className="text-xs text-slate-300/80">
+                          {gemWeights.recency}
+                        </span>
+                      </div>
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={[gemWeights.recency]}
+                        onValueChange={([value]) =>
+                          setGemWeights((prev) => ({ ...prev, recency: value }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Additional Filters */}
+                <div className="border-t border-white/10 pt-4 mt-4">
+                  <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+                    Additional Filters
+                  </h3>
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                    {/* Max Price */}
+                    <div className="space-y-3">
+                      <label
+                        htmlFor="maxPrice"
+                        className="flex items-center justify-between text-sm font-medium text-slate-100"
+                      >
+                        <span>Max Price</span>
+                        <span className="font-semibold text-pink-300">
+                          {maxPrice === MAX_PRICE_SLIDER
+                            ? "Any"
+                            : `$${maxPrice}`}
+                        </span>
+                      </label>
+                      <Slider
+                        id="maxPrice"
+                        value={[maxPrice]}
+                        min={0}
+                        max={MAX_PRICE_SLIDER}
+                        step={1}
+                        onValueChange={(vals) => setMaxPrice(vals[0])}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>$0</span>
+                        <span>{`$${MAX_PRICE_SLIDER}+`}</span>
+                      </div>
+                    </div>
+
+                    {/* Min Reviews */}
+                    <div className="space-y-3">
+                      <label
+                        htmlFor="minReviews"
+                        className="flex items-center justify-between text-sm font-medium text-slate-100"
+                      >
+                        <span>Min Reviews</span>
+                        <span className="font-semibold text-pink-300">
+                          {minReviews === 0 ? "Any" : `${minReviews}+`}
+                        </span>
+                      </label>
+                      <Slider
+                        id="minReviews"
+                        value={[minReviews]}
+                        min={0}
+                        max={2000}
+                        step={50}
+                        onValueChange={(vals) => setMinReviews(vals[0])}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>0</span>
+                        <span>2000+</span>
+                      </div>
+                    </div>
+
+                    {/* Min Playtime */}
+                    <div className="space-y-3">
+                      <label
+                        htmlFor="minPlaytime"
+                        className="flex items-center justify-between text-sm font-medium text-slate-100"
+                      >
+                        <span>Min Playtime</span>
+                        <span className="font-semibold text-pink-300">
+                          {minPlaytime === 0 ? "Any" : `${minPlaytime}h+`}
+                        </span>
+                      </label>
+                      <Slider
+                        id="minPlaytime"
+                        value={[minPlaytime]}
+                        min={0}
+                        max={50}
+                        step={1}
+                        onValueChange={(vals) => setMinPlaytime(vals[0])}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-slate-400">
+                        <span>0h</span>
+                        <span>50h+</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Apply Button */}
+                <div className="flex justify-end pt-4">
+                  <Button
+                    onClick={fetchRankings}
+                    disabled={loading}
+                    className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-6 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.75)] hover:brightness-105"
+                  >
+                    {loading ? "Searching..." : "Apply filters"}
                   </Button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Gem Score Weights (Custom Sort) */}
-          <div className="border-t border-white/10 pt-4 mt-2">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-                Gem Score Weights
-              </h3>
-              <button
-                type="button"
-                className="text-[11px] underline text-slate-300/80"
-                onClick={() => setGemWeights(DEFAULT_WEIGHTS)}
-              >
-                Reset
-              </button>
-            </div>
-            <p className="mb-3 text-xs text-slate-300/80">
-              {isCustomSort
-                ? "「Custom Gem Score」選択時、下記の重みづけで並び替えを行います。"
-                : "重み設定は「Custom Gem Score」を選択すると有効になります。"}
-            </p>
-
-            <div
-              className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${!isCustomSort ? "opacity-60 pointer-events-none" : ""
-                }`}
-            >
-              {/* AI Score */}
-              <div className="space-y-2">
-                <div className="mb-1 flex items-center justify-between">
-                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                    AI Score
-                  </Label>
-                  <span className="text-xs text-slate-300/80">
-                    {gemWeights.aiScore}
-                  </span>
-                </div>
-                <Slider
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={[gemWeights.aiScore]}
-                  onValueChange={([value]) =>
-                    setGemWeights((prev) => ({ ...prev, aiScore: value }))
-                  }
-                />
-              </div>
-
-              {/* Positive Ratio */}
-              <div className="space-y-2">
-                <div className="mb-1 flex items-center justify-between">
-                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                    Positive Ratio
-                  </Label>
-                  <span className="text-xs text-slate-300/80">
-                    {gemWeights.positiveRatio}
-                  </span>
-                </div>
-                <Slider
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={[gemWeights.positiveRatio]}
-                  onValueChange={([value]) =>
-                    setGemWeights((prev) => ({
-                      ...prev,
-                      positiveRatio: value,
-                    }))
-                  }
-                />
-              </div>
-
-              {/* Review Count */}
-              <div className="space-y-2">
-                <div className="mb-1 flex items-center justify-between">
-                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                    Review Count
-                  </Label>
-                  <span className="text-xs text-slate-300/80">
-                    {gemWeights.reviewCount}
-                  </span>
-                </div>
-                <Slider
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={[gemWeights.reviewCount]}
-                  onValueChange={([value]) =>
-                    setGemWeights((prev) => ({
-                      ...prev,
-                      reviewCount: value,
-                    }))
-                  }
-                />
-              </div>
-
-              {/* Recency */}
-              <div className="space-y-2">
-                <div className="mb-1 flex items-center justify-between">
-                  <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                    Recency
-                  </Label>
-                  <span className="text-xs text-slate-300/80">
-                    {gemWeights.recency}
-                  </span>
-                </div>
-                <Slider
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={[gemWeights.recency]}
-                  onValueChange={([value]) =>
-                    setGemWeights((prev) => ({ ...prev, recency: value }))
-                  }
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Additional Filters */}
-          <div className="border-t border-white/10 pt-4 mt-4">
-            <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-              Additional Filters
-            </h3>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              {/* Max Price */}
-              <div className="space-y-3">
-                <label
-                  htmlFor="maxPrice"
-                  className="flex items-center justify-between text-sm font-medium text-slate-100"
-                >
-                  <span>Max Price</span>
-                  <span className="font-semibold text-pink-300">
-                    {maxPrice === MAX_PRICE_SLIDER
-                      ? "Any"
-                      : `$${maxPrice}`}
-                  </span>
-                </label>
-                <Slider
-                  id="maxPrice"
-                  value={[maxPrice]}
-                  min={0}
-                  max={MAX_PRICE_SLIDER}
-                  step={1}
-                  onValueChange={(vals) => setMaxPrice(vals[0])}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-slate-400">
-                  <span>$0</span>
-                  <span>{`$${MAX_PRICE_SLIDER}+`}</span>
-                </div>
-              </div>
-
-              {/* Min Reviews */}
-              <div className="space-y-3">
-                <label
-                  htmlFor="minReviews"
-                  className="flex items-center justify-between text-sm font-medium text-slate-100"
-                >
-                  <span>Min Reviews</span>
-                  <span className="font-semibold text-pink-300">
-                    {minReviews === 0 ? "Any" : `${minReviews}+`}
-                  </span>
-                </label>
-                <Slider
-                  id="minReviews"
-                  value={[minReviews]}
-                  min={0}
-                  max={2000}
-                  step={50}
-                  onValueChange={(vals) => setMinReviews(vals[0])}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-slate-400">
-                  <span>0</span>
-                  <span>2000+</span>
-                </div>
-              </div>
-
-              {/* Min Playtime */}
-              <div className="space-y-3">
-                <label
-                  htmlFor="minPlaytime"
-                  className="flex items-center justify-between text-sm font-medium text-slate-100"
-                >
-                  <span>Min Playtime</span>
-                  <span className="font-semibold text-pink-300">
-                    {minPlaytime === 0 ? "Any" : `${minPlaytime}h+`}
-                  </span>
-                </label>
-                <Slider
-                  id="minPlaytime"
-                  value={[minPlaytime]}
-                  min={0}
-                  max={50}
-                  step={1}
-                  onValueChange={(vals) => setMinPlaytime(vals[0])}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-slate-400">
-                  <span>0h</span>
-                  <span>50h+</span>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Apply Button */}
-          <div className="flex justify-end pt-4">
-            <Button
-              onClick={fetchRankings}
-              disabled={loading}
-              className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-6 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.75)] hover:brightness-105"
-            >
-              {loading ? "Searching..." : "Apply filters"}
-            </Button>
-          </div>
+          )}
         </div>
-    </div>
-  )}
-</div>
-
-
-       
 
         {/* === Active Filter Chips ================================ */}
         {hasActiveFilters && !loading && (
@@ -820,16 +817,16 @@ export default function Rankings() {
 
         {/* === Results ============================================ */}
         {loading ? (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton
                 key={i}
-                className="h-64 w-full rounded-[26px] bg-[#070716] border border-white/10"
+                className="h-72 w-full rounded-[26px] bg-[#070716] border border-white/10"
               />
             ))}
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => {
               // --- ここから下は元のロジックそのまま ------------------
               const explicitGemLabel = game.gemLabel as GemLabel | undefined;
@@ -863,7 +860,7 @@ export default function Rankings() {
                     : "bg-muted text-muted-foreground";
 
               return (
-                <div key={game.appId} className="relative">
+                <div key={game.appId} className="relative h-full">
                   {/* Gem Label Badge */}
                   {derivedGemLabel && (
                     <div className="absolute -top-3 left-6 z-10">

@@ -2,7 +2,7 @@
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-const corsHeaders = {
+const ANALYZE_HIDDEN_GEM_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
@@ -121,6 +121,12 @@ const MAX_TOTAL_REVIEW_CHARS = 12000;
 const EARLY_REVIEW_WINDOW_DAYS = 30; // 発売日から何日までを「初期」とみなすか
 const MAX_EARLY_REVIEW_PAGES = 5; // Steam API を何ページまで遡るか（負荷制御用）
 const MIN_EARLY_REVIEW_SAMPLES = 5; // これ未満なら「初期レビューが薄い」とみなす
+
+// ★ 追加：復活判定に必要な最低経過日数（単位: 日）
+const MIN_DAYS_SINCE_RELEASE_FOR_IMPROVEMENT = 90;
+
+// ★ 追加：安定評価バッジに必要な最低経過日数（単位: 日）
+const MIN_DAYS_SINCE_RELEASE_FOR_STABLE = 180;
 
 // 「過去」と「現在」を分けて評価するために必要な最低レビュー数
 
@@ -406,7 +412,7 @@ function formatReviewBlock(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: ANALYZE_HIDDEN_GEM_CORS_HEADERS });
   }
 
   let fallbackTitle = "Unknown Game";
@@ -452,7 +458,7 @@ Deno.serve(async (req) => {
     const historicalReviewsText = formatReviewBlock(
       "Historical / early reviews",
       historicalReviews,
-        "No trustworthy early-launch reviews were provided. If this block is empty, you should still infer any clear launch or early-version problems from other evidence when possible (such as the overall review tone, pros/cons, and metadata) and describe that trajectory directly inside currentStateSummary. historicalIssuesSummary is deprecated and should normally remain an empty string."
+      "No trustworthy early-launch reviews were provided. If this block is empty, you should still infer any clear launch or early-version problems from other evidence when possible (such as the overall review tone, pros/cons, and metadata) and describe that trajectory directly inside currentStateSummary. historicalIssuesSummary is deprecated and should normally remain an empty string."
     );
 
     const systemPrompt = `You are an AI analyst who evaluates Steam games and contrasts their CURRENT experience with their HISTORICAL launch/early issues.
@@ -496,8 +502,6 @@ Return ONLY valid JSON using this schema:
   "historicalIssuesReliability": "high" | "medium" | "low" | null
 
 }
-
-
 
 Rules:
 
@@ -588,7 +592,7 @@ IMPORTANT:
             {
               status: 429,
               headers: {
-                ...corsHeaders,
+                ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
                 "Content-Type": "application/json",
               },
             }
@@ -603,7 +607,7 @@ IMPORTANT:
             {
               status: 402,
               headers: {
-                ...corsHeaders,
+                ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
                 "Content-Type": "application/json",
               },
             }
@@ -621,7 +625,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...corsHeaders,
+            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -638,7 +642,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...corsHeaders,
+            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -662,6 +666,54 @@ IMPORTANT:
 
         const parsed = JSON.parse(jsonStr.trim());
         analysis = normalizeAnalysisPayload(parsed);
+
+        // -----------------------------
+        // 復活フラグ / 安定評価フラグ のガード処理
+        // -----------------------------
+        const now = new Date();
+        let daysSinceRelease: number | null = null;
+
+        if (gameData.releaseDate) {
+          const release = new Date(gameData.releaseDate);
+          if (!Number.isNaN(release.getTime())) {
+            const diffMs = now.getTime() - release.getTime();
+            daysSinceRelease = diffMs / (1000 * 60 * 60 * 24);
+          }
+        }
+
+        // early/recent のレビューサンプル数
+        const hasEnoughEarly =
+          historicalReviews.length >= MIN_EARLY_REVIEW_SAMPLES;
+        const hasEnoughRecent =
+          recentReviews.length >= MIN_EARLY_REVIEW_SAMPLES;
+
+        // 「復活した」と言い切るために必要な履歴条件
+        const hasHistoricalWindow =
+          daysSinceRelease !== null &&
+          daysSinceRelease >= MIN_DAYS_SINCE_RELEASE_FOR_IMPROVEMENT &&
+          hasEnoughEarly &&
+          hasEnoughRecent;
+
+        // 「安定した評価」バッジを付与してよい最低条件
+        const isTooEarlyForStable =
+          daysSinceRelease !== null &&
+          daysSinceRelease < MIN_DAYS_SINCE_RELEASE_FOR_STABLE;
+
+        // 条件を満たさない場合は、復活フラグとトレンドを弱める
+        if (!hasHistoricalWindow) {
+          // 「復活したタイトル」扱いを禁止
+          analysis.hasImprovedSinceLaunch = null;
+
+          // 履歴が薄い状態での "Improving" も信用しない
+          if (analysis.stabilityTrend === "Improving") {
+            analysis.stabilityTrend = "Unknown";
+          }
+        }
+
+        // リリースから日が浅いタイトルには「安定した評価」を付けない
+        if (isTooEarlyForStable && analysis.stabilityTrend === "Stable") {
+          analysis.stabilityTrend = "Unknown";
+        }
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
@@ -675,7 +727,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...corsHeaders,
+            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -684,7 +736,7 @@ IMPORTANT:
       return new Response(JSON.stringify(analysis), {
         status: 200,
         headers: {
-          ...corsHeaders,
+          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       });
@@ -705,7 +757,7 @@ IMPORTANT:
       return new Response(JSON.stringify(fallback), {
         status: 200,
         headers: {
-          ...corsHeaders,
+          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       });
@@ -721,7 +773,7 @@ IMPORTANT:
       {
         status: 500,
         headers: {
-          ...corsHeaders,
+          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       }
@@ -734,7 +786,7 @@ IMPORTANT:
     {
       status: 500,
       headers: {
-        ...corsHeaders,
+        ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
         "Content-Type": "application/json",
       },
     }

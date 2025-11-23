@@ -235,183 +235,101 @@ header {
   margin-bottom: 16px;
 }
 
-/* 今日の気分スライダー */
+/* 今日の気分スライダー（index(1).html 準拠） */
 .vibe-section {
-  padding: 24px 0 40px;
+  padding: 26px 0;
 }
 
 .vibe-card {
-  border-radius: 20px;
-  background: radial-gradient(circle at top left, #14142b 0, #050509 65%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: var(--shadow-soft);
-  padding: 18px 18px 16px;
-  position: relative;
-  overflow: hidden;
+  background: rgba(7, 11, 34, 0.96);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
+  padding: 16px 16px 18px;
 }
 
-.vibe-card::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
-  background: radial-gradient(
-      circle at 0% 0%,
-      rgba(138, 79, 255, 0.5),
-      transparent 55%
-    ),
-    radial-gradient(circle at 100% 0%, rgba(0, 229, 255, 0.35), transparent 60%);
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.vibe-card-header {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 14px;
-}
-
-.vibe-card-title {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  display: inline-flex;
+.vibe-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr);
+  gap: 14px;
   align-items: center;
-  gap: 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(5, 5, 9, 0.85);
 }
 
-.vibe-card-title::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background-image: var(--accent-grad);
-  box-shadow: 0 0 0 6px rgba(255, 71, 182, 0.25);
-}
-
-.vibe-card-sub {
+.vibe-explain {
   font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 8px;
+  color: #a7afce;
 }
 
 .vibe-sliders {
-  position: relative;
-  z-index: 1;
-  margin-top: 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.vibe-slider-row {
-  border-radius: 12px;
-  padding: 8px 10px 9px;
-  background: rgba(5, 5, 15, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.slider-item {
+  font-size: 11px;
+  color: #a7afce;
 }
 
-.vibe-slider-title {
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.slider-label-row span.key {
+  color: #ffffff;
   font-size: 12px;
-  margin-bottom: 4px;
-  color: #d5d5ff;
+  font-weight: 600;
 }
 
-.vibe-slider-bar {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr) 80px;
-  align-items: center;
-  gap: 8px;
-}
-
-.vibe-slider-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.vibe-slider-label-left {
-  text-align: left;
-}
-
-.vibe-slider-label-right {
-  text-align: right;
-}
-
-/* range スライダー共通デザイン */
-.vibe-slider-bar input[type="range"] {
+/* range スライダー本体 */
+.vibe-card input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 6px;
   border-radius: 999px;
-  background-image: var(--accent-grad-alt);
+  background: rgba(255, 255, 255, 0.12);
   outline: none;
+  overflow: hidden;
   cursor: pointer;
 }
 
 /* WebKit thumb */
-.vibe-slider-bar input[type="range"]::-webkit-slider-thumb {
+.vibe-card input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   background: #ffffff;
-  border: 2px solid #050509;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6);
+  border: 2px solid #050717;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4),
+    -1000px 0 0 1000px rgba(255, 63, 177, 0.7);
 }
 
 /* Firefox thumb */
-.vibe-slider-bar input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
+.vibe-card input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   background: #ffffff;
-  border: 2px solid #050509;
-  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6);
+  border: 2px solid #050717;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
 }
 
 /* Firefox track */
-.vibe-slider-bar input[type="range"]::-moz-range-track {
+.vibe-card input[type="range"]::-moz-range-track {
   height: 6px;
   border-radius: 999px;
-  background-image: var(--accent-grad-alt);
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.vibe-footer {
-  position: relative;
-  z-index: 1;
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.vibe-footer-pill {
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(5, 5, 9, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: var(--text-muted);
-}
-
-/* スマホでの余白調整 */
-@media (max-width: 800px) {
-  .vibe-card {
-    padding: 14px 12px 14px;
-  }
-
-  .vibe-slider-bar {
-    grid-template-columns: 1fr;
-  }
-
-  .vibe-slider-label {
-    font-size: 9px;
+/* スマホ時：左右2カラムを1カラムに落とす */
+@media (max-width: 900px) {
+  .vibe-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

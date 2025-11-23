@@ -269,7 +269,7 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md"
+      className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md h-full flex flex-col"
       onClick={handleClick}
     >
       {/* Wishlist heart button */}
@@ -290,20 +290,18 @@ export const SearchResultCard = ({
         />
       </button>
 
-      <div className="flex flex-col sm:flex-row gap-4 p-4">
+      <div className="flex flex-col gap-4 p-4 h-full">
         {/* Left: Header Image */}
-        <div className="flex-shrink-0">
+        <div className="w-full">
           <img
             src={headerImageUrl}
-            alt={title}
-            loading="lazy"
-            className="w-full sm:w-40 h-24 sm:h-auto object-cover rounded"
+            className="w-full aspect-video object-cover rounded-lg"
           />
         </div>
 
         {/* Middle: Title, Metascore, Summary, Tags */}
         <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap mt-1">
             <h3 className="font-semibold text-lg line-clamp-1">{title}</h3>
 
             {/* gemLabel バッジ */}
@@ -331,7 +329,7 @@ export const SearchResultCard = ({
             )}
           </div>
 
-          <p className="text-sm text-muted-foreground line-clamp-2">
+          <p className="text-sm text-muted-foreground line-clamp-3">
             {safeSummary}
           </p>
 
@@ -382,7 +380,7 @@ export const SearchResultCard = ({
         </div>
 
         {/* Right: Gem Score + Stats */}
-        <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:gap-2 flex-shrink-0">
+        <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-col items-center">
             <div className="flex flex-col items-center">
               <div
@@ -396,13 +394,9 @@ export const SearchResultCard = ({
             </div>
           </div>
 
-          {aiRecommendsLabel && (
-            <p className="text-[10px] text-muted-foreground text-right">
-              {aiRecommendsLabel}
-            </p>
-          )}
+        
 
-          <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 text-xs text-right">
+          <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <div className="text-muted-foreground">Positive</div>
               <div className="font-semibold text-primary">
