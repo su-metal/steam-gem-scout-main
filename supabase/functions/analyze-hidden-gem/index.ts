@@ -177,7 +177,46 @@ Deno.serve(async (req) => {
       gameData.recentReviews?.length ??
       0;
 
-    // early/recent のどちらかでも入っているか
+    let totalReviewCount = 0;
+
+    // totalReviews が number ならそのまま
+    if (typeof gameData.totalReviews === "number") {
+      totalReviewCount = gameData.totalReviews;
+    } else if (typeof gameData.totalReviews === "string") {
+      // string の場合は数値にパースして使う
+      const parsed = Number.parseInt(gameData.totalReviews, 10);
+      if (!Number.isNaN(parsed)) {
+        totalReviewCount = parsed;
+      }
+    } else if (Array.isArray(gameData.reviews)) {
+      // totalReviews が無い場合は reviews 配列の長さを fallback にする
+      totalReviewCount = gameData.reviews.length;
+    }
+
+    const combinedWindowReviews =
+      earlyReviewCountFromStats + recentReviewCountFromStats;
+
+    const releaseIsRecent =
+      gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY;
+
+    let isNewRelease: boolean;
+    if (releaseIsRecent) {
+      // 明確に「発売から日が浅い」タイトルは新作扱い
+      isNewRelease = true;
+    } else if (gameAgeDays === null) {
+      // リリース日が不明な場合だけ、レビュー履歴が極端に少なければ新作扱いにする
+      const sparseReviewHistory =
+        combinedWindowReviews < MIN_REVIEWS_FOR_HISTORY &&
+        totalReviewCount < MIN_REVIEWS_FOR_HISTORY * 2;
+      isNewRelease = sparseReviewHistory;
+    } else {
+      // リリースから十分日数が経っているタイトルは新作扱いしない
+      isNewRelease = false;
+    }
+
+    const isLongRunningTitle = !isNewRelease;
+
+    // early/recent �̂ǂ��炩�ł������Ă��邩
     const hasWindowData =
       earlyReviewCountFromStats > 0 || recentReviewCountFromStats > 0;
 
@@ -188,17 +227,17 @@ Deno.serve(async (req) => {
     let hasEnoughHistorySignal: boolean;
 
     if (!hasWindowData) {
-      // 期間別レビューが無い場合は、従来どおり「十分」とみなす
-      hasEnoughHistorySignal = true;
-    } else if (gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY) {
-      // ★ 新作（リリースから一定日数未満）の場合だけ、
-      //    「最近のレビュー数がしきい値以上あるか」を条件にする
+      // Without window data we only trust long-running titles
+      hasEnoughHistorySignal = !isNewRelease;
+    } else if (isNewRelease) {
+      // Require both early and recent history for fresh releases
+      const meetsEarlyThreshold =
+        earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
       const meetsRecentThreshold =
         recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
-      hasEnoughHistorySignal = meetsRecentThreshold;
+      hasEnoughHistorySignal = meetsEarlyThreshold && meetsRecentThreshold;
     } else {
-      // ★ それ以外（十分古いタイトル）は、
-      //    評価の履歴が蓄積されているとみなし、常に true
+      // Older titles are considered trustworthy even with sparse windows
       hasEnoughHistorySignal = true;
     }
 
@@ -210,16 +249,14 @@ Deno.serve(async (req) => {
     let historicalIssuesReliability: "high" | "medium" | "low" = "medium";
 
     if (hasWindowData) {
-      if (gameAgeDays !== null && gameAgeDays < MIN_DAYS_FOR_HISTORY) {
-        // 新作：慎重に。recent が少ないうちはどちらも低めに。
-        currentStateReliability =
-          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
-            ? "medium"
-            : "low";
-        historicalIssuesReliability = "low";
+      if (isNewRelease) {
+        const meetsRecentThreshold =
+          recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
+        const meetsEarlyThreshold =
+          earlyReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY;
+        currentStateReliability = meetsRecentThreshold ? "medium" : "low";
+        historicalIssuesReliability = meetsEarlyThreshold ? "medium" : "low";
       } else {
-        // 古いタイトル：recent が十分なら現在は high、
-        // early が十分なら過去も high、足りなければ medium。
         currentStateReliability =
           recentReviewCountFromStats >= MIN_REVIEWS_FOR_HISTORY
             ? "high"
@@ -229,15 +266,20 @@ Deno.serve(async (req) => {
             ? "high"
             : "medium";
       }
+    } else {
+      currentStateReliability = isNewRelease ? "low" : "medium";
+      historicalIssuesReliability = isNewRelease ? "low" : "medium";
     }
 
     console.log("History signal stats:", {
       earlyReviewCount: earlyReviewCountFromStats,
       recentReviewCount: recentReviewCountFromStats,
+      totalReviewCount,
       hasWindowData,
       hasEnoughHistorySignal,
       currentStateReliability,
       historicalIssuesReliability,
+      isNewRelease,
       gameAgeDays,
     });
 
@@ -463,35 +505,44 @@ Return ONLY the JSON response, no other text.`;
         // -------------------------------
         // 「過去の問題」要約のフォールバック生成
         // -------------------------------
-        const isLongRunningTitle =
-          gameAgeDays === null || gameAgeDays >= MIN_DAYS_FOR_HISTORY;
         const looksLikeImproved =
           analysis.hasImprovedSinceLaunch === true ||
           analysis.stabilityTrend === "Improving";
-
-        if (
-          hasWindowData &&
-          hasEnoughHistorySignal && // 履歴は十分
-          isLongRunningTitle && // 古いタイトル
-          looksLikeImproved && // 「改善された」傾向がある
-          (!analysis.historicalIssuesSummary ||
-            !analysis.historicalIssuesSummary.trim())
-        ) {
-          // AI が historicalIssuesSummary を埋めてこなかった場合は、
-          // cons から簡易的な「過去の問題」サマリを作る
-          if (Array.isArray(analysis.cons) && analysis.cons.length > 0) {
-            const fallbackIssues = analysis.cons.slice(0, 3).join(" / ");
-            analysis.historicalIssuesSummary = fallbackIssues;
-          }
+        if (isLongRunningTitle && analysis.stabilityTrend === "Improving" && analysis.hasImprovedSinceLaunch !== true) {
+          analysis.hasImprovedSinceLaunch = true;
         }
 
-        // early/recent が渡されていて、かつ十分な履歴が無い場合は
-        // 「過去の問題」系の情報は UI に出さないようクリアしておく
-        if (hasWindowData && !hasEnoughHistorySignal) {
+
+        const historicalSummaryMissing =
+          !analysis.historicalIssuesSummary ||
+          !analysis.historicalIssuesSummary.trim();
+
+        const shouldSuppressHistorical =
+          isNewRelease && hasWindowData && !hasEnoughHistorySignal;
+
+        if (shouldSuppressHistorical) {
           analysis.historicalIssuesSummary = "";
           analysis.hasImprovedSinceLaunch = false;
           if (!analysis.stabilityTrend) {
             analysis.stabilityTrend = "Stable";
+          }
+          analysis.historicalIssuesReliability = "low";
+        } else if (isLongRunningTitle && historicalSummaryMissing) {
+          if (Array.isArray(analysis.cons) && analysis.cons.length > 0) {
+            const fallbackIssues = analysis.cons.slice(0, 3).join(" / ");
+            analysis.historicalIssuesSummary = fallbackIssues;
+          } else if (analysis.summary && analysis.summary.trim()) {
+            analysis.historicalIssuesSummary =
+              "Earlier versions reportedly faced issues before recent fixes.";
+          } else {
+            analysis.historicalIssuesSummary =
+              "Early adopters mentioned problems, though details were scarce.";
+          }
+          if (
+            looksLikeImproved &&
+            analysis.historicalIssuesReliability === "medium"
+          ) {
+            analysis.historicalIssuesReliability = "high";
           }
         }
       } catch (e) {

@@ -921,8 +921,19 @@ async function fetchAndBuildRankingGame(
   const reviewQualityScore = analysis.reviewQualityScore ?? 5;
   const bugRisk = analysis.bugRisk ?? 5;
   const refundMentions = analysis.refundMentions ?? 0;
-  const improved = analysis.hasImprovedSinceLaunch ?? false;
+  let improved = analysis.hasImprovedSinceLaunch ?? false;
   const trend = analysis.stabilityTrend ?? "Stable"; // Improving / Stable / Deteriorating
+
+  // --- stabilityTrend と hasImprovedSinceLaunch の整合性を取る ---
+  if (trend === "Improving") {
+    improved = true;
+    analysis.hasImprovedSinceLaunch = true;
+  } else if (trend === "Deteriorating") {
+    improved = false;
+    analysis.hasImprovedSinceLaunch = false;
+  } else if (analysis.hasImprovedSinceLaunch === undefined) {
+    analysis.hasImprovedSinceLaunch = improved;
+  }
 
   // --- Updated Hidden Gem Verdict Logic (recent state prioritized) ---
 
@@ -990,6 +1001,30 @@ async function fetchAndBuildRankingGame(
   }
 
   // analysis に statGemScore を埋め込む
+  // --- statGemScore を使った後処理で、ラベルと verdict の整合性を補正 ---
+  if (typeof statGemScore === "number" && statGemScore >= 8) {
+    if (isStatisticallyHidden) {
+      if (trend === "Improving" || improved) {
+        gemLabel = "Improved Hidden Gem";
+      } else {
+        gemLabel = "Hidden Gem";
+      }
+      // verdict が Unknown のままなら、統計的にも Hidden Gem と判断
+      if (analysis.hiddenGemVerdict === "Unknown") {
+        analysis.hiddenGemVerdict = "Yes";
+      }
+    } else if (gemLabel === "Hidden Gem") {
+      // 統計的には Hidden ではないタイトルには Hidden Gem ラベルを付けない
+      gemLabel =
+        positiveRatio >= 85 ? "Highly rated but not hidden" : "Not a hidden gem";
+    }
+  }
+
+  // 最終チェック: 非 Hidden なゲームで verdict が "Yes" になっていないか確認
+  if (!isStatisticallyHidden && analysis.hiddenGemVerdict === "Yes") {
+    analysis.hiddenGemVerdict = "No";
+  }
+
   const enrichedAnalysis: GameAnalysis = {
     ...analysis,
     statGemScore,

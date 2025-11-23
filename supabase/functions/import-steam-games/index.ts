@@ -614,12 +614,14 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
     { count: "exact" }
   );
 
-  // 直近◯日フィルタ（last_steam_fetch_at 基準）
-  // 直近◯日フィルタ（last_steam_fetch_at 基準）
+  // 直近◯日フィルタ（release_date 基準）
   if (recentDays && recentDays > 0) {
     const since = new Date();
     since.setDate(since.getDate() - recentDays);
-    query = query.gte("last_steam_fetch_at", since.toISOString());
+    const sinceIso = since.toISOString();
+
+    // ★ 基準を last_steam_fetch_at → release_date に変更
+    query = query.gte("release_date", sinceIso);
   }
 
   // ★ 発売年月フィルタ（"YYYY-MM" を期待）
