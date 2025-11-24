@@ -853,8 +853,22 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         analysis: aiResult,
       };
 
+      // gemLabel（AI側で付与されたラベル）があれば反映
       if (typeof (aiResult as any).gemLabel === "string") {
         updatedData.gemLabel = (aiResult as any).gemLabel;
+      }
+
+      // ★ 追加: scores / scoreHighlights も保存
+      if (aiResult && typeof aiResult === "object") {
+        const anyResult = aiResult as any;
+
+        if (anyResult.scores && typeof anyResult.scores === "object") {
+          updatedData.scores = anyResult.scores;
+        }
+
+        if (Array.isArray(anyResult.scoreHighlights)) {
+          updatedData.scoreHighlights = anyResult.scoreHighlights;
+        }
       }
 
       const { error: updateError } = await supabase

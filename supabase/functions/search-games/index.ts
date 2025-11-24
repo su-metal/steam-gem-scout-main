@@ -98,6 +98,52 @@ const normalizeStringArray = (value: unknown): string[] => {
   return normalized;
 };
 
+// --- 可変スコア軸用ヘルパー -------------------------
+
+const SCORE_KEYS = [
+  "hidden",
+  "quality",
+  "moodFit",
+  "comeback",
+  "niche",
+  "innovation",
+] as const;
+
+type ScoreKey = (typeof SCORE_KEYS)[number];
+
+/**
+ * game_rankings_cache.data.scores に入っている値を
+ * 0〜1 の範囲に正規化して取り出すヘルパー。
+ */
+const normalizeScores = (value: unknown): Record<ScoreKey, number> => {
+  const base: Record<ScoreKey, number> = {
+    hidden: 0,
+    quality: 0,
+    moodFit: 0,
+    comeback: 0,
+    niche: 0,
+    innovation: 0,
+  };
+
+  if (!value || typeof value !== "object") return base;
+
+  const src = value as any;
+
+  for (const key of SCORE_KEYS) {
+    const raw = src?.[key];
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      let v = raw;
+      // 0〜1 が基本だが、万一 0〜100 っぽい値が来た場合は 0〜1 に縮める
+      if (v > 1.000001) {
+        v = v / 100;
+      }
+      base[key] = Math.max(0, Math.min(1, v));
+    }
+  }
+
+  return base;
+};
+
 // ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
 //   指標: positive_ratio / reviews / owners / price / playtime / release_year
 //   重み: 40 / 20 / 15 / 10 / 10 / 5
@@ -265,16 +311,56 @@ Deno.serve(async (req: Request): Promise<Response> => {
         releaseYear,
       });
 
+      // scores: game_rankings_cache.data.scores を 0〜1 に正規化
+      const scores = normalizeScores(g.scores);
+
+      // scoreHighlights: DB 側にあればそのまま使う。無ければデフォルトを組み立てる
+      let scoreHighlights: string[] | undefined;
+
+      if (Array.isArray(g.scoreHighlights)) {
+        scoreHighlights = g.scoreHighlights.filter(
+          (k: any) => typeof k === "string"
+        );
+      }
+
+      if (!scoreHighlights || scoreHighlights.length === 0) {
+        // デフォルト: moodFit は常に表示候補に含める
+        const defaults: ScoreKey[] = ["moodFit"];
+
+        // scores の中で値が高い軸を上位2つまで採用（moodFit 以外）
+        const otherKeys: ScoreKey[] = [
+          "hidden",
+          "quality",
+          "comeback",
+          "niche",
+          "innovation",
+        ];
+
+        const ranked = otherKeys
+          .filter((key) => scores[key] > 0)
+          .sort((a, b) => scores[b] - scores[a]);
+
+        for (const key of ranked) {
+          if (defaults.length >= 3) break;
+          if (!defaults.includes(key)) {
+            defaults.push(key);
+          }
+        }
+
+        scoreHighlights = defaults;
+      }
+
       const normalizedHeaderImage =
         typeof g.headerImage === "string" && g.headerImage.trim() !== ""
           ? g.headerImage
-          : typeof g.header_image === "string" &&
-            g.header_image.trim() !== ""
+          : typeof g.header_image === "string" && g.header_image.trim() !== ""
           ? g.header_image
           : null;
 
       const summaryText =
-        typeof analysisRaw.summary === "string" ? analysisRaw.summary.trim() : "";
+        typeof analysisRaw.summary === "string"
+          ? analysisRaw.summary.trim()
+          : "";
       const stabilityTrend =
         typeof analysisRaw.stabilityTrend === "string" &&
         VALID_TRENDS.includes(analysisRaw.stabilityTrend)
@@ -299,7 +385,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         steamUrl: g.steamUrl ?? `https://store.steampowered.com/app/${g.appId}`,
         screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         reviewScoreDesc: g.reviewScoreDesc ?? "",
-        // ★ 追加：game_rankings_cache.data.headerImage をそのまま返す
         headerImage: normalizedHeaderImage,
         analysis: {
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
@@ -312,19 +397,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
           refundMentions: toNumber(analysisRaw.refundMentions, 0),
           statGemScore: toNumberOrUndefined(analysisRaw.statGemScore),
           reviewQualityScore: toNumber(analysisRaw.reviewQualityScore, 0),
-          currentStateSummary: normalizeSectionText(analysisRaw.currentStateSummary),
-          historicalIssuesSummary: normalizeSectionText(analysisRaw.historicalIssuesSummary),
+          currentStateSummary: normalizeSectionText(
+            analysisRaw.currentStateSummary
+          ),
+          historicalIssuesSummary: normalizeSectionText(
+            analysisRaw.historicalIssuesSummary
+          ),
           stabilityTrend,
           hasImprovedSinceLaunch,
-          currentStateReliability: normalizeReliability(analysisRaw.currentStateReliability),
-          historicalIssuesReliability: normalizeReliability(analysisRaw.historicalIssuesReliability),
+          currentStateReliability: normalizeReliability(
+            analysisRaw.currentStateReliability
+          ),
+          historicalIssuesReliability: normalizeReliability(
+            analysisRaw.historicalIssuesReliability
+          ),
         },
         gemLabel: g.gemLabel ?? "",
         isStatisticallyHidden: g.isStatisticallyHidden ?? false,
         releaseDate: g.releaseDate ?? "",
         releaseYear,
-        // ★ 新フィールド: 統計ベースの Base Hidden Gem Score (0〜100)
+        // 統計ベースの Base Hidden Gem Score (0〜100)
         baseScore,
+        // ★ 新フィールド群
+        scores,
+        scoreHighlights,
       };
     });
 

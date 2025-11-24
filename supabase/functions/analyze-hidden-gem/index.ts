@@ -61,6 +61,14 @@ interface EarlyRecentBlocks {
   };
 }
 
+interface HiddenGemScores {
+  hidden: number;
+  quality: number;
+  comeback: number;
+  niche: number;
+  innovation: number;
+}
+
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
   summary: string;
@@ -114,6 +122,17 @@ interface HiddenGemAnalysis {
    */
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown" | null;
 
+  /**
+   * このタイトルの「スコア軸」。
+   * 0.0〜1.0 の正規化された値。UI 側で ★ や 10 段階などに変換して使う。
+   */
+  scores?: HiddenGemScores | null;
+
+  /**
+   * このタイトルで特に特徴的なスコア軸のキー一覧。
+   * 例: ["hidden", "comeback", "niche"]
+   */
+  scoreHighlights?: string[] | null;
   aiError?: boolean;
 }
 
@@ -776,6 +795,9 @@ IMPORTANT:
         if (isTooEarlyForStable && analysis.stabilityTrend === "Stable") {
           analysis.stabilityTrend = "Unknown";
         }
+        const scores = computeScores(gameData, analysis);
+        analysis.scores = scores;
+        analysis.scoreHighlights = pickScoreHighlights(scores);
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
@@ -1016,14 +1038,7 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     ),
   };
 
-  if (typeof parsed?.statGemScore === "number") {
-    (normalized as any).statGemScore = parsed.statGemScore;
-  }
-
-  if (typeof parsed?.aiError === "boolean") {
-    normalized.aiError = parsed.aiError;
-  }
-
+  // statGemScore / aiError をそのまま通しておく
   if (typeof parsed?.statGemScore === "number") {
     (normalized as any).statGemScore = parsed.statGemScore;
   }
@@ -1044,4 +1059,134 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   }
 
   return normalized;
+}
+
+function clamp01(value: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+/**
+ * GameData + Analysis から Hidden / Quality / Comeback / Niche / Innovation をざっくり算出する。
+ * すべて 0.0〜1.0 に正規化して返す。
+ */
+function computeScores(
+  game: GameData,
+  analysis: HiddenGemAnalysis
+): HiddenGemScores {
+  const totalReviews =
+    typeof game.totalReviews === "number" ? game.totalReviews : 0;
+  const positiveRatio =
+    typeof game.positiveRatio === "number" ? game.positiveRatio : 0;
+
+  // 60〜100% のポジ率を 0〜1 にマッピング（60% 未満は 0 付近）
+  const normPositive = clamp01((positiveRatio - 0.6) / 0.4);
+
+  // レビュー数が少ないほど「隠れている」とみなす簡易指標。
+  // 100 件あたりを 1.0 近辺、10 万件あたりで 0 に近づくイメージ。
+  const logReviews = Math.log10(Math.max(totalReviews, 1)); // 1〜10^5+ → 0〜5+
+  const hiddenByReviews = clamp01(1 - logReviews / 5); // 10^5 レビューでほぼ 0
+
+  // Hidden: 「レビュー数が少ない」＋「評価が高い」ほど高くなる
+  const hidden = clamp01(hiddenByReviews * 0.7 + normPositive * 0.3);
+
+  // Quality: AI が付けた reviewQualityScore と positiveRatio の平均
+  const qualityFromAI =
+    typeof analysis.reviewQualityScore === "number"
+      ? analysis.reviewQualityScore / 10
+      : 0.5;
+  const quality = clamp01(qualityFromAI * 0.7 + normPositive * 0.3);
+
+  // Comeback: hasImprovedSinceLaunch + stabilityTrend から算出
+  let comeback = 0;
+  if (analysis.hasImprovedSinceLaunch === true) {
+    if (analysis.stabilityTrend === "Improving") {
+      comeback = 1.0;
+    } else if (analysis.stabilityTrend === "Stable") {
+      comeback = 0.8;
+    } else {
+      comeback = 0.6;
+    }
+  } else if (
+    analysis.hasImprovedSinceLaunch === null &&
+    analysis.stabilityTrend === "Improving"
+  ) {
+    // 明確な「復活」ではないが、改善傾向はありそうなケース
+    comeback = 0.4;
+  }
+  comeback = clamp01(comeback);
+
+  // Niche: audienceBadges や vibes の「とがり具合」からざっくり計算
+  let niche = 0;
+  if (
+    Array.isArray(analysis.audienceBadges) &&
+    analysis.audienceBadges.length > 0
+  ) {
+    // バッジが付いている時点で「ある程度、人を選ぶタイトル」とみなす
+    niche = 0.4 + Math.min(analysis.audienceBadges.length - 1, 3) * 0.1; // 最大 0.7
+  }
+
+  if (analysis.vibes) {
+    const v = analysis.vibes;
+    const vals = [v.active, v.stress, v.volume];
+    const avg = vals.reduce((s, x) => s + x, 0) / vals.length;
+    const sqAvg = vals.reduce((s, x) => s + x * x, 0) / vals.length;
+    const variance = Math.max(sqAvg - avg * avg, 0);
+    const stddev = Math.sqrt(variance);
+    // 振れ幅が大きいほど「尖っている」とみなす（最大 1.0）
+    const extremeness = clamp01(stddev * 2);
+    niche = Math.max(niche, extremeness);
+  }
+  niche = clamp01(niche);
+
+  // Innovation: ひとまず保留気味に 0〜0.7 の間で軽く振る。
+  // （将来的に「独自性の強さ」を AI から直接受けるなら差し替え）
+  let innovation = 0;
+  if (Array.isArray(analysis.labels) && analysis.labels.length >= 3) {
+    innovation = 0.3;
+  }
+  if (
+    Array.isArray(analysis.labels) &&
+    analysis.labels.some(
+      (label) =>
+        typeof label === "string" &&
+        (label.includes("独自") ||
+          label.includes("実験") ||
+          label.includes("ユニーク") ||
+          label.includes("変わった"))
+    )
+  ) {
+    innovation = 0.6;
+  }
+  innovation = clamp01(innovation);
+
+  return {
+    hidden,
+    quality,
+    comeback,
+    niche,
+    innovation,
+  };
+}
+
+/**
+ * サーバー側で出せるスコアの中から、そのゲームにとって特徴的な軸を 3 つまで選ぶ。
+ * （moodFit はクライアント側で計算するのでここには含めない）
+ */
+function pickScoreHighlights(scores: HiddenGemScores): string[] {
+  const entries: { key: keyof HiddenGemScores; value: number }[] = [
+    { key: "hidden", value: scores.hidden },
+    { key: "quality", value: scores.quality },
+    { key: "comeback", value: scores.comeback },
+    { key: "niche", value: scores.niche },
+    { key: "innovation", value: scores.innovation },
+  ];
+
+  return entries
+    .filter((e) => e.value > 0.15) // ほぼ 0 の軸は除外
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .map((e) => e.key);
 }
