@@ -16,6 +16,7 @@ import {
 import { SimilarGemsSection } from "@/components/SimilarGemsSection";
 import { supabase } from "@/integrations/supabase/client";
 
+
 // Returns the tags that should be displayed on the detail page.
 // Priority: analysis.labels (AI labels) -> fallback to raw tags.
 const getDisplayTags = (
@@ -58,11 +59,11 @@ interface AnalysisData {
   currentStateSummary?: string | null;
   historicalIssuesSummary?: string | null;
   stabilityTrend?:
-    | "Improving"
-    | "Stable"
-    | "Deteriorating"
-    | "Unknown"
-    | null;
+  | "Improving"
+  | "Stable"
+  | "Deteriorating"
+  | "Unknown"
+  | null;
   hasImprovedSinceLaunch?: boolean | null;
 
   // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-hidden-gem から来る）
@@ -134,20 +135,120 @@ type GameData = NonNullable<GameDetailState["gameData"]>;
 export default function GameDetail() {
   const location = useLocation();
   const navigate = useNavigate();
+  const game = location.state as GameDetailState;
 
   // Steam 側の最新情報で上書きするための state
   const [liveGameData, setLiveGameData] = useState<GameData | null>(null);
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
-  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0); // 追加
+  const [activeScreenshotIndex, setActiveScreenshotIndex] = useState(0);
   const [invalidMediaSrcs, setInvalidMediaSrcs] = useState<string[]>([]);
 
+
+  // ★ 追加: analyze-hidden-gem の結果と状態
+  const [remoteAnalysis, setRemoteAnalysis] = useState<AnalysisData | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
 
-  const game = location.state as GameDetailState;
+  // ★ 追加: GameDetail に遷移したときに AI 解析を走らせる
+  useEffect(() => {
+    if (!game) return;
+
+    // すでに analysisData / gameData.analysis があれば、それを優先
+    const existingAnalysis: AnalysisData | undefined =
+      game.analysisData || game.gameData?.analysis;
+
+    // 新仕様（今と昔モデル）の情報がすでに入っているかどうかをチェック
+    const hasNewModelAnalysis =
+      !!existingAnalysis &&
+      (
+        existingAnalysis.currentStateSummary ||              // 現在の状態
+        existingAnalysis.historicalIssuesSummary ||          // 過去の問題
+        typeof existingAnalysis.stabilityTrend === "string" ||  // 安定度トレンド
+        typeof existingAnalysis.hasImprovedSinceLaunch === "boolean" // 改善フラグ
+      );
+
+    // 新モデルの解析がすでにある場合は再解析しない
+    if (hasNewModelAnalysis) {
+      return;
+    }
+
+    // すでに fetch 済み or 実行中なら何もしない
+    if (isAnalyzing || remoteAnalysis) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+
+      // GameDetailState から analyze-hidden-gem に渡すための GameData を組み立て
+      const source = game.gameData ?? {
+        appId: (game.appId as number) || 0,
+        title: game.title || "Unknown Game",
+        positiveRatio: game.positiveRatio || 0,
+        totalReviews: game.totalReviews || 0,
+        estimatedOwners: game.estimatedOwners || 0,
+        price: game.price || 0,
+        averagePlaytime: game.averagePlaytime || 0,
+        tags: game.tags || [],
+        steamUrl: game.steamUrl,
+        reviewScoreDesc: game.reviewScoreDesc,
+        releaseDate: game.releaseDate ?? null,
+        releaseYear: game.releaseYear ?? null,
+      };
+
+      const payload = {
+        title: source.title,
+        appId: source.appId,
+        positiveRatio: source.positiveRatio,
+        totalReviews: source.totalReviews,
+        estimatedOwners: source.estimatedOwners,
+        recentPlayers: 0, // GameDetailState には無いので 0 で補完
+        price: source.price,
+        averagePlaytime: source.averagePlaytime,
+        lastUpdated: source.releaseDate || new Date().toISOString(),
+        releaseDate: source.releaseDate,
+        tags: source.tags ?? [],
+        // reviews / earlyReviews / recentReviews を扱う場合はここに追加する
+      };
+
+      const { data, error } = await supabase.functions.invoke<AnalysisData>(
+        "analyze-hidden-gem",
+        { body: payload }
+      );
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("analyze-hidden-gem error:", error);
+        setAnalysisError(error.message ?? "AI解析に失敗しました");
+        setIsAnalyzing(false);
+        return;
+      }
+
+      if (!data) {
+        setAnalysisError("AI解析結果を取得できませんでした");
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // ★ analyze-hidden-gem から返ってきた HiddenGemAnalysis をそのまま反映
+      setRemoteAnalysis(data);
+      setIsAnalyzing(false);
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [game, isAnalyzing, remoteAnalysis]);
+
 
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
@@ -196,7 +297,8 @@ export default function GameDetail() {
   // Steam から取得した最新情報があれば優先する
   const baseGame = liveGameData ?? gameData;
 
-  const analysisData: AnalysisData =
+  // まずは DB / navigation state から来ている既存の解析を組み立てる
+  const baseAnalysisData: AnalysisData =
     game.analysisData ||
     gameData.analysis ||
     {
@@ -216,6 +318,10 @@ export default function GameDetail() {
       stabilityTrend: game.stabilityTrend as AnalysisData["stabilityTrend"],
       hasImprovedSinceLaunch: game.hasImprovedSinceLaunch,
     };
+
+  // ★ analyze-hidden-gem の結果があれば、それを最優先で使う
+  const analysisData: AnalysisData = remoteAnalysis ?? baseAnalysisData;
+
 
 
   // Safe fallback arrays for fields that may be undefined
@@ -465,7 +571,7 @@ export default function GameDetail() {
       {/* === Main Content ========================================= */}
       <div className="max-w-5xl mx-auto px-4 pb-10 pt-6 md:px-8 md:pb-16 md:pt-10 space-y-6 -mt-6 md:-mt-10">
         {/* Header Navigation */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <Button
             variant="outline"
             onClick={handleBack}
@@ -477,6 +583,16 @@ export default function GameDetail() {
           {isLoadingSteam && (
             <span className="text-xs text-muted-foreground">
               Steam から最新のメタ情報を取得中…
+            </span>
+          )}
+          {isAnalyzing && (
+            <span className="text-xs text-muted-foreground">
+              レビューを AI 解析中…
+            </span>
+          )}
+          {analysisError && (
+            <span className="text-xs text-red-400">
+              {analysisError}
             </span>
           )}
         </div>

@@ -904,110 +904,56 @@ async function fetchAndBuildRankingGame(
   // 4) 推定オーナー数 / Hidden 判定（ざっくりルール）
   const estimatedOwners = totalReviews > 0 ? totalReviews * 30 : 0;
 
-  const isStatisticallyHidden = totalReviews < 2000 || estimatedOwners < 50000;
+  const isStatisticallyHidden =
+    estimatedOwners > 0 &&
+    totalReviews > 0 &&
+    totalReviews / estimatedOwners < 0.02 &&
+    estimatedOwners < 50000;
 
-  let gemLabel = "Not a hidden gem" as
-    | "Hidden Gem"
-    | "Highly rated but not hidden"
-    | "Not a hidden gem";
+  // ★ RankingGameData と同じ型にする
+  let gemLabel: RankingGameData["gemLabel"] = "Not a hidden gem";
 
   const nowIso = new Date().toISOString();
 
   console.log("Sample reviews fetched", appId, sampleReviews.length);
 
-  const analysis = await analyzeGameWithAI({
-    appId,
-    title,
-    tags,
-    positiveRatio,
-    totalReviews,
-    price,
-    sampleReviews,
-    contextNotes,
-    reviewScoreDesc,
+  console.log("Sample reviews fetched", appId, sampleReviews.length);
 
-    // ★ リリース日と過去/最近レビュー統計
-    releaseDate: releaseDateStr,
-    earlyWindowStats,
-    recentWindowStats,
-  });
-
-  console.log("AI analysis finished", appId, {
-    reviewQualityScore: analysis.reviewQualityScore,
-    bugRisk: analysis.bugRisk,
-    refundMentions: analysis.refundMentions,
-  });
+  // ★ Import 時点では AI 解析は走らせない。
+  //    GameDetail 側の analyze-hidden-gem が必要に応じて解析を行う前提。
+  const analysis: GameAnalysis = {
+    hiddenGemVerdict: "Unknown",
+    summary: "",
+    labels: [],
+    pros: [],
+    cons: [],
+    riskScore: 5,
+    bugRisk: 5,
+    refundMentions: 0,
+    reviewQualityScore: 5,
+    hasImprovedSinceLaunch: false,
+    stabilityTrend: "Stable",
+  };
 
   // --- AI スコアを使って hiddenGemVerdict / gemLabel を決定する ---
 
-  // 念のため安全なデフォルトを入れておく
-  const reviewQualityScore = analysis.reviewQualityScore ?? 5;
-  const bugRisk = analysis.bugRisk ?? 5;
-  const refundMentions = analysis.refundMentions ?? 0;
-  let improved = analysis.hasImprovedSinceLaunch ?? false;
-  const trend = analysis.stabilityTrend ?? "Stable"; // Improving / Stable / Deteriorating
-
-  // --- stabilityTrend と hasImprovedSinceLaunch の整合性を取る ---
-  if (trend === "Improving") {
-    improved = true;
-    analysis.hasImprovedSinceLaunch = true;
-  } else if (trend === "Deteriorating") {
-    improved = false;
-    analysis.hasImprovedSinceLaunch = false;
-  } else if (analysis.hasImprovedSinceLaunch === undefined) {
-    analysis.hasImprovedSinceLaunch = improved;
-  }
-
-  // --- Updated Hidden Gem Verdict Logic (recent state prioritized) ---
-
-  if (trend === "Deteriorating") {
-    // 最近悪化 → Hidden Gem として推奨しない
-    analysis.hiddenGemVerdict = "No";
-  } else if (reviewQualityScore >= 8 && bugRisk <= 4 && refundMentions <= 3) {
-    // 高品質かつ低リスク
-    analysis.hiddenGemVerdict = "Yes";
-  } else if (reviewQualityScore >= 7) {
-    // 曖昧・情報不足
-    analysis.hiddenGemVerdict = "Unknown";
-  } else {
-    // 品質が低い
-    analysis.hiddenGemVerdict = "No";
-  }
-
-  // ★ 改善していたら、その情報を重み付け
-  if (improved && analysis.hiddenGemVerdict === "Unknown") {
-    analysis.hiddenGemVerdict = "Yes"; // “復活した Hidden Gem” パターン
-  }
-
-  // --- Advanced gemLabel with update-aware logic ---
-  if (
-    isStatisticallyHidden &&
-    positiveRatio >= 85 &&
-    analysis.hiddenGemVerdict === "Yes"
-  ) {
-    if (trend === "Improving" || improved) {
-      gemLabel = "Improved Hidden Gem"; // ★ 昔は微妙、今は良くなった
-    } else {
-      gemLabel = "Hidden Gem";
-    }
-  } else if (
-    isStatisticallyHidden &&
-    positiveRatio >= 80 &&
-    analysis.hiddenGemVerdict !== "No"
-  ) {
-    gemLabel = "Emerging Gem"; // ★ ほぼHidden。惜しいけど埋もれている
-  } else if (positiveRatio >= 85) {
+  // --- AI を使わない統計ベースの gemLabel 判定 ---
+  // ここでは「どれくらい埋もれていそうか」と「評価の高さ」でざっくり分類する。
+  if (isStatisticallyHidden && positiveRatio >= 85) {
+    // 本命の「隠れた良作」候補
+    gemLabel = "Hidden Gem";
+  } else if (isStatisticallyHidden && positiveRatio >= 75) {
+    // データがまだ少ない / 惜しいが埋もれている作品
+    gemLabel = "Emerging Gem";
+  } else if (!isStatisticallyHidden && positiveRatio >= 85) {
+    // 既に結構知られているが高評価な作品
     gemLabel = "Highly rated but not hidden";
   } else {
     gemLabel = "Not a hidden gem";
   }
 
-  // ★ 最近悪化しているなら警告カテゴリ（ただしNot hiddenよりは上）
-  if (trend === "Deteriorating") {
-    gemLabel = "Not a hidden gem"; // or "Declining title" 作ってもOK
-  }
-
-  // 統計ベースの「隠れた名作」スコアを計算（1〜10）
+  // trend / improved などは、GameDetail 側の analyze-hidden-gem で
+  // AI 解析したときにだけ付与される前提。
   const statGemScore = computeStatGemScore({
     positiveRatio,
     totalReviews,

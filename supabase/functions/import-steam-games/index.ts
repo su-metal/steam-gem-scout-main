@@ -43,8 +43,15 @@ type RankingGame = {
 };
 
 type ImportSteamGamesRequest =
-  | { appId: number }
-  | { appIds: number[] }
+  | {
+      appId: number;
+      /** Import 後に AI 解析を実行するかどうか（任意） */
+      runAiAnalysisAfterImport?: boolean;
+    }
+  | {
+      appIds: number[];
+      runAiAnalysisAfterImport?: boolean;
+    }
   | {
       recentDays?: number;
       minPositiveRatio?: number;
@@ -59,6 +66,8 @@ type ImportSteamGamesRequest =
       releaseTo?: string; // "YYYY-MM"
       // ★ 追加: フィルタ結果の中からフロントで選択された AppID 群
       selectedAppIds?: number[];
+      /** Import 後に AI 解析を実行するかどうか（任意） */
+      runAiAnalysisAfterImport?: boolean;
     };
 
 type ImportCandidate = {
@@ -82,6 +91,12 @@ type ImportSteamGamesResult = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
+
+// ★ 追加: analyze-hidden-gem エンドポイント
+const ANALYZE_HIDDEN_GEM_URL = `${SUPABASE_URL.replace(
+  /\/+$/,
+  ""
+)}/functions/v1/analyze-hidden-gem`;
 
 // Supabase サーバーサイドクライアント
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -108,6 +123,10 @@ Deno.serve(async (req) => {
 
   try {
     const body = (await req.json()) as ImportSteamGamesRequest;
+
+    // ★ 追加: フロントから渡されたフラグを読み取る
+    const runAiAnalysisAfterImport =
+      (body as any).runAiAnalysisAfterImport === true;
 
     const hasSingleAppId =
       typeof (body as any).appId === "number" &&
@@ -249,6 +268,16 @@ Deno.serve(async (req) => {
     const { inserted, skippedExisting } = await upsertGamesToRankingsCache(
       appIds
     );
+
+    // ★ 追加: Import 後に AI 解析を実行するオプション
+    if (runAiAnalysisAfterImport && appIds.length > 0) {
+      try {
+        await runAiAnalysisForAppIds(appIds);
+      } catch (e) {
+        console.error("runAiAnalysisForAppIds failed:", e);
+        // ここでは import 自体は成功として扱いたいので、throw はしない
+      }
+    }
 
     const response: ImportSteamGamesResult = {
       // ★ selectedAppIds が指定されている場合は「実際に対象となった件数」を返す
@@ -579,6 +608,110 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   }
 
   return { inserted, skippedExisting, results };
+}
+
+/**
+ * Import 済みの appId 群に対して analyze-hidden-gem を実行し、
+ * game_rankings_cache.data.analysis / gemLabel を更新する。
+ *
+ * - 既に analysis が入っている場合はスキップ
+ * - 統計上の hidden gem 判定が true のものだけを対象にしても良いが、
+ *   ここでは「import されたもの全て」をベースにしつつ
+ *   analysis が null のものだけに絞る。
+ */
+async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
+  for (const appId of appIds) {
+    try {
+      const appIdStr = String(appId);
+
+      const { data: existing, error } = await supabase
+        .from("game_rankings_cache")
+        .select("id, data")
+        .eq("data->>appId", appIdStr)
+        .maybeSingle();
+
+      if (error) {
+        console.error(
+          "runAiAnalysisForAppIds: select error in game_rankings_cache",
+          appId,
+          error
+        );
+        continue;
+      }
+
+      if (!existing || !existing.data || typeof existing.data !== "object") {
+        console.warn(
+          "runAiAnalysisForAppIds: no existing row for appId",
+          appId
+        );
+        continue;
+      }
+
+      const currentData = existing.data as any;
+
+      // 既に analysis がある場合は再解析しない
+      if (currentData.analysis) {
+        continue;
+      }
+
+      // ★ analyze-hidden-gem に渡すペイロード
+      //   → ここでは RankingGame 相当の data 全体を渡す。
+      const payload = currentData;
+
+      const res = await fetch(ANALYZE_HIDDEN_GEM_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // プロジェクト設定に応じて不要なら削ってOK
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        console.error(
+          "runAiAnalysisForAppIds: analyze-hidden-gem failed for appId",
+          appId,
+          await res.text()
+        );
+        continue;
+      }
+
+      const aiResult = await res.json();
+
+      // analyze-hidden-gem 側のレスポンス仕様に合わせてマージ
+      const updatedData = {
+        ...currentData,
+        analysis:
+          aiResult.analysis !== undefined
+            ? aiResult.analysis
+            : currentData.analysis ?? null,
+        gemLabel:
+          aiResult.gemLabel !== undefined
+            ? aiResult.gemLabel
+            : currentData.gemLabel ?? "",
+      };
+
+      const { error: updateError } = await supabase
+        .from("game_rankings_cache")
+        .update({ data: updatedData })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        console.error(
+          "runAiAnalysisForAppIds: update error in game_rankings_cache",
+          appId,
+          updateError
+        );
+      }
+    } catch (e) {
+      console.error(
+        "runAiAnalysisForAppIds: unexpected error for appId",
+        appId,
+        e
+      );
+    }
+  }
 }
 
 async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{

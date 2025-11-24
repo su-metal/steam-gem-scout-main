@@ -82,14 +82,11 @@ export const SearchResultCard = ({
     explicitHeaderImage && explicitHeaderImage.trim() !== ""
       ? explicitHeaderImage
       : fallbackHeaderImageUrl;
-  const safeSummary =
-    summary || "AI could not generate a summary for this title, but it looks like a promising hidden gem.";
 
   const tagSource =
     gameData ?? {
       analysis:
-        analysisData ??
-        (labels && labels.length > 0 ? { labels } : undefined),
+        analysisData ?? (labels && labels.length > 0 ? { labels } : undefined),
       tags,
     };
 
@@ -99,12 +96,35 @@ export const SearchResultCard = ({
     ? Math.round(positiveRatio)
     : 0;
 
+  // --- 統計ベースのサマリ生成 ---
+  const hasAISummary =
+    typeof summary === "string" && summary.trim().length > 0;
+
+  const statBasedSummary = (() => {
+    const mainTag = displayTags[0];
+    const tagText = mainTag ? `${mainTag}系の` : "";
+    const positiveText =
+      positiveDisplay > 0 ? `${positiveDisplay}%の好評率` : "一定の好評";
+    const reviewsText =
+      typeof totalReviews === "number" && totalReviews > 0
+        ? `${totalReviews.toLocaleString()}件のレビュー`
+        : "いくつかのレビュー";
+
+    return `${positiveText}と${reviewsText}を持つ${tagText}タイトルです。カードを開くと、AIがレビュー内容を解析して詳しい長所・短所を表示します。`;
+  })();
+
+  const safeSummary = hasAISummary ? summary : statBasedSummary;
+
   // --- AI info extraction ---
 
   const ai = analysisData || gameData?.analysis || {};
 
+  // GameDetail 側の analyze-hidden-gem が走ると currentStateSummary / historicalIssuesSummary が入る前提
+  const hasFullAIAnalysis =
+    !!ai.currentStateSummary || !!ai.historicalIssuesSummary;
+
   const verdict: "Yes" | "No" | "Unknown" =
-    ai.hiddenGemVerdict ?? "Unknown";
+    hasFullAIAnalysis ? (ai.hiddenGemVerdict ?? "Unknown") : "Unknown";
 
   const riskScore: number | null =
     typeof ai.riskScore === "number" ? ai.riskScore : null;
@@ -199,10 +219,6 @@ export const SearchResultCard = ({
   }
 
   // --- AI gem score & verdict line ---
-  // 優先順位:
-  //  1. statGemScore（統計ベースの隠れた名作度）
-  //  2. reviewQualityScore（旧AIスコア：statGemScore の無い古いデータ用）
-  //  3. hiddenGemScore（props から渡されるフォールバック）
   const gemScore: number | null =
     statGemScore !== null
       ? statGemScore
@@ -212,16 +228,20 @@ export const SearchResultCard = ({
           ? hiddenGemScore
           : null;
 
+  const hasGemScore = typeof gemScore === "number" && gemScore > 0;
 
   // 色付き丸バッジ class
   const gemScoreCircleClass =
-    gemScore === null
+    !hasGemScore
       ? "bg-muted text-muted-foreground"
-      : gemScore >= 8
+      : gemScore! >= 8
         ? "bg-emerald-500 text-emerald-50"
-        : gemScore >= 6
+        : gemScore! >= 6
           ? "bg-yellow-500 text-yellow-900"
           : "bg-red-500 text-red-50";
+
+  const gemScoreLabel = hasFullAIAnalysis ? "AI Gem Score" : "Gem Score";
+
 
   // AI recommends 文言
   const aiRecommendsLabel =
@@ -348,22 +368,32 @@ export const SearchResultCard = ({
           )}
 
           {/* AI Verdict & Risk badges */}
+          {/* AI Verdict & Risk badges */}
           <div className="flex flex-wrap gap-1 mt-1">
             {/* Verdict Badge */}
-            <Badge
-              variant="outline"
-              className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
-                ? "border-green-500 text-green-400"
-                : verdict === "Unknown"
-                  ? "border-yellow-500 text-yellow-400"
-                  : "border-red-500 text-red-400"
-                }`}
-            >
-              AI: {verdict}
-            </Badge>
+            {hasFullAIAnalysis ? (
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
+                  ? "border-green-500 text-green-400"
+                  : verdict === "Unknown"
+                    ? "border-yellow-500 text-yellow-400"
+                    : "border-red-500 text-red-400"
+                  }`}
+              >
+                AI: {verdict}
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground"
+              >
+                AI: Pending
+              </Badge>
+            )}
 
-            {/* Risk Level Badge */}
-            {riskLevel && (
+            {/* Risk Level Badge: AI解析済みのときだけ表示 */}
+            {hasFullAIAnalysis && riskLevel && (
               <Badge
                 variant="outline"
                 className={`text-[10px] px-2 py-0.5 rounded-full ${riskLevel === "Low"
@@ -377,24 +407,24 @@ export const SearchResultCard = ({
               </Badge>
             )}
           </div>
+
         </div>
 
         {/* Right: Gem Score + Stats */}
         <div className="flex flex-wrap justify-between items-center gap-3">
-          <div className="flex flex-col items-center">
-            <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center">
               <div
                 className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
               >
-                {gemScore !== null ? gemScore.toFixed(1) : "N/A"}
+                {hasGemScore ? gemScore!.toFixed(1) : "—"}
               </div>
               <span className="text-[10px] mt-0.5 text-muted-foreground">
-                AI Gem Score
+                {gemScoreLabel}
               </span>
             </div>
-          </div>
 
-        
+
+
 
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
