@@ -119,6 +119,40 @@ export const SearchResultCard = ({
 
   const ai = analysisData || gameData?.analysis || {};
 
+  const rawAudienceBadges = (ai as any)?.audienceBadges;
+
+  const audienceBadges: { id?: string; label: string }[] = Array.isArray(
+    rawAudienceBadges
+  )
+    ? rawAudienceBadges
+      .map((item: any) => {
+        if (!item) return null;
+
+        // 文字列だけ返ってきた場合も一応ケア
+        if (typeof item === "string") {
+          return { id: item, label: item };
+        }
+
+        const id =
+          typeof item.id === "string" && item.id.trim().length > 0
+            ? item.id.trim()
+            : undefined;
+        const label =
+          typeof item.label === "string" && item.label.trim().length > 0
+            ? item.label.trim()
+            : id;
+
+        if (!label) return null;
+
+        return { id, label };
+      })
+      // null を除外
+      .filter((b: any): b is { id?: string; label: string } => !!b)
+      // 最大 3 〜 4 個くらいに絞る（ここでは 4 個）
+      .slice(0, 4)
+    : [];
+
+
   // GameDetail 側の analyze-hidden-gem が走ると currentStateSummary / historicalIssuesSummary が入る前提
   const hasFullAIAnalysis =
     !!ai.currentStateSummary || !!ai.historicalIssuesSummary;
@@ -367,7 +401,21 @@ export const SearchResultCard = ({
             </div>
           )}
 
-          {/* AI Verdict & Risk badges */}
+          {audienceBadges.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {audienceBadges.map((badge, i) => (
+                <Badge
+                  key={`${badge.id ?? badge.label}-${i}`}
+                  variant="outline"
+                  className="text-[11px] px-2 py-0.5 rounded-full border-primary/40 text-primary/90 bg-primary/5"
+                >
+                  {badge.label}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+
           {/* AI Verdict & Risk badges */}
           <div className="flex flex-wrap gap-1 mt-1">
             {/* Verdict Badge */}
@@ -412,16 +460,16 @@ export const SearchResultCard = ({
 
         {/* Right: Gem Score + Stats */}
         <div className="flex flex-wrap justify-between items-center gap-3">
-                      <div className="flex flex-col items-center">
-              <div
-                className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
-              >
-                {hasGemScore ? gemScore!.toFixed(1) : "—"}
-              </div>
-              <span className="text-[10px] mt-0.5 text-muted-foreground">
-                {gemScoreLabel}
-              </span>
+          <div className="flex flex-col items-center">
+            <div
+              className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
+            >
+              {hasGemScore ? gemScore!.toFixed(1) : "—"}
             </div>
+            <span className="text-[10px] mt-0.5 text-muted-foreground">
+              {gemScoreLabel}
+            </span>
+          </div>
 
 
 
