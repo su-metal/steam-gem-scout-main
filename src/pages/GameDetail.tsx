@@ -69,6 +69,18 @@ interface AnalysisData {
   // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-hidden-gem から来る）
   currentStateReliability?: "high" | "medium" | "low" | null;
   historicalIssuesReliability?: "high" | "medium" | "low" | null;
+
+  // ★ 追加: プレイヤータイプ（ポジ／ネガ）
+  audiencePositive?: {
+    id: string;
+    label: string;
+    description?: string;
+  }[];
+  audienceNegative?: {
+    id: string;
+    label: string;
+    description?: string;
+  }[];
 }
 
 interface SteamScreenshot {
@@ -98,6 +110,7 @@ interface GameDetailState {
     releaseYear?: number | null;
     headerImage?: string | null;
   };
+  analysis?: AnalysisData;
   analysisData?: AnalysisData;
   // Legacy props for backward compatibility
   gemLabel?: GemLabel;
@@ -158,9 +171,8 @@ export default function GameDetail() {
   useEffect(() => {
     if (!game) return;
 
-    // すでに analysisData / gameData.analysis があれば、それを優先
     const existingAnalysis: AnalysisData | undefined =
-      game.analysisData || game.gameData?.analysis;
+      game.gameData?.analysis || game.analysis || game.analysisData;
 
     // 新仕様（今と昔モデル）の情報がすでに入っているかどうかをチェック
     const hasNewModelAnalysis =
@@ -286,7 +298,8 @@ export default function GameDetail() {
       reviewScoreDesc: game.reviewScoreDesc,
       // fallback 側にも gemLabel / analysis を用意しておく
       gemLabel: game.gemLabel as GameData["gemLabel"],
-      analysis: game.analysisData as GameData["analysis"],
+      analysis: (game.analysis as AnalysisData) ??
+        (game.analysisData as GameData["analysis"]),
       screenshots: game.screenshots as GameData["screenshots"],
       releaseDate: game.releaseDate ?? null,
       releaseYear: game.releaseYear ?? null,
@@ -298,26 +311,39 @@ export default function GameDetail() {
   const baseGame = liveGameData ?? gameData;
 
   // まずは DB / navigation state から来ている既存の解析を組み立てる
-  const baseAnalysisData: AnalysisData =
-    game.analysisData ||
-    gameData.analysis ||
-    {
-      hiddenGemVerdict:
-        game.hiddenGemVerdict as AnalysisData["hiddenGemVerdict"],
-      summary: game.summary,
-      labels: game.labels,
-      pros: game.pros,
-      cons: game.cons,
-      riskScore: game.riskScore,
-      bugRisk: game.bugRisk,
-      refundMentions: game.refundMentions,
-      reviewQualityScore: game.reviewQualityScore,
-      // レガシーからも「今と昔」の情報を引き継げる
-      currentStateSummary: game.currentStateSummary,
-      historicalIssuesSummary: game.historicalIssuesSummary,
-      stabilityTrend: game.stabilityTrend as AnalysisData["stabilityTrend"],
-      hasImprovedSinceLaunch: game.hasImprovedSinceLaunch,
-    };
+  const primaryAnalysis: AnalysisData | undefined =
+    gameData.analysis ?? game.analysis ?? game.analysisData;
+
+  const baseAnalysisData: AnalysisData = {
+    // まずは Supabase から来た新しい analysis をそのまま土台にする
+    ...(primaryAnalysis ?? {}),
+
+    // その上で、足りない項目だけ legacy から埋める
+    hiddenGemVerdict:
+      primaryAnalysis?.hiddenGemVerdict ??
+      (game.hiddenGemVerdict as AnalysisData["hiddenGemVerdict"]),
+    summary: primaryAnalysis?.summary ?? game.summary,
+    labels: primaryAnalysis?.labels ?? game.labels,
+    pros: primaryAnalysis?.pros ?? game.pros,
+    cons: primaryAnalysis?.cons ?? game.cons,
+    riskScore: primaryAnalysis?.riskScore ?? game.riskScore,
+    bugRisk: primaryAnalysis?.bugRisk ?? game.bugRisk,
+    refundMentions:
+      primaryAnalysis?.refundMentions ?? game.refundMentions,
+    reviewQualityScore:
+      primaryAnalysis?.reviewQualityScore ?? game.reviewQualityScore,
+    currentStateSummary:
+      primaryAnalysis?.currentStateSummary ?? game.currentStateSummary,
+    historicalIssuesSummary:
+      primaryAnalysis?.historicalIssuesSummary ??
+      game.historicalIssuesSummary,
+    stabilityTrend:
+      primaryAnalysis?.stabilityTrend ??
+      (game.stabilityTrend as AnalysisData["stabilityTrend"]),
+    hasImprovedSinceLaunch:
+      primaryAnalysis?.hasImprovedSinceLaunch ??
+      game.hasImprovedSinceLaunch,
+  };
 
   // ★ analyze-hidden-gem の結果があれば、それを最優先で使う
   const analysisData: AnalysisData = remoteAnalysis ?? baseAnalysisData;
@@ -328,6 +354,60 @@ export default function GameDetail() {
   const pros = Array.isArray(analysisData.pros) ? analysisData.pros : [];
   const cons = Array.isArray(analysisData.cons) ? analysisData.cons : [];
   const labels = Array.isArray(analysisData.labels) ? analysisData.labels : [];
+
+  // プレイヤータイプ配列を安全に整形するヘルパー
+  const normalizeAudienceSegmentList = (
+    value: AnalysisData["audiencePositive"]
+  ) => {
+    if (!Array.isArray(value)) return [];
+    const result: { id: string; label: string; description?: string }[] = [];
+
+    for (const item of value) {
+      if (!item) continue;
+
+      if (typeof (item as any) === "string") {
+        const label = (item as unknown as string).trim();
+        if (!label) continue;
+        result.push({
+          id: label.toLowerCase().replace(/\s+/g, "_").slice(0, 48),
+          label,
+        });
+        continue;
+      }
+
+      if (typeof item === "object") {
+        const label =
+          typeof item.label === "string" && item.label.trim()
+            ? item.label.trim()
+            : typeof item.id === "string" && item.id.trim()
+              ? item.id.trim()
+              : "";
+        if (!label) continue;
+
+        const id =
+          typeof item.id === "string" && item.id.trim()
+            ? item.id.trim()
+            : label.toLowerCase().replace(/\s+/g, "_").slice(0, 48);
+
+        const description =
+          typeof item.description === "string" && item.description.trim()
+            ? item.description.trim()
+            : undefined;
+
+        result.push({ id, label, ...(description ? { description } : {}) });
+      }
+    }
+
+    return result;
+  };
+
+  const audiencePositive = normalizeAudienceSegmentList(
+    analysisData.audiencePositive
+  );
+  const audienceNegative = normalizeAudienceSegmentList(
+    analysisData.audienceNegative
+  );
+
 
   // Safe values with defaults
   const title = baseGame.title || "Unknown Game";
@@ -918,6 +998,80 @@ export default function GameDetail() {
               </Card>
             )}
           </div>
+        )}
+
+        {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
+        {(audiencePositive.length > 0 || audienceNegative.length > 0) && (
+          <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-xl">
+                プレイヤーとの相性（Who this game is for）
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                {/* 刺さっているプレイヤー像 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <ThumbsUp className="w-4 h-4 text-emerald-400" />
+                    <span className="text-sm font-semibold text-emerald-300">
+                      こんなプレイヤーに刺さっています
+                    </span>
+                  </div>
+                  {audiencePositive.length > 0 ? (
+                    <ul className="space-y-3 text-sm">
+                      {audiencePositive.map((seg) => (
+                        <li key={seg.id} className="space-y-1">
+                          <div className="font-semibold text-slate-50">
+                            {seg.label}
+                          </div>
+                          {seg.description && (
+                            <p className="text-xs text-slate-300/85 leading-relaxed">
+                              {seg.description}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      まだ「どんなプレイヤーに刺さっているか」の傾向は十分に抽出されていません。
+                    </p>
+                  )}
+                </div>
+
+                {/* 刺さりにくいプレイヤー像 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <ThumbsDown className="w-4 h-4 text-rose-400" />
+                    <span className="text-sm font-semibold text-rose-300">
+                      こんなプレイヤーにはやや不向きかもしれません
+                    </span>
+                  </div>
+                  {audienceNegative.length > 0 ? (
+                    <ul className="space-y-3 text-sm">
+                      {audienceNegative.map((seg) => (
+                        <li key={seg.id} className="space-y-1">
+                          <div className="font-semibold text-slate-50">
+                            {seg.label}
+                          </div>
+                          {seg.description && (
+                            <p className="text-xs text-slate-300/85 leading-relaxed">
+                              {seg.description}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      「どんなプレイヤーには向いていないか」の明確な傾向は、まだあまり見えていません。
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
 

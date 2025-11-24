@@ -387,6 +387,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         reviewScoreDesc: g.reviewScoreDesc ?? "",
         headerImage: normalizedHeaderImage,
         analysis: {
+          // まずは AI 解析結果をそのまま全部載せる（既存フィールドを維持）
+          ...(analysisRaw ?? {}),
+
+          // その上で、必要なフィールドだけ「正規化して上書き」する
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
           summary: summaryText,
           labels: normalizeStringArray(analysisRaw.labels),
@@ -412,6 +416,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             analysisRaw.historicalIssuesReliability
           ),
         },
+
         gemLabel: g.gemLabel ?? "",
         isStatisticallyHidden: g.isStatisticallyHidden ?? false,
         releaseDate: g.releaseDate ?? "",

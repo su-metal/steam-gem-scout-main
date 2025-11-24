@@ -1,7 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { Heart, Sparkles, TrendingUp } from "lucide-react";
+import { Heart } from "lucide-react";
 import { useWishlist } from "@/hooks/useWishlist";
 
 // Returns the tags that should be displayed on the card
@@ -17,16 +17,9 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 };
 
 // gemLabel のバリエーション
-type GemLabel =
-  | "Hidden Gem"
-  | "Improved Hidden Gem"
-  | "Emerging Gem"
-  | "Highly rated but not hidden"
-  | "Not a hidden gem";
 
 interface SearchResultCardProps {
   title: string;
-  hiddenGemScore: number;
   summary: string;
   labels: string[];
   positiveRatio: number;
@@ -64,45 +57,40 @@ const getScoreAxisBadgeClass = (key: ScoreAxisKey, value: number): string => {
 
   switch (key) {
     case "hidden":
-      return `${base} ${
-        strong
+      return `${base} ${strong
           ? "border-indigo-500 text-indigo-300 bg-indigo-500/15"
           : mid
-          ? "border-indigo-400 text-indigo-200 bg-indigo-400/10"
-          : "border-border/60 text-muted-foreground bg-muted/40"
-      }`;
+            ? "border-indigo-400 text-indigo-200 bg-indigo-400/10"
+            : "border-border/60 text-muted-foreground bg-muted/40"
+        }`;
     case "quality":
-      return `${base} ${
-        strong
+      return `${base} ${strong
           ? "border-emerald-500 text-emerald-300 bg-emerald-500/15"
           : mid
-          ? "border-emerald-400 text-emerald-200 bg-emerald-400/10"
-          : "border-border/60 text-muted-foreground bg-muted/40"
-      }`;
+            ? "border-emerald-400 text-emerald-200 bg-emerald-400/10"
+            : "border-border/60 text-muted-foreground bg-muted/40"
+        }`;
     case "comeback":
-      return `${base} ${
-        strong
+      return `${base} ${strong
           ? "border-amber-500 text-amber-300 bg-amber-500/15"
           : mid
-          ? "border-amber-400 text-amber-200 bg-amber-400/10"
-          : "border-border/60 text-muted-foreground bg-muted/40"
-      }`;
+            ? "border-amber-400 text-amber-200 bg-amber-400/10"
+            : "border-border/60 text-muted-foreground bg-muted/40"
+        }`;
     case "niche":
-      return `${base} ${
-        strong
+      return `${base} ${strong
           ? "border-rose-500 text-rose-300 bg-rose-500/15"
           : mid
-          ? "border-rose-400 text-rose-200 bg-rose-400/10"
-          : "border-border/60 text-muted-foreground bg-muted/40"
-      }`;
+            ? "border-rose-400 text-rose-200 bg-rose-400/10"
+            : "border-border/60 text-muted-foreground bg-muted/40"
+        }`;
     case "innovation":
-      return `${base} ${
-        strong
+      return `${base} ${strong
           ? "border-sky-500 text-sky-300 bg-sky-500/15"
           : mid
-          ? "border-sky-400 text-sky-200 bg-sky-400/10"
-          : "border-border/60 text-muted-foreground bg-muted/40"
-      }`;
+            ? "border-sky-400 text-sky-200 bg-sky-400/10"
+            : "border-border/60 text-muted-foreground bg-muted/40"
+        }`;
     default:
       return `${base} border-border/60 text-muted-foreground bg-muted/40`;
   }
@@ -111,7 +99,6 @@ const getScoreAxisBadgeClass = (key: ScoreAxisKey, value: number): string => {
 
 export const SearchResultCard = ({
   title,
-  hiddenGemScore,
   summary,
   labels,
   positiveRatio,
@@ -184,7 +171,7 @@ export const SearchResultCard = ({
 
   const ai = analysisData || gameData?.analysis || {};
 
-    // --- 可変スコア軸（hidden / quality / comeback / niche / innovation） ---
+  // --- 可変スコア軸（hidden / quality / comeback / niche / innovation） ---
 
   // gameRankingsCache 由来の scores / scoreHighlights を優先
   const rawScores =
@@ -204,7 +191,7 @@ export const SearchResultCard = ({
         : 0,
     comeback:
       typeof rawScores.comeback === "number" &&
-      Number.isFinite(rawScores.comeback)
+        Number.isFinite(rawScores.comeback)
         ? Math.max(0, Math.min(1, rawScores.comeback))
         : 0,
     niche:
@@ -213,7 +200,7 @@ export const SearchResultCard = ({
         : 0,
     innovation:
       typeof rawScores.innovation === "number" &&
-      Number.isFinite(rawScores.innovation)
+        Number.isFinite(rawScores.innovation)
         ? Math.max(0, Math.min(1, rawScores.innovation))
         : 0,
   };
@@ -297,130 +284,6 @@ export const SearchResultCard = ({
     : [];
 
 
-  // GameDetail 側の analyze-hidden-gem が走ると currentStateSummary / historicalIssuesSummary が入る前提
-  const hasFullAIAnalysis =
-    !!ai.currentStateSummary || !!ai.historicalIssuesSummary;
-
-  const verdict: "Yes" | "No" | "Unknown" =
-    hasFullAIAnalysis ? (ai.hiddenGemVerdict ?? "Unknown") : "Unknown";
-
-  const riskScore: number | null =
-    typeof ai.riskScore === "number" ? ai.riskScore : null;
-
-  const riskLevel =
-    riskScore == null
-      ? null
-      : riskScore <= 3
-        ? "Low"
-        : riskScore <= 6
-          ? "Medium"
-          : "High";
-
-  // --- AI Gem Score (statGemScore 優先) ---
-  const statGemScore: number | null =
-    typeof ai.statGemScore === "number" ? ai.statGemScore : null;
-
-  const reviewQualityScore: number | null =
-    typeof ai.reviewQualityScore === "number"
-      ? ai.reviewQualityScore
-      : null;
-
-
-  // --- gemLabel 抽出 & Hidden Gem 判定補完 ---
-
-  // まずは明示的についているラベルを優先
-  const explicitGemLabel: GemLabel | undefined =
-    (gameData?.gemLabel as GemLabel | undefined) ??
-    (analysisData?.gemLabel as GemLabel | undefined) ??
-    (ai.gemLabel as GemLabel | undefined) ??
-    undefined;
-
-  // AI 判定情報
-  const aiVerdict: "Yes" | "No" | "Unknown" =
-    ai.hiddenGemVerdict ?? "Unknown";
-
-  const isStatisticallyHidden: boolean =
-    ai.isStatisticallyHidden === true || gameData?.isStatisticallyHidden === true;
-
-  const qualifiesAsHiddenGem: boolean =
-    isStatisticallyHidden ||
-    aiVerdict === "Yes" ||
-    (statGemScore !== null && statGemScore >= 8);
-
-  // 最終的にカードで扱う gemLabel
-  const gemLabel: GemLabel | undefined =
-    explicitGemLabel ??
-    (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
-
-  // 表示用の gem バッジ設定
-  let gemBadgeText: string | null = null;
-  let gemBadgeClass =
-    "bg-muted text-muted-foreground border border-border/40";
-  let GemIcon: React.ComponentType<{ className?: string }> | null = null;
-
-
-  if (gemLabel) {
-    switch (gemLabel) {
-      case "Hidden Gem":
-        gemBadgeText = "Hidden Gem";
-        gemBadgeClass =
-          "bg-primary/10 text-primary border border-primary/40";
-        GemIcon = Sparkles;
-        break;
-      case "Improved Hidden Gem":
-        gemBadgeText = "復活した Hidden Gem";
-        gemBadgeClass =
-          "bg-emerald-500/15 text-emerald-300 border border-emerald-500/40";
-        GemIcon = TrendingUp;
-        break;
-      case "Emerging Gem":
-        gemBadgeText = "Emerging Gem";
-        gemBadgeClass =
-          "bg-indigo-500/15 text-indigo-200 border border-indigo-500/40";
-        GemIcon = Sparkles;
-        break;
-      case "Highly rated but not hidden":
-        gemBadgeText = "Highly rated";
-        gemBadgeClass =
-          "bg-slate-500/15 text-slate-200 border border-slate-500/40";
-        GemIcon = null;
-        break;
-      case "Not a hidden gem":
-        gemBadgeText = "Not a hidden gem";
-        gemBadgeClass =
-          "bg-muted text-muted-foreground border border-border/60";
-        GemIcon = null;
-        break;
-      default:
-        break;
-    }
-  }
-
-  // --- AI gem score & verdict line ---
-  const gemScore: number | null =
-    statGemScore !== null
-      ? statGemScore
-      : reviewQualityScore !== null
-        ? reviewQualityScore
-        : Number.isFinite(hiddenGemScore)
-          ? hiddenGemScore
-          : null;
-
-  const hasGemScore = typeof gemScore === "number" && gemScore > 0;
-
-  // 色付き丸バッジ class
-  const gemScoreCircleClass =
-    !hasGemScore
-      ? "bg-muted text-muted-foreground"
-      : gemScore! >= 8
-        ? "bg-emerald-500 text-emerald-50"
-        : gemScore! >= 6
-          ? "bg-yellow-500 text-yellow-900"
-          : "bg-red-500 text-red-50";
-
-  const gemScoreLabel = hasFullAIAnalysis ? "AI Gem Score" : "Gem Score";
-
-
   // メタスコア表示用（"Metacritic: 94" から 94 を抜き出す）
   const reviewScoreDesc: string | undefined =
     gameData?.reviewScoreDesc ?? analysisData?.reviewScoreDesc ?? undefined;
@@ -492,16 +355,6 @@ export const SearchResultCard = ({
           <div className="flex items-center gap-2 flex-wrap mt-1">
             <h3 className="font-semibold text-lg line-clamp-1">{title}</h3>
 
-            {/* gemLabel バッジ */}
-            {gemBadgeText && (
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${gemBadgeClass}`}
-              >
-                {GemIcon && <GemIcon className="w-3 h-3" />}
-                <span className="leading-none">{gemBadgeText}</span>
-              </span>
-            )}
-
             {/* メタスコアバッジ */}
             {reviewScoreDesc && (
               <div
@@ -516,6 +369,7 @@ export const SearchResultCard = ({
               </div>
             )}
           </div>
+
 
           <p className="text-sm text-muted-foreground line-clamp-3">
             {safeSummary}
@@ -549,7 +403,7 @@ export const SearchResultCard = ({
             </div>
           )}
 
-                    {/* 可変スコア軸（このゲームの強み 〜 Hidden / Quality / Comeback / Niche / Innovation） */}
+          {/* 可変スコア軸（このゲームの強み 〜 Hidden / Quality / Comeback / Niche / Innovation） */}
           {highlightedScoreBadges.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-1">
               {highlightedScoreBadges.map((axis) => (
@@ -566,66 +420,10 @@ export const SearchResultCard = ({
             </div>
           )}
 
-
-
-          {/* AI Verdict & Risk badges */}
-          <div className="flex flex-wrap gap-1 mt-1">
-            {/* Verdict Badge */}
-            {hasFullAIAnalysis ? (
-              <Badge
-                variant="outline"
-                className={`text-[10px] px-2 py-0.5 rounded-full ${verdict === "Yes"
-                  ? "border-green-500 text-green-400"
-                  : verdict === "Unknown"
-                    ? "border-yellow-500 text-yellow-400"
-                    : "border-red-500 text-red-400"
-                  }`}
-              >
-                AI: {verdict}
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground"
-              >
-                AI: Pending
-              </Badge>
-            )}
-
-            {/* Risk Level Badge: AI解析済みのときだけ表示 */}
-            {hasFullAIAnalysis && riskLevel && (
-              <Badge
-                variant="outline"
-                className={`text-[10px] px-2 py-0.5 rounded-full ${riskLevel === "Low"
-                  ? "border-green-500 text-green-400"
-                  : riskLevel === "Medium"
-                    ? "border-yellow-500 text-yellow-400"
-                    : "border-red-500 text-red-400"
-                  }`}
-              >
-                Risk: {riskLevel}
-              </Badge>
-            )}
-          </div>
-
         </div>
 
-        {/* Right: Gem Score + Stats */}
-        <div className="flex flex-wrap justify-between items-center gap-3">
-          <div className="flex flex-col items-center">
-            <div
-              className={`rounded-full w-12 h-12 flex items-center justify-center text-lg font-bold shadow-lg border ${gemScoreCircleClass}`}
-            >
-              {hasGemScore ? gemScore!.toFixed(1) : "—"}
-            </div>
-            <span className="text-[10px] mt-0.5 text-muted-foreground">
-              {gemScoreLabel}
-            </span>
-          </div>
-
-
-
-
+              {/* Stats only (Positive, Reviews, Price, Playtime) */}
+        <div className="flex justify-end">
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <div className="text-muted-foreground">Positive</div>
@@ -649,6 +447,7 @@ export const SearchResultCard = ({
             </div>
           </div>
         </div>
+
       </div>
     </Card>
   );

@@ -143,7 +143,6 @@ export default function Wishlist() {
                 key={game.appId}
                 appId={game.appId}
                 title={game.title}
-                hiddenGemScore={game.analysis.reviewQualityScore}
                 summary={game.analysis.summary}
                 labels={game.analysis.labels}
                 positiveRatio={game.positiveRatio}

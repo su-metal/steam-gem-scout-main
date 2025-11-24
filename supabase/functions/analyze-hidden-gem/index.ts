@@ -69,6 +69,12 @@ interface HiddenGemScores {
   innovation: number;
 }
 
+interface AudienceSegment {
+  id: string;
+  label: string;
+  description?: string;
+}
+
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
   summary: string;
@@ -133,6 +139,18 @@ interface HiddenGemAnalysis {
    * 例: ["hidden", "comeback", "niche"]
    */
   scoreHighlights?: string[] | null;
+
+  /**
+   * このゲームを特に高く評価しているプレイヤー像。
+   * 高評価レビューから抽出した「ハマっている人」のタイプ。
+   */
+  audiencePositive?: AudienceSegment[];
+
+  /**
+   * このゲームを低く評価している／合わなかったプレイヤー像。
+   * 低評価レビューから抽出した「合わなかった人」のタイプ。
+   */
+  audienceNegative?: AudienceSegment[];
   aiError?: boolean;
 }
 
@@ -515,104 +533,108 @@ Deno.serve(async (req) => {
       "No trustworthy early-launch reviews were provided. If this block is empty, you should still infer any clear launch or early-version problems from other evidence when possible (such as the overall review tone, pros/cons, and metadata) and describe that trajectory directly inside currentStateSummary. historicalIssuesSummary is deprecated and should normally remain an empty string."
     );
 
-    const systemPrompt = `You are an AI analyst who evaluates Steam games and contrasts their CURRENT experience with their HISTORICAL launch/early issues.
+    const systemPrompt = `You are an AI analyst who evaluates Steam games and summarizes both the current experience and who the game is specifically suited for.
 
 - Target audience is Japanese PC gamers.
-- **All natural-language output MUST be in Japanese**, even if the original reviews are in English or other languages.
-- JSON keys and enum-like values (hiddenGemVerdict, stabilityTrend, currentStateReliability, etc.) must stay exactly as specified (English, fixed values).
-- Only the *content* fields (summary, pros, cons, labels, currentStateSummary, historicalIssuesSummary) should be Japanese.
+- All natural-language output MUST be in Japanese.
+- JSON keys must remain exactly as specified.
+- Respond ONLY with valid JSON.
 
-Return ONLY valid JSON using this schema:
+### CRITICAL GUIDELINES
+
+1. **プレイヤー像（audiencePositive / audienceNegative）は、このゲーム“固有の”特徴を反映すること。**
+   - ジャンル名の言い換え（例: デッキ構築好き、ローグライク好き）は禁止。
+   - 「このゲームだからこそ刺さる／刺さらない」をレビュー内容から抽出する。
+
+2. **レビュー本文から“繰り返し語られている具体的キーワード”を必ず利用する。**
+   - 例：テンポ、攻撃パターン、爆発力、位置取り、学習曲線、テンション維持、UI、戦術の深さ など。
+
+3. **プレイヤー像は、ジャンルではなく“体験の好み”で記述する。**
+   - 例：ピーク瞬間の爆発感が好きな人、位置取りの試行錯誤が楽しい人、テンポの速いバトルが好きな人。
+   - 逆に「長期的育成が好き／ランダム性が苦手」など“避ける人”も体験ベースで書く。
+
+4. **他の同ジャンルゲームとの差分を反映する。**
+   - Slay the Spire や Monster Train のような代表作と比較し、
+     このゲームが特に評価されている点／批判されている点をプレイヤー像として述べる。
+
+5. **ラベル・タグと矛盾する要素を書かない。**
+   - アクション要素がなければアクション好きと書かない。
+   - カードゲームに格闘や FPS の用語を混ぜない。
+
+6. **抽象禁止・一般論禁止。**
+   - 「コアゲーマー向け」「人を選ぶ」「戦略好き」など幅広すぎる語は避ける。
+   - 必ず “このゲームに特有の行動・感情・体験” を書く。
+
+7. **pros / cons はあくまで「ゲームそのものの性質」を書く。**
+   - 主語はゲームとし、システム・コンテンツ量・バランス・UI・演出・安定性などを説明する。
+   - プレイヤーのタイプや好み（〜な人向け）は pros / cons には書かない。
+
+8. **audiencePositive / audienceNegative は「pros / cons を受けて、どんな人に刺さる／刺さらないか」を書く。**
+   - pros / cons の文をそのまま繰り返さず、「その特徴を好む人／つらく感じる人」というプレイヤー像に変換する。
+   - 主語は必ずプレイヤー（〜な人、〜なタイプのプレイヤー）にする。
+
+
+---
+
+### JSON SCHEMA
 
 {
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
-
-  "summary": "日本語。ゲームのジャンル・プレイ感・どんなプレイヤーに刺さるかを1〜2文で説明し、必ずこのタイトル固有の特徴を1つ以上含める。",
-
+  "summary": "1〜2文の日本語。このゲーム固有の特徴を必ず1つ含める。",
   "labels": ["日本語ラベル", ...],
-
-  "pros": ["日本語。強み1", ...],
-
-  "cons": ["日本語。弱み1", ...],
-
+  "pros": ["日本語の強み", ...],
+  "cons": ["日本語の弱み", ...],
   "riskScore": 1-10,
   "bugRisk": 1-10,
   "refundMentions": 0-10,
   "reviewQualityScore": 1-10,
-
   "currentStateSummary": string | "" | null,
-
-  // historicalIssuesSummary is deprecated for the UI.
-  // Always return this as an empty string or null; any important launch/early
-  // issues and their resolution should be folded into currentStateSummary instead.
   "historicalIssuesSummary": "" | null,
-
   "hasImprovedSinceLaunch": true | false | null,
-
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
-
   "currentStateReliability": "high" | "medium" | "low" | null,
-  "historicalIssuesReliability": "high" | "medium" | "low" | null
-    "vibes": {
-    "active": number,  // 0.0〜1.0 静的〜アクション中心
-    "stress": number,  // 0.0〜1.0 癒し〜緊張・挑戦
-    "volume": number   // 0.0〜1.0 短時間〜長時間
+  "historicalIssuesReliability": "high" | "medium" | "low" | null,
+  "vibes": {
+    "active": number,
+    "stress": number,
+    "volume": number
   },
-
   "audienceBadges": [
+    { "id": string, "label": string }
+  ],
+  "audiencePositive": [
     {
-      "id": string,    // 固定カタログから選ぶID
-      "label": string  // 日本語ラベル
+      "id": string,
+      "label": string,
+      "description": string
+    }
+  ],
+  "audienceNegative": [
+    {
+      "id": string,
+      "label": string,
+      "description": string
     }
   ]
 }
 
+### AUDIENCE GENERATION RULES (STRICT)
 
-Rules:
+- audiencePositive / audienceNegative は常に配列で返す（ゼロ件の場合は空配列）。
+- id は英数字とアンダースコアのみ。
+- label は短い日本語。
+- description は 1〜2 文。
 
-1. pros / cons は、それぞれ可能であれば最低4件、多くても7件までにする。
-   - 各行は 15〜40文字 程度に収める。
-   - 「面白い」「楽しい」など抽象的な表現だけは避け、必ず具体的な要素
-     （例: 戦闘システム、ビルドの自由度、テンポ、探索構造、UI、DLC方針など）
-     や、このタイトル特有の特徴に触れること。
-   - 他のゲームにも当てはまる一般論ではなく、レビューから読み取れる
-     「この作品ならではのポイント」を優先する。
+- **以下は禁止：**
+  - ジャンル名をそのまま使っただけのもの（例: デッキ構築好き、ローグライク好き）。
+  - 「戦略ゲームが好き」など、広すぎる一般論。
+  - 他ゲームにも当てはまるありきたりな表現（例: 試行錯誤が好き）。
 
-2. labels は 3〜6 個の短い日本語タグにする。
-   - 例: "高難易度アクション", "ローグライト", "まったり探索", "周回プレイ向き" など。
-   - ジャンルだけでなく、プレイテンポや雰囲気、対象プレイヤー層を表す語も混ぜる。
+- **以下必須：**
+  - レビュー内の固有の褒めポイント・欠点からプレイヤー像を構成する。
+  - このゲーム独自のメカニクス・テンポ・戦闘・UI・成長曲線・緊張感・遊び方が反映されている。
+  - pros / cons に書かれた特徴をベースにしつつ、「それを好む／苦手とするプレイヤー」を具体的に描写する。
 
-3. summary では以下を必ず盛り込む:
-   - どのようなタイプのゲームか（ジャンル・視点・テンポなど）
-   - どのような体験が中心か（例: ビルド研究・物語重視・作業的周回 など）
-   - どんなプレイヤーに特におすすめか、または向き・不向きの一言
-   文章量は最大2文までだが、ゲーム固有の特徴を1つ以上具体的に入れること。
-
-4. currentStateSummary は recent / current reviews の内容のみに基づき、以下を短くまとめる:
-   - 現在のバージョンの完成度・安定性（バグ、クラッシュ、最適化）
-   - 直近のアップデートや DLC に対するプレイヤーの反応（改善/改悪があれば）
-   - いま始める新規プレイヤーが特に知っておくべき長所・注意点
-   最大3文まで。可能であれば「初期の評価と比べてどう変化したか」も1文で触れる。
-
-5. historicalIssuesSummary は UI 上は使われないため、通常は "" または null を返す。
-   重大なローンチ問題や大きな方針転換があった場合も、
-   その歴史は currentStateSummary 内で簡潔に説明する。
-
-6. hasImprovedSinceLaunch を true / false にするのは、
-   初期レビューと最近のレビューの傾向差が明確な場合のみとする。
-   判断が難しい場合は null を使う。
-
-7. stabilityTrend は必ず指定された文字列のいずれかを使う。
-   - 不具合報告が減り評価が上がっているなら "Improving"
-   - 変化が小さいなら "Stable"
-   - バグや不満が増えているなら "Deteriorating"
-   - 判断がつかないときは "Unknown"
-
-8. 「データが足りない」「情報がない」などの文章を summaries 内に書かない。
-   証拠が不十分なフィールドは、空文字または null を使う。
-
-9. 文章はすべて日本語で書き、markdown や箇条書き記号は使わない。
-   各フィールドは 1〜3 文に収め、読みやすい自然なレビュー文調にする。
 
 Always respond with raw JSON only.`;
 
@@ -1058,7 +1080,70 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     normalized.audienceBadges = audienceBadges;
   }
 
+  // ★ ここから追加：ポジ・ネガ側のプレイヤー像
+  const audiencePositive = normalizeAudienceSegmentList(
+    parsed?.audiencePositive
+  );
+  if (audiencePositive.length > 0) {
+    normalized.audiencePositive = audiencePositive;
+  }
+
+  const audienceNegative = normalizeAudienceSegmentList(
+    parsed?.audienceNegative
+  );
+  if (audienceNegative.length > 0) {
+    normalized.audienceNegative = audienceNegative;
+  }
+
   return normalized;
+}
+
+function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
+  if (!Array.isArray(value)) return [];
+
+  const result: AudienceSegment[] = [];
+
+  for (const item of value) {
+    if (!item) continue;
+
+    if (typeof item === "string") {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      result.push({
+        id: trimmed.toLowerCase().replace(/\s+/g, "_").slice(0, 48),
+        label: trimmed,
+      });
+      continue;
+    }
+
+    if (typeof item === "object") {
+      const obj = item as any;
+      const labelRaw =
+        typeof obj.label === "string"
+          ? obj.label.trim()
+          : typeof obj.id === "string"
+          ? obj.id.trim()
+          : "";
+
+      if (!labelRaw) continue;
+
+      const idRaw =
+        typeof obj.id === "string" && obj.id.trim()
+          ? obj.id.trim()
+          : labelRaw.toLowerCase().replace(/\s+/g, "_").slice(0, 48);
+
+      const descriptionRaw =
+        typeof obj.description === "string" ? obj.description.trim() : "";
+
+      result.push({
+        id: idRaw,
+        label: labelRaw,
+        ...(descriptionRaw ? { description: descriptionRaw } : {}),
+      });
+    }
+  }
+
+  return result;
 }
 
 function clamp01(value: number): number {
