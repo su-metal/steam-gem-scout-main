@@ -571,7 +571,7 @@ export default function GameDetail() {
       {/* === Main Content ========================================= */}
       <div className="max-w-5xl mx-auto px-4 pb-10 pt-6 md:px-8 md:pb-16 md:pt-10 space-y-6 -mt-6 md:-mt-10">
         {/* Header Navigation */}
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4 mt-5">
           <Button
             variant="outline"
             onClick={handleBack}

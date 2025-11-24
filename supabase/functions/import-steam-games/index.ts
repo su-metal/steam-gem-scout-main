@@ -152,6 +152,21 @@ Deno.serve(async (req) => {
       const { inserted, skippedExisting, results } =
         await upsertGamesToRankingsCache(appIds);
 
+      if (runAiAnalysisAfterImport && appIds.length > 0) {
+        try {
+          console.log(
+            "[import-steam-games] Running AI analysis for",
+            appIds
+          );
+          await runAiAnalysisForAppIds(appIds);
+        } catch (e) {
+          console.error(
+            "[import-steam-games] runAiAnalysisForAppIds failed",
+            e
+          );
+        }
+      }
+
       const response: ImportSteamGamesResult & {
         results: { appId: number; status: "ok" | "error"; message?: string }[];
       } = {
@@ -649,21 +664,22 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const currentData = existing.data as any;
 
-      // 既に analysis がある場合は再解析しない
       if (currentData.analysis) {
+        console.log(
+          "runAiAnalysisForAppIds: analysis already present, skipping",
+          appId
+        );
         continue;
       }
 
-      // ★ analyze-hidden-gem に渡すペイロード
-      //   → ここでは RankingGame 相当の data 全体を渡す。
       const payload = currentData;
 
       const res = await fetch(ANALYZE_HIDDEN_GEM_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // プロジェクト設定に応じて不要なら削ってOK
           apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         },
         body: JSON.stringify(payload),
       });
@@ -678,19 +694,23 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
       }
 
       const aiResult = await res.json();
+      if (!aiResult || typeof aiResult !== "object") {
+        console.error(
+          "runAiAnalysisForAppIds: invalid AI response for appId",
+          appId,
+          aiResult
+        );
+        continue;
+      }
 
-      // analyze-hidden-gem 側のレスポンス仕様に合わせてマージ
-      const updatedData = {
+      const updatedData: Record<string, any> = {
         ...currentData,
-        analysis:
-          aiResult.analysis !== undefined
-            ? aiResult.analysis
-            : currentData.analysis ?? null,
-        gemLabel:
-          aiResult.gemLabel !== undefined
-            ? aiResult.gemLabel
-            : currentData.gemLabel ?? "",
+        analysis: aiResult,
       };
+
+      if (typeof (aiResult as any).gemLabel === "string") {
+        updatedData.gemLabel = (aiResult as any).gemLabel;
+      }
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
@@ -703,7 +723,13 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
           appId,
           updateError
         );
+        continue;
       }
+
+      console.log(
+        "runAiAnalysisForAppIds: stored AI analysis for appId",
+        appId
+      );
     } catch (e) {
       console.error(
         "runAiAnalysisForAppIds: unexpected error for appId",

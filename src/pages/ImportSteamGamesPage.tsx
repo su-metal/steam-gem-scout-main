@@ -47,8 +47,6 @@ export function ImportSteamGamesPage() {
 
   // ★ ここから AI 解析オプション用の state を追加
   const [runAiAfterImport, setRunAiAfterImport] = useState(false);
-  const [maxAiCount, setMaxAiCount] = useState("20");
-  const [isAiRunning, setIsAiRunning] = useState(false);
 
   // 新規：条件インポート
   const [recentDays, setRecentDays] = useState("90");
@@ -285,57 +283,6 @@ export function ImportSteamGamesPage() {
     }
   };
 
-  const runAiAnalysisForCandidates = async () => {
-    if (previewCandidates.length === 0) {
-      toast({
-        title: "No candidates to analyze",
-        description:
-          'まず "Preview candidates" を実行して候補を表示してください。',
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const max = Number(maxAiCount);
-    const limit =
-      Number.isFinite(max) && max > 0
-        ? Math.min(max, previewCandidates.length)
-        : previewCandidates.length;
-
-    const targets = previewCandidates.slice(0, limit);
-
-    setIsAiRunning(true);
-    try {
-      for (let i = 0; i < targets.length; i++) {
-        const appId = targets[i].appId;
-
-        const { data, error } = await supabase.functions.invoke(
-          "search-hidden-gems",
-          {
-            body: { appId },
-          }
-        );
-
-        console.log("search-hidden-gems result", { appId, data, error });
-
-        if (error) {
-          console.error("AI analysis error for appId", appId, error);
-          // 全体は止めず、次へ
-        }
-      }
-
-      toast({
-        title: "AI analysis completed",
-        description: `Ran analysis for ${targets.length} games via search-hidden-gems.`,
-      });
-    } finally {
-      setIsAiRunning(false);
-    }
-  };
-
-
-
-
   const handleRunFilterImport = async () => {
     if (previewCandidates.length === 0) {
       toast({
@@ -360,6 +307,7 @@ export function ImportSteamGamesPage() {
     const payload = {
       ...buildFilterPayload(false),
       selectedAppIds,
+      runAiAnalysisAfterImport: runAiAfterImport,
     };
 
     setIsFilterImporting(true);
@@ -399,10 +347,6 @@ export function ImportSteamGamesPage() {
         title: "Filtered import completed",
         description: `Imported ${data.inserted} games (total candidates: ${data.totalCandidates}).`,
       });
-      // ★ ここで AI 解析オプションを実行
-      if (runAiAfterImport) {
-        await runAiAnalysisForCandidates();
-      }
     } finally {
       setIsFilterImporting(false);
     }
@@ -593,20 +537,8 @@ export function ImportSteamGamesPage() {
               <span>After import, run AI analysis for candidates</span>
             </label>
 
-            <div className="flex items-center gap-2 text-xs">
-              <span>Max AI analyses</span>
-              <Input
-                type="number"
-                className="w-20 h-7 text-xs"
-                value={maxAiCount}
-                onChange={(e) => setMaxAiCount(e.target.value)}
-                disabled={!runAiAfterImport}
-              />
-              {isAiRunning && (
-                <span className="text-muted-foreground">
-                  Running AI...
-                </span>
-              )}
+            <div className="text-xs text-muted-foreground">
+              Backend will run AI analysis for the imported games when checked.
             </div>
           </div>
 
@@ -615,7 +547,7 @@ export function ImportSteamGamesPage() {
             <Button
               variant="outline"
               onClick={handlePreviewFilterImport}
-              disabled={isPreviewLoading || isFilterImporting || isAiRunning}
+              disabled={isPreviewLoading || isFilterImporting}
             >
               {isPreviewLoading ? "Previewing..." : "Preview candidates"}
             </Button>
@@ -624,7 +556,6 @@ export function ImportSteamGamesPage() {
               disabled={
                 isPreviewLoading ||
                 isFilterImporting ||
-                isAiRunning ||
                 previewCandidates.length === 0 ||
                 selectedAppIds.length === 0
               }
