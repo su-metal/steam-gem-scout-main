@@ -14,6 +14,25 @@ type Analysis = {
   bugRisk: number;
   refundMentions: number;
   reviewQualityScore: number;
+
+  // ★ 追加: 気分スライダー用の3軸ベクトル
+  vibes?: {
+    active: number; // 0.0〜1.0 静的〜アクション寄り
+    stress: number; // 0.0〜1.0 癒し〜緊張・挑戦
+    volume: number; // 0.0〜1.0 短時間〜長時間
+  } | null;
+
+  // ★ 追加: 「どんな人に刺さるか」バッジ
+  audienceBadges?:
+    | {
+        id: string; // 例: "factory_builder", "automation_fan"
+        label: string; // 例: "工場建設好き"
+      }[]
+    | null;
+
+  // 既存のフィールド（currentStateSummary など）は
+  // Analysis 型ではなく HiddenGemAnalysis 側に定義しているので、
+  // import-steam-games 側はここまででOK。
 };
 
 type RankingGame = {
@@ -343,7 +362,6 @@ type FilterParams = {
   releaseFrom?: string; // 例: "2017-01"
   releaseTo?: string; // 例: "2017-12"
 };
-
 
 function buildRankingGameFromSteamRow(row: any): RankingGame {
   const appId: number = row.app_id;
@@ -788,6 +806,16 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const currentData = existing.data as any;
 
+      // ★ AI には reviews も渡すが、DB に保存するときは捨てたいのでここで分離
+      const {
+        reviews,
+        earlyReviews,
+        recentReviews,
+        earlyWindowStats,
+        recentWindowStats,
+        ...baseDataForStorage
+      } = currentData || {};
+
       const payload = currentData;
 
       const res = await fetch(ANALYZE_HIDDEN_GEM_URL, {
@@ -820,7 +848,8 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
       }
 
       const updatedData: Record<string, any> = {
-        ...currentData,
+        // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
+        ...baseDataForStorage,
         analysis: aiResult,
       };
 

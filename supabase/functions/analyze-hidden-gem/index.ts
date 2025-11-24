@@ -71,18 +71,34 @@ interface HiddenGemAnalysis {
   bugRisk: number;
   refundMentions: number;
   reviewQualityScore: number;
-
-  /**
-   * 現在のバージョン（最近のレビューから推測した状態）の要約。
-   * 例: 「最近のパッチ以降、安定性が大きく改善され高評価が増えている」
-   */
+  /** 現在の状態の要約（日本語）。なければ null でもよい。 */
   currentStateSummary?: string | null;
 
-  /**
-   * 過去のバージョンで多かった問題の要約。
-   * 例: 「ローンチ直後はクラッシュや最適化不足への不満が多かった」
-   */
+  /** 過去の問題・初期評価の要約（日本語）。なければ null でもよい。 */
   historicalIssuesSummary?: string | null;
+
+  /**
+   * 「現在の状態」に関する分析の信頼度。
+   * early/recent どちらにも十分なレビューがある場合は "high"。
+   */
+  currentStateReliability?: "high" | "medium" | "low" | null;
+
+  /**
+   * 「過去の問題」に関する分析の信頼度。
+   */
+  historicalIssuesReliability?: "high" | "medium" | "low" | null;
+
+  /**
+   * 気分スライダー用の3軸ベクトル。
+   * 0.0〜1.0 の数値を期待するが、欠損時は null / 未定義も許可。
+   */
+  vibes?: VibeVector | null;
+
+  /**
+   * 「どんな人に刺さるか」を表すバッジ一覧。
+   * id は固定カタログのキー、label は日本語表示用。
+   */
+  audienceBadges?: AudienceBadge[] | null;
 
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
@@ -98,18 +114,21 @@ interface HiddenGemAnalysis {
    */
   stabilityTrend?: "Improving" | "Stable" | "Deteriorating" | "Unknown" | null;
 
-  /**
-   * 「現在の状態」に関する分析の信頼度。
-   * early/recent どちらにも十分なレビューがある場合は "high"。
-   */
-  currentStateReliability?: "high" | "medium" | "low" | null;
-
-  /**
-   * 「過去の問題」に関する分析の信頼度。
-   */
-  historicalIssuesReliability?: "high" | "medium" | "low" | null;
-
   aiError?: boolean;
+}
+
+interface VibeVector {
+  /** 0.0〜1.0 静的〜アクション寄り */
+  active: number;
+  /** 0.0〜1.0 癒し〜緊張・挑戦 */
+  stress: number;
+  /** 0.0〜1.0 短時間〜長時間 */
+  volume: number;
+}
+
+interface AudienceBadge {
+  id: string; // 例: "story_focus"
+  label: string; // 日本語ラベル。UIにそのまま出す想定
 }
 
 // Limits to keep review input safely within token constraints
@@ -162,6 +181,15 @@ function buildFallbackAnalysis(
     stabilityTrend: "Unknown",
     currentStateReliability: currentRel,
     historicalIssuesReliability: historicalRel,
+
+    // ★ 追加
+    vibes: {
+      active: 0.5,
+      stress: 0.5,
+      volume: 0.5,
+    },
+    audienceBadges: [],
+
     aiError: true,
   };
 }
@@ -470,30 +498,30 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `You are an AI analyst who evaluates Steam games and contrasts their CURRENT experience with their HISTORICAL launch/early issues.
 
+- Target audience is Japanese PC gamers.
+- **All natural-language output MUST be in Japanese**, even if the original reviews are in English or other languages.
+- JSON keys and enum-like values (hiddenGemVerdict, stabilityTrend, currentStateReliability, etc.) must stay exactly as specified (English, fixed values).
+- Only the *content* fields (summary, pros, cons, labels, currentStateSummary, historicalIssuesSummary) should be Japanese.
 
 Return ONLY valid JSON using this schema:
 
 {
-
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
 
-  "summary": "One or two concise sentences explaining the overall evaluation",
+  "summary": "日本語。ゲームのジャンル・プレイ感・どんなプレイヤーに刺さるかを1〜2文で説明し、必ずこのタイトル固有の特徴を1つ以上含める。",
 
-  "labels": ["short label", ...],
+  "labels": ["日本語ラベル", ...],
 
-  "pros": ["strength 1", ...],
+  "pros": ["日本語。強み1", ...],
 
-  "cons": ["weakness 1", ...],
+  "cons": ["日本語。弱み1", ...],
 
   "riskScore": 1-10,
-
   "bugRisk": 1-10,
-
   "refundMentions": 0-10,
-
   "reviewQualityScore": 1-10,
 
-    "currentStateSummary": string | "" | null,
+  "currentStateSummary": string | "" | null,
 
   // historicalIssuesSummary is deprecated for the UI.
   // Always return this as an empty string or null; any important launch/early
@@ -505,26 +533,67 @@ Return ONLY valid JSON using this schema:
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
 
   "currentStateReliability": "high" | "medium" | "low" | null,
-
   "historicalIssuesReliability": "high" | "medium" | "low" | null
+    "vibes": {
+    "active": number,  // 0.0〜1.0 静的〜アクション中心
+    "stress": number,  // 0.0〜1.0 癒し〜緊張・挑戦
+    "volume": number   // 0.0〜1.0 短時間〜長時間
+  },
 
+  "audienceBadges": [
+    {
+      "id": string,    // 固定カタログから選ぶID
+      "label": string  // 日本語ラベル
+    }
+  ]
 }
+
 
 Rules:
 
-1. Base currentStateSummary ONLY on the recent/current review block. Mention stability, polish, standout positives, or new issues that affect players now.
+1. pros / cons は、それぞれ可能であれば最低4件、多くても7件までにする。
+   - 各行は 15〜40文字 程度に収める。
+   - 「面白い」「楽しい」など抽象的な表現だけは避け、必ず具体的な要素
+     （例: 戦闘システム、ビルドの自由度、テンポ、探索構造、UI、DLC方針など）
+     や、このタイトル特有の特徴に触れること。
+   - 他のゲームにも当てはまる一般論ではなく、レビューから読み取れる
+     「この作品ならではのポイント」を優先する。
 
-2. historicalIssuesSummary is deprecated for the UI. In normal cases you should return this as an empty string and not place any important information there. When the data shows clear launch/early issues and later improvement, describe that history directly in currentStateSummary instead of using historicalIssuesSummary.
+2. labels は 3〜6 個の短い日本語タグにする。
+   - 例: "高難易度アクション", "ローグライト", "まったり探索", "周回プレイ向き" など。
+   - ジャンルだけでなく、プレイテンポや雰囲気、対象プレイヤー層を表す語も混ぜる。
 
-3. Set hasImprovedSinceLaunch to true/false only when the difference between historical and recent reviews is obvious. Otherwise, use null.
+3. summary では以下を必ず盛り込む:
+   - どのようなタイプのゲームか（ジャンル・視点・テンポなど）
+   - どのような体験が中心か（例: ビルド研究・物語重視・作業的周回 など）
+   - どんなプレイヤーに特におすすめか、または向き・不向きの一言
+   文章量は最大2文までだが、ゲーム固有の特徴を1つ以上具体的に入れること。
 
-4. stabilityTrend must be one of the allowed strings above. Use "Unknown" when the direction is unclear.
+4. currentStateSummary は recent / current reviews の内容のみに基づき、以下を短くまとめる:
+   - 現在のバージョンの完成度・安定性（バグ、クラッシュ、最適化）
+   - 直近のアップデートや DLC に対するプレイヤーの反応（改善/改悪があれば）
+   - いま始める新規プレイヤーが特に知っておくべき長所・注意点
+   最大3文まで。可能であれば「初期の評価と比べてどう変化したか」も1文で触れる。
 
-5. Never fabricate statements like "not enough data" inside the summaries. Prefer empty strings or null values when evidence is missing.
+5. historicalIssuesSummary は UI 上は使われないため、通常は "" または null を返す。
+   重大なローンチ問題や大きな方針転換があった場合も、
+   その歴史は currentStateSummary 内で簡潔に説明する。
 
-6. Keep sentences concise (under 3 sentences per field) and avoid markdown or bullet formatting.
+6. hasImprovedSinceLaunch を true / false にするのは、
+   初期レビューと最近のレビューの傾向差が明確な場合のみとする。
+   判断が難しい場合は null を使う。
 
+7. stabilityTrend は必ず指定された文字列のいずれかを使う。
+   - 不具合報告が減り評価が上がっているなら "Improving"
+   - 変化が小さいなら "Stable"
+   - バグや不満が増えているなら "Deteriorating"
+   - 判断がつかないときは "Unknown"
 
+8. 「データが足りない」「情報がない」などの文章を summaries 内に書かない。
+   証拠が不十分なフィールドは、空文字または null を使う。
+
+9. 文章はすべて日本語で書き、markdown や箇条書き記号は使わない。
+   各フィールドは 1〜3 文に収め、読みやすい自然なレビュー文調にする。
 
 Always respond with raw JSON only.`;
 
@@ -606,7 +675,6 @@ IMPORTANT:
             }
           );
         }
-
 
         // For all other error codes (including 500), return a safe fallback
         console.log("Returning fallback analysis due to AI Gateway error");
@@ -803,6 +871,77 @@ function normalizeStringArray(input?: any[]): string[] {
   return normalized;
 }
 
+function normalizeVibes(raw: any): VibeVector | null {
+  if (!raw || typeof raw !== "object") return null;
+
+  const toNumber = (v: any): number | null => {
+    if (typeof v === "number" && !Number.isNaN(v)) return v;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const clamp01 = (v: number): number => {
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+  };
+
+  const active = toNumber((raw as any).active);
+  const stress = toNumber((raw as any).stress);
+  const volume = toNumber((raw as any).volume);
+
+  // 3つとも無い場合は「そもそも未設定」
+  if (active === null && stress === null && volume === null) {
+    return null;
+  }
+
+  return {
+    active: active !== null ? clamp01(active) : 0.5,
+    stress: stress !== null ? clamp01(stress) : 0.5,
+    volume: volume !== null ? clamp01(volume) : 0.5,
+  };
+}
+
+function normalizeAudienceBadges(raw: any): AudienceBadge[] {
+  if (!Array.isArray(raw)) return [];
+  const badges: AudienceBadge[] = [];
+  const seen = new Set<string>();
+
+  for (const item of raw) {
+    if (!item) continue;
+
+    let id: string | null = null;
+    let label: string | null = null;
+
+    if (typeof item === "string") {
+      id = item.trim();
+      label = id;
+    } else if (typeof item === "object") {
+      if (typeof (item as any).id === "string") {
+        id = (item as any).id.trim();
+      }
+      if (typeof (item as any).label === "string") {
+        label = (item as any).label.trim();
+      }
+    }
+
+    if (!id && !label) continue;
+    const finalId = id ?? label!;
+    if (!finalId || seen.has(finalId)) continue;
+    seen.add(finalId);
+
+    badges.push({
+      id: finalId,
+      label: label ?? finalId,
+    });
+
+    // 念のため最大5個まで
+    if (badges.length >= 5) break;
+  }
+
+  return badges;
+}
+
 function clampInt(value: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return min;
@@ -883,6 +1022,25 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
 
   if (typeof parsed?.aiError === "boolean") {
     normalized.aiError = parsed.aiError;
+  }
+
+  if (typeof parsed?.statGemScore === "number") {
+    (normalized as any).statGemScore = parsed.statGemScore;
+  }
+
+  if (typeof parsed?.aiError === "boolean") {
+    normalized.aiError = parsed.aiError;
+  }
+
+  // ★ 追加: vibes / audienceBadges を正規化して取り込む
+  const vibes = normalizeVibes(parsed?.vibes);
+  if (vibes) {
+    normalized.vibes = vibes;
+  }
+
+  const audienceBadges = normalizeAudienceBadges(parsed?.audienceBadges);
+  if (audienceBadges.length > 0) {
+    normalized.audienceBadges = audienceBadges;
   }
 
   return normalized;

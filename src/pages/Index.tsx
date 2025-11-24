@@ -91,31 +91,28 @@ const getDisplayTags = (
 // 気分スライダーの定義
 const VIBE_SLIDERS = [
   {
-    id: "story",
-    mainLabel: "Story ＋ Character",
+    id: "Story Weight",
+    mainLabel: "Passive ←→ Active",
     leftLabel: "ライト",
-    rightLabel: "ヘビー",
-  },
-  {
-    id: "healing",
-    mainLabel: "癒し ←→ 緊張感",
-    leftLabel: "癒し",
-    rightLabel: "緊張感",
-  },
-  {
-    id: "sessionLength",
-    mainLabel: "Shoet ←→ Long",
-    leftLabel: "サクっと",
-    rightLabel: "がっつり",
+    rightLabel: "重厚",
   },
 
   {
-    id: "pace",
-    mainLabel: "Chill ←→ Cozy",
-    leftLabel: "刺激的",
-    rightLabel: "まったり",
+    id: "Volume",
+    mainLabel: "Shoet ←→ Long",
+    leftLabel: "サクっと",
+    rightLabel: "ヘビー",
   },
+  {
+    id: "Stress Level",
+    mainLabel: "Cozy ←→ High-Challenge",
+    leftLabel: "リラックス",
+    rightLabel: "緊張・挑戦",
+  },
+
 ] as const;
+
+const VIBE_MAX = 4; // 0〜4 の 5 段階
 
 type VibeId = (typeof VIBE_SLIDERS)[number]["id"];
 type VibeState = Record<VibeId, number>;
@@ -127,12 +124,11 @@ const Index: React.FC = () => {
   const [vibes, setVibes] = useState<VibeState>(() => {
     const initial: Partial<VibeState> = {};
     VIBE_SLIDERS.forEach((v) => {
-      // 0〜100 の真ん中あたりからスタート
-      initial[v.id] = 50;
+      // 0〜4 の真ん中（2）からスタート
+      initial[v.id] = Math.round(VIBE_MAX / 2);
     });
     return initial as VibeState;
   });
-
 
   // 「今週の隠れた名作 TOP 6」に表示するゲーム
   const [weeklyGems, setWeeklyGems] = useState<RankingGame[]>([]);
@@ -395,10 +391,12 @@ const Index: React.FC = () => {
                           {slider.leftLabel} ← → {slider.rightLabel}
                         </span>
                       </div>
+
                       <input
                         type="range"
                         min={0}
-                        max={100}
+                        max={VIBE_MAX}
+                        step={1}
                         value={vibes[slider.id]}
                         onChange={(e) =>
                           setVibes((prev) => ({
@@ -407,7 +405,29 @@ const Index: React.FC = () => {
                           }))
                         }
                       />
+
+                      {/* ドット表示（数値は出さない） */}
+                      <div className="slider-dots" aria-hidden="true">
+                        {Array.from({ length: VIBE_MAX + 1 }).map((_, idx) => (
+                          <button
+                            type="button"
+                            key={idx}
+                            className={
+                              "slider-dot" +
+                              (idx === vibes[slider.id] ? " is-active" : "") +
+                              (idx < vibes[slider.id] ? " is-filled" : "")
+                            }
+                            onClick={() =>
+                              setVibes((prev) => ({
+                                ...prev,
+                                [slider.id]: idx,
+                              }))
+                            }
+                          />
+                        ))}
+                      </div>
                     </div>
+
                   ))}
                 </div>
               </div>
