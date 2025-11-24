@@ -70,6 +70,7 @@ type ImportSteamGamesRequest =
       runAiAnalysisAfterImport?: boolean;
     };
 
+
 type ImportCandidate = {
   appId: number;
   title: string;
@@ -92,11 +93,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
 
-// ★ 追加: analyze-hidden-gem エンドポイント
-const ANALYZE_HIDDEN_GEM_URL = `${SUPABASE_URL.replace(
-  /\/+$/,
-  ""
-)}/functions/v1/analyze-hidden-gem`;
+// ★ 追加: analyze-hidden-gem のエンドポイント
+const ANALYZE_HIDDEN_GEM_URL =
+  `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/analyze-hidden-gem`;
 
 // Supabase サーバーサイドクライアント
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -663,14 +662,6 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
       }
 
       const currentData = existing.data as any;
-
-      if (currentData.analysis) {
-        console.log(
-          "runAiAnalysisForAppIds: analysis already present, skipping",
-          appId
-        );
-        continue;
-      }
 
       const payload = currentData;
 
