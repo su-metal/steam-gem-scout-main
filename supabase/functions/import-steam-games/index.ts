@@ -34,6 +34,18 @@ type RankingGame = {
   headerImage?: string;
   // ★ 互換用：旧キー
   header_image?: string;
+  // ★ ここから追加: AI 解析用に保存しておくレビュー情報
+  reviews?: string[];
+  earlyReviews?: string[];
+  recentReviews?: string[];
+  earlyWindowStats?: {
+    reviewCount: number;
+    positiveRatio: number;
+  };
+  recentWindowStats?: {
+    reviewCount: number;
+    positiveRatio: number;
+  };
   analysis: Analysis | null;
   gemLabel: string;
   isStatisticallyHidden: boolean;
@@ -70,7 +82,6 @@ type ImportSteamGamesRequest =
       runAiAnalysisAfterImport?: boolean;
     };
 
-
 type ImportCandidate = {
   appId: number;
   title: string;
@@ -94,8 +105,10 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
 
 // ★ 追加: analyze-hidden-gem のエンドポイント
-const ANALYZE_HIDDEN_GEM_URL =
-  `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/analyze-hidden-gem`;
+const ANALYZE_HIDDEN_GEM_URL = `${SUPABASE_URL.replace(
+  /\/+$/,
+  ""
+)}/functions/v1/analyze-hidden-gem`;
 
 // Supabase サーバーサイドクライアント
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -103,6 +116,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const STEAM_APP_DETAILS_URL = "https://store.steampowered.com/api/appdetails";
+// ★ 追加: レビュー取得用エンドポイント
+const STEAM_APP_REVIEWS_URL = "https://store.steampowered.com/appreviews";
 
 Deno.serve(async (req) => {
   // CORS 対応（フロントから直接呼ぶ想定）
@@ -153,10 +168,7 @@ Deno.serve(async (req) => {
 
       if (runAiAnalysisAfterImport && appIds.length > 0) {
         try {
-          console.log(
-            "[import-steam-games] Running AI analysis for",
-            appIds
-          );
+          console.log("[import-steam-games] Running AI analysis for", appIds);
           await runAiAnalysisForAppIds(appIds);
         } catch (e) {
           console.error(
@@ -332,20 +344,6 @@ type FilterParams = {
   releaseTo?: string; // 例: "2017-12"
 };
 
-// 日付文字列から「年」だけ安全に抜き出すヘルパー
-function parseReleaseYear(dateStr?: string | null): number {
-  if (!dateStr) return 0;
-
-  // まずは Date としてパースしてみる
-  const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) {
-    return d.getUTCFullYear();
-  }
-
-  // うまくパースできない形式の場合は、文字列中の4桁の数字を拾う
-  const m = String(dateStr).match(/(\d{4})/);
-  return m ? Number(m[1]) : 0;
-}
 
 function buildRankingGameFromSteamRow(row: any): RankingGame {
   const appId: number = row.app_id;
@@ -443,6 +441,112 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   return rankingGame;
 }
 
+// 日付文字列から「年」だけ安全に抜き出すヘルパー
+function parseReleaseYear(dateStr?: string | null): number {
+  if (!dateStr) return 0;
+
+  // まずは Date としてパースしてみる
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.getUTCFullYear();
+  }
+
+  // うまくパースできない形式の場合は、文字列中の4桁の数字を拾う
+  const m = String(dateStr).match(/(\d{4})/);
+  return m ? Number(m[1]) : 0;
+}
+
+// ★ ここから追加: Steam レビューを取得して AI 用に整形するヘルパー
+type SteamReview = {
+  review: string;
+  voted_up: boolean;
+  timestamp_created: number;
+};
+
+type SteamReviewResponse = {
+  success: number;
+  query_summary?: {
+    total_reviews?: number;
+    total_positive?: number;
+    total_negative?: number;
+  };
+  reviews?: SteamReview[];
+};
+
+type ReviewBundle = {
+  reviews: string[];
+  earlyReviews: string[];
+  recentReviews: string[];
+  earlyWindowStats: { reviewCount: number; positiveRatio: number };
+  recentWindowStats: { reviewCount: number; positiveRatio: number };
+};
+
+async function fetchSteamReviewsForAnalysis(
+  appId: number,
+  maxReviews = 80
+): Promise<ReviewBundle | null> {
+  const params = new URLSearchParams({
+    json: "1",
+    language: "all", // 必要なら "japanese" などに変更
+    filter: "all",
+    num_per_page: String(maxReviews),
+    purchase_type: "all",
+  });
+
+  const url = `${STEAM_APP_REVIEWS_URL}/${appId}?${params.toString()}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.warn(
+      "[import-steam-games] failed to fetch reviews from Steam",
+      appId,
+      res.status
+    );
+    return null;
+  }
+
+  const json = (await res.json()) as SteamReviewResponse;
+  const rawReviews = Array.isArray(json.reviews) ? json.reviews : [];
+  if (!rawReviews.length) {
+    return null;
+  }
+
+  // 古い順に並べ替え
+  const sorted = [...rawReviews].sort(
+    (a, b) => a.timestamp_created - b.timestamp_created
+  );
+
+  const texts = sorted.map((r) => r.review).filter((t) => !!t);
+
+  const earlySize = Math.min(30, sorted.length);
+  const recentSize = Math.min(30, sorted.length);
+
+  const earlySlice = sorted.slice(0, earlySize);
+  const recentSlice = sorted.slice(sorted.length - recentSize);
+
+  const earlyReviews = earlySlice.map((r) => r.review).filter(Boolean);
+  const recentReviews = recentSlice.map((r) => r.review).filter(Boolean);
+
+  const calcWindowStats = (items: SteamReview[]) => {
+    if (!items.length) {
+      return { reviewCount: 0, positiveRatio: 0 };
+    }
+    const positives = items.filter((r) => r.voted_up).length;
+    return {
+      reviewCount: items.length,
+      positiveRatio: Math.round((positives / items.length) * 100),
+    };
+  };
+
+  return {
+    reviews: texts,
+    earlyReviews,
+    recentReviews,
+    earlyWindowStats: calcWindowStats(earlySlice),
+    recentWindowStats: calcWindowStats(recentSlice),
+  };
+}
+
 async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
   inserted: number;
   skippedExisting: number;
@@ -514,7 +618,28 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       }
 
       // steam_games の行から RankingGame を組み立てる
-      const rankingGame = buildRankingGameFromSteamRow(row);
+      let rankingGame = buildRankingGameFromSteamRow(row);
+
+      // ★ 追加: Steam からレビューを取得して RankingGame に埋め込む
+      try {
+        const reviewBundle = await fetchSteamReviewsForAnalysis(appId);
+        if (reviewBundle) {
+          rankingGame = {
+            ...rankingGame,
+            reviews: reviewBundle.reviews,
+            earlyReviews: reviewBundle.earlyReviews,
+            recentReviews: reviewBundle.recentReviews,
+            earlyWindowStats: reviewBundle.earlyWindowStats,
+            recentWindowStats: reviewBundle.recentWindowStats,
+          };
+        }
+      } catch (e) {
+        console.warn(
+          "[import-steam-games] failed to fetch reviews for appId",
+          appId,
+          e
+        );
+      }
 
       const appIdStr = String(appId);
 
