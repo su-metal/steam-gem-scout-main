@@ -64,7 +64,7 @@ interface RankingGameData {
     thumbnail: string;
     full: string;
   }[];
-  analysis: GameAnalysis;
+  analysis: GameAnalysis | null;
   gemLabel:
     | "Hidden Gem"
     | "Improved Hidden Gem"
@@ -1015,7 +1015,10 @@ async function fetchAndBuildRankingGame(
     steamUrl: `https://store.steampowered.com/app/${appId}`,
     reviewScoreDesc,
     screenshots,
-    analysis: enrichedAnalysis,
+    // ★ ここがポイント：
+    //   DB にはダミー analysis を保存せず、null で渡す。
+    //   実際の AI 解析結果は import-steam-games → analyze-hidden-gem 側で埋める。
+    analysis: null,
     gemLabel,
     isStatisticallyHidden,
     releaseDate: releaseDateStr,

@@ -226,6 +226,11 @@ export function ImportSteamGamesPage() {
       .filter(Boolean);
     if (tags.length > 0) payload.tags = tags;
 
+    // ★追加：本番インポート時かつチェックONのときだけフラグを付ける
+    if (!dryRun && runAiAfterImport) {
+      payload.runAiAnalysisAfterImport = true;
+    }
+
     return payload;
   };
 
