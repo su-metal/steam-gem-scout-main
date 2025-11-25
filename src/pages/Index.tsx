@@ -89,27 +89,49 @@ const getDisplayTags = (
 };
 
 // 気分スライダーの定義
-const VIBE_SLIDERS = [
+
+// メイン3本（既存）
+const BASE_VIBE_SLIDERS = [
   {
     id: "Story Weight",
-    mainLabel: "Passive ←→ Active",
-    leftLabel: "ライト",
-    rightLabel: "重厚",
+    mainLabel: "Passive ←→ Action",
+    leftLabel: "ゆったり",
+    rightLabel: "アクション",
   },
-
   {
     id: "Volume",
-    mainLabel: "Shoet ←→ Long",
-    leftLabel: "サクっと",
-    rightLabel: "ヘビー",
+    mainLabel: "Short ←→ Long",
+    leftLabel: "短め",
+    rightLabel: "長め",
   },
   {
     id: "Stress Level",
-    mainLabel: "Cozy ←→ High-Challenge",
+    mainLabel: "Cozy ←→ Intense",
     leftLabel: "リラックス",
     rightLabel: "緊張・挑戦",
   },
+] as const;
 
+// Advanced Filters 用の2本
+const ADVANCED_VIBE_SLIDERS = [
+  {
+    id: "Story Density",
+    mainLabel: "Story-Light ←→ Story-Heavy",
+    leftLabel: "プレイ重視",
+    rightLabel: "ナラティブ",
+  },
+  {
+    id: "Brain Load",
+    mainLabel: "Brain-Light ←→ Brain-Heavy",
+    leftLabel: "直感プレイ",
+    rightLabel: "頭を使う",
+  },
+] as const;
+
+// 型用に全部まとめた配列
+const VIBE_SLIDERS = [
+  ...BASE_VIBE_SLIDERS,
+  ...ADVANCED_VIBE_SLIDERS,
 ] as const;
 
 const VIBE_MAX = 4; // 0〜4 の 5 段階
@@ -129,6 +151,10 @@ const Index: React.FC = () => {
     });
     return initial as VibeState;
   });
+
+  // Advanced Filters の開閉
+  const [showAdvancedVibes, setShowAdvancedVibes] = useState(false);
+
 
   // 「今週の隠れた名作 TOP 6」に表示するゲーム
   const [weeklyGems, setWeeklyGems] = useState<RankingGame[]>([]);
@@ -358,82 +384,151 @@ const Index: React.FC = () => {
         {/* 今日の気分スライダー（index(1).html 準拠） */}
         <section id="vibe" className="vibe-section">
           <div className="container">
-            <p className="section-label">vibe match</p>
-            <h2 className="section-title">
-              スライダーを動かすだけで、今の“気分”に合う一本を。
-            </h2>
+            <div className="section-label">VIBE MATCH</div>
+            <h2 className="section-title">スライダーを動かすだけで、今の“気分”に合う一本を。</h2>
             <p className="section-sub">
-              難しい条件入力は不要です。
-              <br />
-              ストーリー重視か、アクション重視か、今日はまったりしたいのか——
+              難しい条件入力は不要です。ストーリー重視か、アクション重視か、今日はまったりしたいのか──
               3つのVibeスライダーを動かすだけで、AIが数千本のレビューから候補を絞り込みます。
             </p>
 
             <div className="vibe-card">
-              <div className="vibe-row">
-                {/* 左側：説明テキスト */}
-                <div className="vibe-explain">
-                  <strong>今日の気分を3つだけ調整</strong>
-                  <br />
-                  <br />
-                  右に寄せれば寄せるほど、その要素が強いゲームを優先。
-                  <br />
-                  実際のアプリでは、この入力をもとにAIがレビュー本文の「温度感」「ワード傾向」を解析してスコアリングします。
+              <div className="vibe-layout">
+                {/* 左カラム：説明＋メイン3本 */}
+                <div className="vibe-main">
+                  <div className="vibe-explain">
+                    <strong>今日の気分を3つだけ調整</strong>
+                    <br />
+                    <br />
+                    右に寄せれば寄せるほど、その要素が強いゲームを優先。
+                    実際のアプリでは、この入力をもとにAIがレビュー本文の「温度感」「ワード傾向」を解析してスコアリングします。
+                  </div>
+
+                  <div className="vibe-sliders">
+                    {BASE_VIBE_SLIDERS.map((slider) => (
+                      <div className="slider-item" key={slider.id}>
+                        <div className="slider-label-row">
+                          <span className="key">{slider.mainLabel}</span>
+                          <span>
+                            {slider.leftLabel} ←→ {slider.rightLabel}
+                          </span>
+                        </div>
+
+                        <input
+                          type="range"
+                          min={0}
+                          max={VIBE_MAX}
+                          step={1}
+                          value={vibes[slider.id]}
+                          onChange={(e) =>
+                            setVibes((prev) => ({
+                              ...prev,
+                              [slider.id]: Number(e.target.value),
+                            }))
+                          }
+                        />
+
+                        <div className="slider-dots" aria-hidden="true">
+                          {Array.from({ length: VIBE_MAX + 1 }).map((_, idx) => (
+                            <button
+                              type="button"
+                              key={idx}
+                              className={
+                                "slider-dot" +
+                                (idx === vibes[slider.id] ? " is-active" : "") +
+                                (idx < vibes[slider.id] ? " is-filled" : "")
+                              }
+                              onClick={() =>
+                                setVibes((prev) => ({
+                                  ...prev,
+                                  [slider.id]: idx,
+                                }))
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="vibe-advanced-toggle"
+                    onClick={() => setShowAdvancedVibes((v) => !v)}
+                  >
+                    {showAdvancedVibes
+                      ? "詳細な気分調整を閉じる"
+                      : "詳細な気分調整（＋2軸）"}
+                  </button>
                 </div>
 
-                {/* 右側：スライダー群 */}
-                <div className="vibe-sliders">
-                  {VIBE_SLIDERS.map((slider) => (
-                    <div className="slider-item" key={slider.id}>
-                      <div className="slider-label-row">
-                        <span className="key">{slider.mainLabel}</span>
-                        <span>
-                          {slider.leftLabel} ← → {slider.rightLabel}
-                        </span>
-                      </div>
+                {/* 右カラム：Advanced Filters の小さなサブカード */}
+                <div
+                  className={
+                    "vibe-advanced-panel" + (showAdvancedVibes ? " is-open" : "")
+                  }
+                >
+                  <div className="vibe-advanced-header">
+                    <span className="chip">Advanced Filters</span>
+                    <p>
+                      ストーリーの濃さと「頭をどれくらい使うか」を細かく調整できます。
+                      デフォルトのままでも十分ですが、こだわり派の方はこちらで微調整してください。
+                    </p>
+                  </div>
 
-                      <input
-                        type="range"
-                        min={0}
-                        max={VIBE_MAX}
-                        step={1}
-                        value={vibes[slider.id]}
-                        onChange={(e) =>
-                          setVibes((prev) => ({
-                            ...prev,
-                            [slider.id]: Number(e.target.value),
-                          }))
-                        }
-                      />
+                  {showAdvancedVibes && (
+                    <div className="vibe-advanced-sliders">
+                      {ADVANCED_VIBE_SLIDERS.map((slider) => (
+                        <div className="slider-item" key={slider.id}>
+                          <div className="slider-label-row">
+                            <span className="key">{slider.mainLabel}</span>
+                            <span>
+                              {slider.leftLabel} ←→ {slider.rightLabel}
+                            </span>
+                          </div>
 
-                      {/* ドット表示（数値は出さない） */}
-                      <div className="slider-dots" aria-hidden="true">
-                        {Array.from({ length: VIBE_MAX + 1 }).map((_, idx) => (
-                          <button
-                            type="button"
-                            key={idx}
-                            className={
-                              "slider-dot" +
-                              (idx === vibes[slider.id] ? " is-active" : "") +
-                              (idx < vibes[slider.id] ? " is-filled" : "")
-                            }
-                            onClick={() =>
+                          <input
+                            type="range"
+                            min={0}
+                            max={VIBE_MAX}
+                            step={1}
+                            value={vibes[slider.id]}
+                            onChange={(e) =>
                               setVibes((prev) => ({
                                 ...prev,
-                                [slider.id]: idx,
+                                [slider.id]: Number(e.target.value),
                               }))
                             }
                           />
-                        ))}
-                      </div>
-                    </div>
 
-                  ))}
+                          <div className="slider-dots" aria-hidden="true">
+                            {Array.from({ length: VIBE_MAX + 1 }).map((_, idx) => (
+                              <button
+                                type="button"
+                                key={idx}
+                                className={
+                                  "slider-dot" +
+                                  (idx === vibes[slider.id] ? " is-active" : "") +
+                                  (idx < vibes[slider.id] ? " is-filled" : "")
+                                }
+                                onClick={() =>
+                                  setVibes((prev) => ({
+                                    ...prev,
+                                    [slider.id]: idx,
+                                  }))
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </section>
+
 
 
         {/* Gems list */}

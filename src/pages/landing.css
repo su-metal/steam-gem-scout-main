@@ -240,19 +240,110 @@ header {
   padding: 26px 0;
 }
 
+/* 新レイアウト：左右2カラムでメインとAdvancedを分離 */
+.vibe-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.vibe-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vibe-explain {
+  font-size: 12px;
+  color: #a7afce;
+}
+
+/* 右カラムの小カード */
+.vibe-advanced-panel {
+  border-radius: 14px;
+  background: rgba(5, 7, 23, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0.0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.vibe-advanced-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.vibe-advanced-header {
+  font-size: 11px;
+  color: #a7afce;
+}
+
+.vibe-advanced-header .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: rgba(5, 5, 9, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  margin-bottom: 6px;
+}
+
+/* Advanced内のスライダーは縦並び */
+.vibe-advanced-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Advanced トグルボタン */
+.vibe-advanced-toggle {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(5, 5, 9, 0.7);
+  color: #d1d6f5;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease,
+    border-color 0.15s ease;
+}
+
+.vibe-advanced-toggle:hover {
+  background: rgba(15, 15, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+
 .vibe-card {
   background: rgba(7, 11, 34, 0.96);
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.6);
   padding: 16px 16px 18px;
+  max-width: 980px; /* 追加: カード幅を絞る */
+  margin: 0 auto; /* 追加: センター配置 */
 }
 
 .vibe-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr);
-  gap: 14px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr);
+  gap: 18px;
+  align-items: flex-start; /* 上揃えにして右側のスライダーが窮屈に見えないようにする */
 }
 
 .vibe-explain {
@@ -326,10 +417,84 @@ header {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.vibe-advanced {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr);
+  gap: 18px;
+}
+
+.vibe-advanced-header {
+  font-size: 11px;
+  color: #a7afce;
+  max-width: 320px; /* 追加: 文章幅を制限して読みやすく */
+}
+
+.vibe-advanced-header .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: rgba(5, 5, 9, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  margin-bottom: 6px;
+}
+
+/* Advanced用スライダーの縦並び */
+.vibe-advanced-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Advanced トグルボタン */
+.vibe-advanced-toggle {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(5, 5, 9, 0.7);
+  color: #d1d6f5;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease,
+    border-color 0.15s ease;
+}
+
+.vibe-advanced-toggle:hover {
+  background: rgba(15, 15, 30, 0.95);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+/* モバイル時は Advanced も1カラムに */
+@media (max-width: 900px) {
+  .vibe-advanced {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* スマホ時：左右2カラムを1カラムに落とす */
 @media (max-width: 900px) {
   .vibe-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .vibe-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .vibe-advanced-panel {
+    margin-top: 10px;
   }
 }
 
@@ -1034,8 +1199,6 @@ footer {
     align-items: flex-start;
   }
 }
-
-
 
 @media (max-width: 520px) {
   .hero-title {
