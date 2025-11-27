@@ -2,6 +2,10 @@
 
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
+import {
+  MoodSliderId,
+  MoodVector,
+} from "../_shared/mood.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -32,6 +36,8 @@ interface SearchBody {
   positiveRatioWeight?: number;
   reviewCountWeight?: number;
   recencyWeight?: number;
+  userMood?: Partial<Record<MoodSliderId, number>>;
+  vibes?: Partial<Record<MoodSliderId, number>>;
 }
 
 const toNumber = (val: any, fallback = 0): number => {
@@ -142,6 +148,77 @@ const normalizeScores = (value: unknown): Record<ScoreKey, number> => {
   }
 
   return base;
+};
+
+// ---- Mood Matching Helpers ------------------------------------
+
+const VIBE_MAX = 4;
+type UserMoodPrefs = MoodVector;
+
+const slidersToUserMood = (
+  sliders: Partial<Record<MoodSliderId, number>>
+): UserMoodPrefs => {
+  const to01 = (v: number | undefined) => {
+    const raw = Number.isFinite(v) ? (v as number) : 2;
+    return Math.min(1, Math.max(0, raw / VIBE_MAX));
+  };
+
+  return {
+    operation: to01(sliders.operation),
+    session: to01(sliders.session),
+    tension: to01(sliders.tension),
+    story: to01(sliders.story),
+    brain: to01(sliders.brain),
+  };
+};
+
+const MOOD_WEIGHTS: Record<MoodSliderId, number> = {
+  operation: 1.1,
+  session: 0.9,
+  tension: 1.1,
+  story: 0.8,
+  brain: 0.9,
+};
+
+const distanceToScore = (d: number, maxD: number): number => {
+  const norm = Math.min(1, d / maxD);
+  const s = 1 - norm;
+  return Math.pow(s, 1.25);
+};
+
+const calcMoodMatchScore = (
+  game: MoodVector | null | undefined,
+  user: UserMoodPrefs | null | undefined
+): number => {
+  if (!game || !user) return 0;
+
+  let sum = 0;
+  let weightSum = 0;
+
+  (Object.keys(MOOD_WEIGHTS) as MoodSliderId[]).forEach((key) => {
+    const w = MOOD_WEIGHTS[key];
+    const g = (game as any)?.[key];
+    const u = (user as any)?.[key];
+    if (typeof g !== "number" || typeof u !== "number") return;
+    const diff = g - u;
+    sum += w * diff * diff;
+    weightSum += w;
+  });
+
+  if (weightSum === 0) return 0;
+
+  const maxD = Math.sqrt(weightSum);
+  const d = Math.sqrt(sum);
+  return distanceToScore(d, maxD);
+};
+
+const calcFinalRankingScore = (baseScore: number, moodScore: number): number => {
+  const BASE_WEIGHT = 0.6;
+  const MOOD_WEIGHT = 0.4;
+
+  if (moodScore <= 0) return baseScore;
+
+  return BASE_WEIGHT * baseScore + MOOD_WEIGHT * moodScore;
 };
 
 // ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
@@ -259,6 +336,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const reviewCountWeight = body.reviewCountWeight ?? 20;
     const recencyWeight = body.recencyWeight ?? 10;
+
+    let userMood: UserMoodPrefs | null = null;
+    const moodSource =
+      (body.userMood as Partial<Record<MoodSliderId, number>> | undefined) ??
+      (body.vibes as Partial<Record<MoodSliderId, number>> | undefined);
+    if (moodSource && typeof moodSource === "object") {
+      userMood = slidersToUserMood(moodSource);
+    }
 
     console.log("search-games request body:", body);
 
@@ -426,6 +511,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         // ★ 新フィールド群
         scores,
         scoreHighlights,
+        moodScores:
+          (g.mood_scores as MoodVector | undefined | null) ??
+          (g.moodScores as MoodVector | undefined | null) ??
+          null,
       };
     });
 
@@ -598,11 +687,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
       case "custom": {
         const isCustom = sort === "custom";
         sorted = [...filtered]
-          .map((g) => ({
-            ...g,
-            compositeScore: computeScore(g, isCustom),
-          }))
-          .sort((a, b) => (b.compositeScore ?? 0) - (a.compositeScore ?? 0));
+          .map((g) => {
+            const compositeScore = computeScore(g, isCustom) ?? 0;
+            const moodScore = userMood
+              ? calcMoodMatchScore(g.moodScores, userMood)
+              : 0;
+
+            const normalizedBase = isCustom
+              ? compositeScore
+              : compositeScore / 10;
+            const finalNormalized = userMood
+              ? calcFinalRankingScore(normalizedBase, moodScore)
+              : normalizedBase;
+            const finalComposite = isCustom
+              ? finalNormalized
+              : finalNormalized * 10;
+
+            return {
+              ...g,
+              compositeScore,
+              moodScore,
+              finalScore: finalNormalized,
+              finalCompositeScore: finalComposite,
+            };
+          })
+          .sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
         break;
       }
       default:

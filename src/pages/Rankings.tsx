@@ -6,7 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
 import { Home, X } from "lucide-react";
 
 interface HiddenGemAnalysis {
@@ -48,6 +47,8 @@ interface RankingGame {
   analysis: HiddenGemAnalysis;
   gemLabel: GemLabel;
   isStatisticallyHidden: boolean;
+  moodScore?: number;
+  finalScore?: number;
   // Edge Function 側で compositeScore を付ける予定（ここでは未使用）
   // compositeScore?: number;
   screenshots?: {
@@ -80,27 +81,47 @@ const PERIOD_OPTIONS = [
 ];
 
 const SORT_OPTIONS = [
-  { label: "Gem Score", value: "recommended" },
+  { label: "Mood Match", value: "recommended" },
   { label: "Positive %", value: "positive-ratio" },
   { label: "Reviews", value: "most-reviews" },
   { label: "Recentness", value: "newest" },
-  { label: "Custom Gem Score", value: "custom" }, // ★ 追加
 ];
 
-// Gem Score の重み（0〜100のライト版スライダー）
-type GemWeights = {
-  aiScore: number;
-  positiveRatio: number;
-  reviewCount: number;
-  recency: number;
+type MoodSliderId =
+  | "operation"
+  | "session"
+  | "tension"
+  | "story"
+  | "brain";
+
+const DEFAULT_MOOD: Record<MoodSliderId, number> = {
+  operation: 2,
+  session: 2,
+  tension: 2,
+  story: 2,
+  brain: 2,
 };
 
-const DEFAULT_WEIGHTS: GemWeights = {
-  aiScore: 40,
-  positiveRatio: 30,
-  reviewCount: 20,
-  recency: 10,
-};
+const MOOD_STORAGE_KEY = "rankings_userMood" as const;
+const MOOD_SLIDER_MAX = 4;
+
+const MOOD_SLIDERS: Array<{
+  id: MoodSliderId;
+  label: string;
+  left: string;
+  right: string;
+}> = [
+  { id: "operation", label: "操作量", left: "Passive", right: "Active" },
+  { id: "session", label: "セッション長", left: "Short", right: "Long" },
+  { id: "tension", label: "テンション", left: "Cozy", right: "Intense" },
+  {
+    id: "story",
+    label: "ストーリー密度",
+    left: "Story-Light",
+    right: "Story-Heavy",
+  },
+  { id: "brain", label: "思考負荷", left: "Simple", right: "Deep" },
+];
 
 // 価格スライダーの最大値（ここを変えれば一括で反映）
 const MAX_PRICE_SLIDER = 60;
@@ -113,7 +134,6 @@ const STORAGE_KEYS = {
   maxPrice: "rankings_maxPrice",
   minReviews: "rankings_minReviews",
   minPlaytime: "rankings_minPlaytime",
-  gemWeights: "rankings_gemWeights",
 } as const;
 
 export default function Rankings() {
@@ -161,22 +181,24 @@ export default function Rankings() {
     return Number.isFinite(n) ? n : 0;
   });
 
-  // Custom Gem Score 用の重み
-  const [gemWeights, setGemWeights] = useState<GemWeights>(() => {
-    if (typeof window === "undefined") return DEFAULT_WEIGHTS;
-    const raw = window.localStorage.getItem(STORAGE_KEYS.gemWeights);
-    if (!raw) return DEFAULT_WEIGHTS;
+  const [userMood, setUserMood] = useState<Record<MoodSliderId, number>>(() => {
+    if (typeof window === "undefined") {
+      return { ...DEFAULT_MOOD };
+    }
+    const stored = window.localStorage.getItem(MOOD_STORAGE_KEY);
+    if (!stored) return { ...DEFAULT_MOOD };
     try {
-      const parsed = JSON.parse(raw);
-      // 片方のプロパティだけ保存されていた場合でも壊れないようにマージ
-      return {
-        ...DEFAULT_WEIGHTS,
-        ...parsed,
-      };
+      const parsed = JSON.parse(stored) as Partial<Record<MoodSliderId, number>>;
+      return { ...DEFAULT_MOOD, ...parsed };
     } catch {
-      return DEFAULT_WEIGHTS;
+      return { ...DEFAULT_MOOD };
     }
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(MOOD_STORAGE_KEY, JSON.stringify(userMood));
+  }, [userMood]);
 
   // フィルターが変わるたびに localStorage に保存
   useEffect(() => {
@@ -188,10 +210,6 @@ export default function Rankings() {
     window.localStorage.setItem(STORAGE_KEYS.maxPrice, String(maxPrice));
     window.localStorage.setItem(STORAGE_KEYS.minReviews, String(minReviews));
     window.localStorage.setItem(STORAGE_KEYS.minPlaytime, String(minPlaytime));
-    window.localStorage.setItem(
-      STORAGE_KEYS.gemWeights,
-      JSON.stringify(gemWeights),
-    );
   }, [
     selectedGenre,
     selectedPeriod,
@@ -199,13 +217,10 @@ export default function Rankings() {
     maxPrice,
     minReviews,
     minPlaytime,
-    gemWeights,
   ]);
 
 
   const { toast } = useToast();
-
-  const isCustomSort = selectedSort === "custom";
 
   // 初回だけ全件ロード（サーバー側は価格フィルタなし）
   useEffect(() => {
@@ -222,7 +237,7 @@ export default function Rankings() {
         sort: selectedSort,
         minReviews,
         minPlaytime,
-        gemWeights: selectedSort === "custom" ? gemWeights : undefined,
+        userMood,
       });
 
       const { data, error } = await supabase.functions.invoke("search-games", {
@@ -232,14 +247,7 @@ export default function Rankings() {
           sort: selectedSort,
           minReviews,
           minPlaytime,
-          ...(selectedSort === "custom"
-            ? {
-              aiWeight: gemWeights.aiScore,
-              positiveRatioWeight: gemWeights.positiveRatio,
-              reviewCountWeight: gemWeights.reviewCount,
-              recencyWeight: gemWeights.recency,
-            }
-            : {}),
+          userMood,
         },
       });
 
@@ -291,7 +299,7 @@ export default function Rankings() {
     setMaxPrice(MAX_PRICE_SLIDER);
     setMinReviews(0);
     setMinPlaytime(0);
-    setGemWeights(DEFAULT_WEIGHTS); // ★ 重みもリセット
+    setUserMood({ ...DEFAULT_MOOD });
   };
 
   const removeFilter = (filterType: string) => {
@@ -498,119 +506,36 @@ export default function Rankings() {
                   </div>
                 </div>
 
-                {/* Gem Score Weights (Custom Sort) */}
-                <div className="border-t border-white/10 pt-4 mt-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-                      Gem Score Weights
-                    </h3>
-                    <button
-                      type="button"
-                      className="text-[11px] underline text-slate-300/80"
-                      onClick={() => setGemWeights(DEFAULT_WEIGHTS)}
-                    >
-                      Reset
-                    </button>
-                  </div>
-                  <p className="mb-3 text-xs text-slate-300/80">
-                    {isCustomSort
-                      ? "「Custom Gem Score」選択時、下記の重みづけで並び替えを行います。"
-                      : "重み設定は「Custom Gem Score」を選択すると有効になります。"}
+                <div className="mt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300 mb-2">
+                    MOOD MATCHING
+                  </h3>
+                  <p className="text-slate-400 text-xs mb-4">
+                    スライダーを動かすと気分マッチ度が検索に反映されます。
                   </p>
 
-                  <div
-                    className={`grid grid-cols-1 gap-4 md:grid-cols-2 ${!isCustomSort ? "opacity-60 pointer-events-none" : ""
-                      }`}
-                  >
-                    {/* AI Score */}
-                    <div className="space-y-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                          AI Score
-                        </Label>
-                        <span className="text-xs text-slate-300/80">
-                          {gemWeights.aiScore}
-                        </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {MOOD_SLIDERS.map((m) => (
+                      <div key={m.id}>
+                        <div className="flex justify-between text-xs text-slate-300 mb-1">
+                          <span>{m.left}</span>
+                          <span>{m.right}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={MOOD_SLIDER_MAX}
+                          value={userMood[m.id]}
+                          onChange={(e) =>
+                            setUserMood((prev) => ({
+                              ...prev,
+                              [m.id]: Number(e.target.value),
+                            }))
+                          }
+                          className="w-full"
+                        />
                       </div>
-                      <Slider
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={[gemWeights.aiScore]}
-                        onValueChange={([value]) =>
-                          setGemWeights((prev) => ({ ...prev, aiScore: value }))
-                        }
-                      />
-                    </div>
-
-                    {/* Positive Ratio */}
-                    <div className="space-y-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                          Positive Ratio
-                        </Label>
-                        <span className="text-xs text-slate-300/80">
-                          {gemWeights.positiveRatio}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={[gemWeights.positiveRatio]}
-                        onValueChange={([value]) =>
-                          setGemWeights((prev) => ({
-                            ...prev,
-                            positiveRatio: value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    {/* Review Count */}
-                    <div className="space-y-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                          Review Count
-                        </Label>
-                        <span className="text-xs text-slate-300/80">
-                          {gemWeights.reviewCount}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={[gemWeights.reviewCount]}
-                        onValueChange={([value]) =>
-                          setGemWeights((prev) => ({
-                            ...prev,
-                            reviewCount: value,
-                          }))
-                        }
-                      />
-                    </div>
-
-                    {/* Recency */}
-                    <div className="space-y-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <Label className="text-[11px] uppercase tracking-[0.12em] text-slate-300">
-                          Recency
-                        </Label>
-                        <span className="text-xs text-slate-300/80">
-                          {gemWeights.recency}
-                        </span>
-                      </div>
-                      <Slider
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={[gemWeights.recency]}
-                        onValueChange={([value]) =>
-                          setGemWeights((prev) => ({ ...prev, recency: value }))
-                        }
-                      />
-                    </div>
+                    ))}
                   </div>
                 </div>
 
@@ -880,7 +805,6 @@ export default function Rankings() {
                   <SearchResultCard
                     appId={game.appId}
                     title={game.title}
-                    hiddenGemScore={game.analysis.reviewQualityScore}
                     summary={game.analysis.summary}
                     labels={game.analysis.labels}
                     positiveRatio={game.positiveRatio}

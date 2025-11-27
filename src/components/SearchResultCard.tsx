@@ -35,6 +35,8 @@ interface SearchResultCardProps {
     thumbnail?: string;
   }[];
   headerImage?: string | null;
+  moodScore?: number;
+  finalScore?: number;
 }
 
 // スコア軸のキー
@@ -111,6 +113,7 @@ export const SearchResultCard = ({
   tags,
   screenshots,
   headerImage,
+  moodScore,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
@@ -147,6 +150,20 @@ export const SearchResultCard = ({
   const positiveDisplay = Number.isFinite(positiveRatio)
     ? Math.round(positiveRatio)
     : 0;
+
+  const rawMoodScore =
+    typeof moodScore === "number"
+      ? moodScore
+      : typeof (gameData as any)?.moodScore === "number"
+        ? (gameData as any).moodScore
+        : typeof (analysisData as any)?.moodScore === "number"
+          ? (analysisData as any).moodScore
+          : null;
+
+  const normalizedMoodScore =
+    typeof rawMoodScore === "number" && Number.isFinite(rawMoodScore)
+      ? Math.max(0, Math.min(1, rawMoodScore))
+      : null;
 
   // --- 統計ベースのサマリ生成 ---
   const hasAISummary =
@@ -389,7 +406,7 @@ export const SearchResultCard = ({
             </div>
           )}
 
-          {audienceBadges.length > 0 && (
+          {(audienceBadges.length > 0 || normalizedMoodScore !== null) && (
             <div className="flex flex-wrap gap-1.5 mt-1">
               {audienceBadges.map((badge, i) => (
                 <Badge
@@ -400,6 +417,11 @@ export const SearchResultCard = ({
                   {badge.label}
                 </Badge>
               ))}
+              {normalizedMoodScore !== null && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-600/20 text-purple-300 border border-purple-500/40">
+                  {Math.round(normalizedMoodScore * 100)}% Match
+                </span>
+              )}
             </div>
           )}
 
@@ -452,3 +474,4 @@ export const SearchResultCard = ({
     </Card>
   );
 };
+

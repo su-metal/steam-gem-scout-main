@@ -660,7 +660,7 @@ IMPORTANT:
 `.trim();
     const controller = new AbortController();
     try {
-      const timeoutMs = 25000;
+      const timeoutMs = 45000; // or 60000
       const timeoutId = setTimeout(() => {
         controller.abort("AI request timeout");
       }, timeoutMs);
@@ -847,19 +847,30 @@ IMPORTANT:
         },
       });
     } catch (aiError: any) {
-      // Catch network errors, timeouts, and unexpected AI errors
+      // AbortController / ネットワーク / OpenAI 側の予期せぬエラーをここで拾う
+
+      const isTimeout =
+        typeof aiError === "string" && aiError === "AI request timeout";
+
+      const message =
+        aiError instanceof Error
+          ? aiError.message
+          : typeof aiError === "string"
+          ? aiError
+          : "Unknown AI error";
+
       console.error("AI analysis error:", {
-        message: aiError?.message,
-        name: aiError?.name,
-        stack: aiError?.stack,
+        raw: aiError, // 元の値をそのまま残す（string なら "AI request timeout" が見える）
+        message,
+        name: aiError instanceof Error ? aiError.name : undefined,
+        stack: aiError instanceof Error ? aiError.stack : undefined,
+        isTimeout,
       });
 
-      const fallback = buildFallbackAnalysis(
-        aiError?.message || "AI analysis error",
-        {
-          title: fallbackTitle,
-        }
-      );
+      const fallback = buildFallbackAnalysis(message, {
+        title: fallbackTitle,
+      });
+
       return new Response(JSON.stringify(fallback), {
         status: 200,
         headers: {

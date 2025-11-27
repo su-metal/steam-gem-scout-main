@@ -91,66 +91,87 @@ const getDisplayTags = (
 // 気分スライダーの定義
 
 // メイン3本（既存）
-const BASE_VIBE_SLIDERS = [
+type MoodSliderId =
+  | "operation"
+  | "session"
+  | "tension"
+  | "story"
+  | "brain";
+
+type MoodState = Record<MoodSliderId, number>;
+
+type SliderConfig = {
+  key: MoodSliderId;
+  title: string;
+  mainLabel: string;
+  leftLabel: string;
+  rightLabel: string;
+};
+
+const VIBE_MAX = 4; // 0〜4 の 5 軸
+
+const BASE_VIBE_SLIDERS: SliderConfig[] = [
   {
-    id: "Story Weight",
-    mainLabel: "Passive ←→ Action",
-    leftLabel: "ゆったり",
-    rightLabel: "アクション",
-  },
-  {
-    id: "Volume",
-    mainLabel: "Short ←→ Long",
-    leftLabel: "短め",
-    rightLabel: "長め",
-  },
-  {
-    id: "Stress Level",
-    mainLabel: "Cozy ←→ Intense",
+    key: "operation",
+    title: "操作量",
+    mainLabel: "Passive ↔ Active",
     leftLabel: "リラックス",
-    rightLabel: "緊張・挑戦",
+    rightLabel: "アクティブ",
   },
-] as const;
-
-// Advanced Filters 用の2本
-const ADVANCED_VIBE_SLIDERS = [
   {
-    id: "Story Density",
-    mainLabel: "Story-Light ←→ Story-Heavy",
+    key: "session",
+    title: "セッション長",
+    mainLabel: "Short ↔ Long",
+    leftLabel: "短時間",
+    rightLabel: "長時間",
+  },
+  {
+    key: "tension",
+    title: "テンション",
+    mainLabel: "Cozy ↔ Intense",
+    leftLabel: "まったり",
+    rightLabel: "高テンション",
+  },
+];
+
+const ADVANCED_VIBE_SLIDERS: SliderConfig[] = [
+  {
+    key: "story",
+    title: "ストーリー濃度",
+    mainLabel: "Story-Light ↔ Story-Heavy",
     leftLabel: "プレイ重視",
-    rightLabel: "ナラティブ",
+    rightLabel: "物語重視",
   },
   {
-    id: "Brain Load",
-    mainLabel: "Brain-Light ←→ Brain-Heavy",
-    leftLabel: "直感プレイ",
-    rightLabel: "頭を使う",
+    key: "brain",
+    title: "思考負荷",
+    mainLabel: "Simple ↔ Deep",
+    leftLabel: "シンプル",
+    rightLabel: "じっくり",
   },
-] as const;
+];
 
-// 型用に全部まとめた配列
-const VIBE_SLIDERS = [
+const VIBE_SLIDERS: SliderConfig[] = [
   ...BASE_VIBE_SLIDERS,
   ...ADVANCED_VIBE_SLIDERS,
-] as const;
+];
 
-const VIBE_MAX = 4; // 0〜4 の 5 段階
-
-type VibeId = (typeof VIBE_SLIDERS)[number]["id"];
-type VibeState = Record<VibeId, number>;
+const DEFAULT_MOOD: MoodState = {
+  operation: 2,
+  session: 2,
+  tension: 2,
+  story: 2,
+  brain: 2,
+};
 
 
 const Index: React.FC = () => {
   const navigate = useNavigate();
 
-  const [vibes, setVibes] = useState<VibeState>(() => {
-    const initial: Partial<VibeState> = {};
-    VIBE_SLIDERS.forEach((v) => {
-      // 0〜4 の真ん中（2）からスタート
-      initial[v.id] = Math.round(VIBE_MAX / 2);
-    });
-    return initial as VibeState;
-  });
+  const [vibes, setVibes] = useState<MoodState>(() => ({ ...DEFAULT_MOOD }));
+
+  const goToSearchWithMood = () =>
+    navigate("/search", { state: { userMood: vibes } });
 
   // Advanced Filters の開閉
   const [showAdvancedVibes, setShowAdvancedVibes] = useState(false);
@@ -272,7 +293,7 @@ const Index: React.FC = () => {
               <button
                 type="button"
                 className="nav-cta"
-                onClick={() => navigate("/search")}
+                onClick={goToSearchWithMood}
               >
                 Appを試す
               </button>
@@ -303,7 +324,7 @@ const Index: React.FC = () => {
                 <button
                   type="button"
                   className="btn-main"
-                  onClick={() => navigate("/search")}
+                  onClick={goToSearchWithMood}
                 >
                   今すぐ隠れた名作を探す
                 </button>
@@ -405,7 +426,7 @@ const Index: React.FC = () => {
 
                   <div className="vibe-sliders">
                     {BASE_VIBE_SLIDERS.map((slider) => (
-                      <div className="slider-item" key={slider.id}>
+                      <div className="slider-item" key={slider.key}>
                         <div className="slider-label-row">
                           <span className="key">{slider.mainLabel}</span>
                           <span>
@@ -418,11 +439,11 @@ const Index: React.FC = () => {
                           min={0}
                           max={VIBE_MAX}
                           step={1}
-                          value={vibes[slider.id]}
+                          value={vibes[slider.key]}
                           onChange={(e) =>
                             setVibes((prev) => ({
                               ...prev,
-                              [slider.id]: Number(e.target.value),
+                              [slider.key]: Number(e.target.value),
                             }))
                           }
                         />
@@ -434,13 +455,13 @@ const Index: React.FC = () => {
                               key={idx}
                               className={
                                 "slider-dot" +
-                                (idx === vibes[slider.id] ? " is-active" : "") +
-                                (idx < vibes[slider.id] ? " is-filled" : "")
+                                (idx === vibes[slider.key] ? " is-active" : "") +
+                                (idx < vibes[slider.key] ? " is-filled" : "")
                               }
                               onClick={() =>
                                 setVibes((prev) => ({
                                   ...prev,
-                                  [slider.id]: idx,
+                                  [slider.key]: idx,
                                 }))
                               }
                             />
@@ -478,7 +499,7 @@ const Index: React.FC = () => {
                   {showAdvancedVibes && (
                     <div className="vibe-advanced-sliders">
                       {ADVANCED_VIBE_SLIDERS.map((slider) => (
-                        <div className="slider-item" key={slider.id}>
+                        <div className="slider-item" key={slider.key}>
                           <div className="slider-label-row">
                             <span className="key">{slider.mainLabel}</span>
                             <span>
@@ -491,11 +512,11 @@ const Index: React.FC = () => {
                             min={0}
                             max={VIBE_MAX}
                             step={1}
-                            value={vibes[slider.id]}
+                            value={vibes[slider.key]}
                             onChange={(e) =>
                               setVibes((prev) => ({
                                 ...prev,
-                                [slider.id]: Number(e.target.value),
+                                [slider.key]: Number(e.target.value),
                               }))
                             }
                           />
@@ -507,13 +528,13 @@ const Index: React.FC = () => {
                                 key={idx}
                                 className={
                                   "slider-dot" +
-                                  (idx === vibes[slider.id] ? " is-active" : "") +
-                                  (idx < vibes[slider.id] ? " is-filled" : "")
+                                  (idx === vibes[slider.key] ? " is-active" : "") +
+                                  (idx < vibes[slider.key] ? " is-filled" : "")
                                 }
                                 onClick={() =>
                                   setVibes((prev) => ({
                                     ...prev,
-                                    [slider.id]: idx,
+                                    [slider.key]: idx,
                                   }))
                                 }
                               />
@@ -525,6 +546,15 @@ const Index: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                className="btn-main"
+                onClick={goToSearchWithMood}
+              >
+                この気分で探す
+              </button>
             </div>
           </div>
         </section>
@@ -860,7 +890,7 @@ const Index: React.FC = () => {
                 <button
                   type="button"
                   className="btn-main"
-                  onClick={() => navigate("/search")}
+                  onClick={goToSearchWithMood}
                 >
                   ベータ版に参加したい
                 </button>
@@ -886,3 +916,4 @@ const Index: React.FC = () => {
 };
 
 export default Index;
+

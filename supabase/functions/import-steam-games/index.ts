@@ -3,6 +3,11 @@
 // 単発 (appId) / 複数 (appIds) 両対応
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
+import {
+  MoodVector,
+  calcRawMood,
+  normalizeMood,
+} from "../_shared/mood.ts";
 
 type Analysis = {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -71,6 +76,7 @@ type RankingGame = {
   releaseDate: string;
   releaseYear: number;
   isAvailableInStore: boolean;
+  mood_scores?: MoodVector | null;
 };
 
 type ImportSteamGamesRequest =
@@ -375,7 +381,19 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   const price: number = row.price ?? 0; // USD (例: 19.99)
   const averagePlaytime: number = row.average_playtime ?? 0;
 
-  const tags: string[] = Array.isArray(row.tags) ? row.tags : [];
+  const tags: string[] = Array.isArray(row.tags)
+    ? row.tags
+    : typeof row.tags === "string"
+    ? row.tags
+        .split(",")
+        .map((t: string) => t.trim())
+        .filter(Boolean)
+    : [];
+
+  let moodScores: MoodVector | null = null;
+  if (tags.length > 0) {
+    moodScores = normalizeMood(calcRawMood(tags));
+  }
 
   // steam_games 側に既に入っている screenshots JSON をそのまま使う
   const screenshots = Array.isArray(row.screenshots) ? row.screenshots : [];
@@ -454,6 +472,7 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     releaseDate: releaseDateStr,
     releaseYear,
     isAvailableInStore: true,
+    mood_scores: moodScores,
   };
 
   return rankingGame;
@@ -695,6 +714,10 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
             previousData.gemLabel !== undefined
               ? previousData.gemLabel
               : rankingGame.gemLabel,
+          mood_scores:
+            previousData.mood_scores !== undefined
+              ? previousData.mood_scores
+              : rankingGame.mood_scores,
           // headerImage は既存があれば優先し、無い場合は今回計算したものを使う
           headerImage:
             previousData.headerImage ??
