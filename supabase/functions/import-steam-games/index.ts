@@ -3,11 +3,7 @@
 // 単発 (appId) / 複数 (appIds) 両対応
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
-import {
-  MoodVector,
-  calcRawMood,
-  normalizeMood,
-} from "../_shared/mood.ts";
+import { MoodVector, buildMoodFromTagsAndAnalysis } from "../_shared/mood.ts";
 
 type Analysis = {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -392,7 +388,8 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
 
   let moodScores: MoodVector | null = null;
   if (tags.length > 0) {
-    moodScores = normalizeMood(calcRawMood(tags));
+    // ここで AI なし版のベースベクトルを作る（analysis はまだ null）
+    moodScores = buildMoodFromTagsAndAnalysis(tags, null);
   }
 
   // steam_games 側に既に入っている screenshots JSON をそのまま使う
@@ -839,6 +836,14 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         ...baseDataForStorage
       } = currentData || {};
 
+      // mood_scores 再計算用に tags と既存スコアを控えておく
+      const tagsForMood: string[] = Array.isArray(baseDataForStorage.tags)
+        ? baseDataForStorage.tags
+        : [];
+
+      let moodScores: MoodVector | null =
+        baseDataForStorage.mood_scores ?? null;
+
       const payload = currentData;
 
       const res = await fetch(ANALYZE_HIDDEN_GEM_URL, {
@@ -870,9 +875,24 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         continue;
       }
 
+      // ★ AI 解析結果を踏まえて mood_scores を再計算
+      if (tagsForMood.length > 0) {
+        try {
+          moodScores = buildMoodFromTagsAndAnalysis(tagsForMood, aiResult);
+        } catch (e) {
+          console.error(
+            "runAiAnalysisForAppIds: failed to rebuild mood_scores",
+            appId,
+            e
+          );
+          // 失敗した場合は既存の moodScores をそのまま残す
+        }
+      }
+
       const updatedData: Record<string, any> = {
         // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
         ...baseDataForStorage,
+        mood_scores: moodScores,
         analysis: aiResult,
       };
 

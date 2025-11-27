@@ -111,17 +111,17 @@ const MOOD_SLIDERS: Array<{
   left: string;
   right: string;
 }> = [
-  { id: "operation", label: "操作量", left: "Passive", right: "Active" },
-  { id: "session", label: "セッション長", left: "Short", right: "Long" },
-  { id: "tension", label: "テンション", left: "Cozy", right: "Intense" },
-  {
-    id: "story",
-    label: "ストーリー密度",
-    left: "Story-Light",
-    right: "Story-Heavy",
-  },
-  { id: "brain", label: "思考負荷", left: "Simple", right: "Deep" },
-];
+    { id: "operation", label: "操作量", left: "Passive", right: "Active" },
+    { id: "session", label: "セッション長", left: "Short", right: "Long" },
+    { id: "tension", label: "テンション", left: "Cozy", right: "Intense" },
+    {
+      id: "story",
+      label: "ストーリー密度",
+      left: "Story-Light",
+      right: "Story-Heavy",
+    },
+    { id: "brain", label: "思考負荷", left: "Simple", right: "Deep" },
+  ];
 
 // 価格スライダーの最大値（ここを変えれば一括で反映）
 const MAX_PRICE_SLIDER = 60;
@@ -264,22 +264,43 @@ export default function Rankings() {
       const rankings = (data as RankingGame[]) ?? [];
       console.log(`Received ${rankings.length} games from server`);
 
-      // ★ ここでクライアント側の価格フィルタを適用
-      const filteredByPrice =
-        maxPrice === MAX_PRICE_SLIDER
-          ? rankings
-          : rankings.filter((game) => {
-            const priceInDollars = game.price / 100;
-            return priceInDollars <= maxPrice;
-          });
+      // ここからクライアント側フィルタを順番に適用
+      let filtered = rankings;
 
-      console.log(`After client-side price filter (<= $${maxPrice} or Any): ${filteredByPrice.length} games`);
+      // 1) Max Price（price はセント想定なので /100）
+      if (maxPrice !== MAX_PRICE_SLIDER) {
+        filtered = filtered.filter((game) => {
+          const priceInDollars =
+            typeof game.price === "number" && Number.isFinite(game.price)
+              ? game.price
+              : 0;
+          return priceInDollars <= maxPrice;
+        });
+      }
 
-      setGames(filteredByPrice);
+      // 2) Min Reviews
+      if (minReviews > 0) {
+        filtered = filtered.filter((game) => game.totalReviews >= minReviews);
+      }
+
+      // 3) Min Playtime（averagePlaytime は分単位なので時間に換算）
+      if (minPlaytime > 0) {
+        filtered = filtered.filter((game) => {
+          const hours = game.averagePlaytime / 60;
+          return hours >= minPlaytime;
+        });
+      }
+
+      console.log(
+        `After client filters (price<=${maxPrice}, reviews>=${minReviews}, playtime>=${minPlaytime}h): ${filtered.length} games`
+      );
+
+      setGames(filtered);
       toast({
         title: "Search complete",
-        description: `Found ${filteredByPrice.length} hidden gems`,
+        description: `Found ${filtered.length} hidden gems`,
       });
+
     } catch (err) {
       console.error("Exception fetching rankings:", err);
       toast({

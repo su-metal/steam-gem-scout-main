@@ -60,38 +60,38 @@ const getScoreAxisBadgeClass = (key: ScoreAxisKey, value: number): string => {
   switch (key) {
     case "hidden":
       return `${base} ${strong
-          ? "border-indigo-500 text-indigo-300 bg-indigo-500/15"
-          : mid
-            ? "border-indigo-400 text-indigo-200 bg-indigo-400/10"
-            : "border-border/60 text-muted-foreground bg-muted/40"
+        ? "border-indigo-500 text-indigo-300 bg-indigo-500/15"
+        : mid
+          ? "border-indigo-400 text-indigo-200 bg-indigo-400/10"
+          : "border-border/60 text-muted-foreground bg-muted/40"
         }`;
     case "quality":
       return `${base} ${strong
-          ? "border-emerald-500 text-emerald-300 bg-emerald-500/15"
-          : mid
-            ? "border-emerald-400 text-emerald-200 bg-emerald-400/10"
-            : "border-border/60 text-muted-foreground bg-muted/40"
+        ? "border-emerald-500 text-emerald-300 bg-emerald-500/15"
+        : mid
+          ? "border-emerald-400 text-emerald-200 bg-emerald-400/10"
+          : "border-border/60 text-muted-foreground bg-muted/40"
         }`;
     case "comeback":
       return `${base} ${strong
-          ? "border-amber-500 text-amber-300 bg-amber-500/15"
-          : mid
-            ? "border-amber-400 text-amber-200 bg-amber-400/10"
-            : "border-border/60 text-muted-foreground bg-muted/40"
+        ? "border-amber-500 text-amber-300 bg-amber-500/15"
+        : mid
+          ? "border-amber-400 text-amber-200 bg-amber-400/10"
+          : "border-border/60 text-muted-foreground bg-muted/40"
         }`;
     case "niche":
       return `${base} ${strong
-          ? "border-rose-500 text-rose-300 bg-rose-500/15"
-          : mid
-            ? "border-rose-400 text-rose-200 bg-rose-400/10"
-            : "border-border/60 text-muted-foreground bg-muted/40"
+        ? "border-rose-500 text-rose-300 bg-rose-500/15"
+        : mid
+          ? "border-rose-400 text-rose-200 bg-rose-400/10"
+          : "border-border/60 text-muted-foreground bg-muted/40"
         }`;
     case "innovation":
       return `${base} ${strong
-          ? "border-sky-500 text-sky-300 bg-sky-500/15"
-          : mid
-            ? "border-sky-400 text-sky-200 bg-sky-400/10"
-            : "border-border/60 text-muted-foreground bg-muted/40"
+        ? "border-sky-500 text-sky-300 bg-sky-500/15"
+        : mid
+          ? "border-sky-400 text-sky-200 bg-sky-400/10"
+          : "border-border/60 text-muted-foreground bg-muted/40"
         }`;
     default:
       return `${base} border-border/60 text-muted-foreground bg-muted/40`;
@@ -335,6 +335,26 @@ export const SearchResultCard = ({
     ? "Free"
     : `$${normalizedPrice.toFixed(2)}`;
 
+  // Playtime: averagePlaytime は分単位で渡ってくる想定なので h に変換して表示する
+  const playtimeMinutes =
+    typeof averagePlaytime === "number" && Number.isFinite(averagePlaytime)
+      ? averagePlaytime
+      : 0;
+
+  let playtimeDisplay = "-";
+  if (playtimeMinutes > 0) {
+    const hours = playtimeMinutes / 60;
+    if (hours < 1) {
+      playtimeDisplay = "<1h";
+    } else if (hours < 10) {
+      // 10時間未満は 1 桁小数で表示（例: 3.5h）
+      playtimeDisplay = `${hours.toFixed(1)}h`;
+    } else {
+      // それ以上は四捨五入した整数時間（例: 36h）
+      playtimeDisplay = `${Math.round(hours)}h`;
+    }
+  }
+
   return (
     <Card
       className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md h-full flex flex-col"
@@ -444,7 +464,7 @@ export const SearchResultCard = ({
 
         </div>
 
-              {/* Stats only (Positive, Reviews, Price, Playtime) */}
+        {/* Stats only (Positive, Reviews, Price, Playtime) */}
         <div className="flex justify-end">
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
@@ -465,7 +485,7 @@ export const SearchResultCard = ({
             </div>
             <div>
               <div className="text-muted-foreground">Playtime</div>
-              <div className="font-semibold">{averagePlaytime}h</div>
+              <div className="font-semibold">{playtimeDisplay}</div>
             </div>
           </div>
         </div>

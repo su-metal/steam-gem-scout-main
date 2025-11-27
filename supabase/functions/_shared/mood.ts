@@ -118,3 +118,122 @@ export function normalizeMood(raw: MoodVector): MoodVector {
 
   return out;
 }
+
+// =========================
+// AI 解析を使った補正ロジック
+// =========================
+
+// analysis のうち、気分補正に使う最小限の構造だけを定義
+export interface MoodAnalysisLike {
+  summary?: string;
+  pros?: string[];
+  cons?: string[];
+  labels?: string[];
+  audiencePositive?: { label?: string; description?: string }[];
+  audienceNegative?: { label?: string; description?: string }[];
+}
+
+// analysis からテキストを全部かき集めて 1 本の文字列にする
+function buildAnalysisText(a?: MoodAnalysisLike | null): string {
+  if (!a) return "";
+  const parts: string[] = [];
+
+  if (a.summary) parts.push(a.summary);
+  if (a.labels?.length) parts.push(a.labels.join(" "));
+  if (a.pros?.length) parts.push(a.pros.join(" "));
+  if (a.cons?.length) parts.push(a.cons.join(" "));
+
+  if (a.audiencePositive?.length) {
+    for (const p of a.audiencePositive) {
+      if (p.label) parts.push(p.label);
+      if (p.description) parts.push(p.description);
+    }
+  }
+
+  if (a.audienceNegative?.length) {
+    for (const n of a.audienceNegative) {
+      if (n.label) parts.push(n.label);
+      if (n.description) parts.push(n.description);
+    }
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
+// 0〜1 の範囲で軸をちょっとだけ増減させるユーティリティ
+function bumpAxis(v: MoodVector, key: MoodSliderId, delta: number) {
+  const next = v[key] + delta;
+  v[key] = Math.max(0, Math.min(1, next));
+}
+
+/**
+ * タグから作ったベース MoodVector に対して、
+ * AI 解析（summary/pros/cons/labels/audiencePositive 等）のニュアンスで
+ * 0.1〜0.25 程度の軽微な補正をかける。
+ */
+export function applyAiMoodAdjustment(
+  base: MoodVector,
+  analysis?: MoodAnalysisLike | null
+): MoodVector {
+  if (!analysis) return base;
+
+  const text = buildAnalysisText(analysis);
+  if (!text) return base;
+
+  const out: MoodVector = { ...base };
+
+  // --- Story 濃度: Play-focused ↔ Narrative ---
+  if (/(物語重視|ストーリー重視|物語|ストーリー|narrative|story[- ]rich)/.test(text)) {
+    bumpAxis(out, "story", 0.18);
+  }
+  if (/(キャラ|キャラクター|会話|ドラマ)/.test(text)) {
+    bumpAxis(out, "story", 0.07);
+  }
+
+  // --- テンション: Cozy ↔ Intense ---
+  if (/(ホラー|恐怖|スリル|緊張感|サバイバル|心臓に悪い|びっくり|jumpscare|intense|tense)/.test(text)) {
+    bumpAxis(out, "tension", 0.22);
+  }
+  if (/(まったり|癒し|ゆったり|リラックス|chill|cozy|のんびり)/.test(text)) {
+    bumpAxis(out, "tension", -0.22);
+  }
+
+  // --- 操作量: Passive ↔ Active ---
+  if (/(アクション|爽快|テンポが速い|スピーディ|忙しい操作|コンボ|連打|dodgeroll|bullet hell)/.test(text)) {
+    bumpAxis(out, "operation", 0.18);
+  }
+  if (/(放置|眺める|idle|オートプレイ|自動で進む)/.test(text)) {
+    bumpAxis(out, "operation", -0.18);
+  }
+
+  // --- 思考負荷: Simple ↔ Deep ---
+  if (/(戦略|ストラテジー|タクティクス|戦術|パズル|頭を使う|思考|ビルド構築|デッキ構築|tactical|strategy|planning)/.test(text)) {
+    bumpAxis(out, "brain", 0.22);
+  }
+  if (/(単純|シンプル|気軽|カジュアル|難しくない)/.test(text)) {
+    bumpAxis(out, "brain", -0.15);
+  }
+
+  // --- セッション長: Short ↔ Long ---
+  if (/(短時間|サクッと|スキマ時間|1時間程度|30分程度|ショートセッション|short session|bite[- ]sized)/.test(text)) {
+    bumpAxis(out, "session", -0.18);
+  }
+  if (/(長時間|腰を据えて|ボリューム|周回プレイ|やり込み|何十時間|長く遊べる|long session)/.test(text)) {
+    bumpAxis(out, "session", 0.18);
+  }
+
+  return out;
+}
+
+/**
+ * タグベースの MoodVector を作成し、
+ * もし analysis があれば AI 補正をかけた最終ベクトルを返す。
+ */
+export function buildMoodFromTagsAndAnalysis(
+  tags: string[],
+  analysis?: MoodAnalysisLike | null
+): MoodVector {
+  const raw = calcRawMood(tags);
+  const base = normalizeMood(raw);
+  return applyAiMoodAdjustment(base, analysis);
+}

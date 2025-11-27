@@ -1,196 +1,243 @@
-# AGENTS.md
+# AGENTS.md（最新版 / 2025-11 更新）
 
-このリポジトリを触るエージェント（Codexなど）向けのメモです。  
-「何を目指しているプロジェクトか」「どこを壊さずに改善すべきか」のガイドラインとして使ってください。
-
----
-
-## 1. プロジェクト概要
-
-- プロジェクト名：**Steam Hidden Gems Finder**
-- 目的：
-  - Steam 上で「埋もれているけど本当に良いゲーム（Hidden Gems）」を見つけやすくする。
-  - ユーザーは検索フォームに頑張って入力するのではなく、
-    - ホームに並んだコンテンツ
-    - タグのチップ
-    - ランキング画面のフィルタ
-    を軽く触るだけで「良さそうなタイトル」に自然にたどり着ける体験がゴール。
-
-- 大事なポイント：
-  - 「単に高評価な有名作」ではなく、
-    - **露出が少ない**
-    - **品質が高い**
-    - できれば **最近のアップデで化けた**
-    作品をきちんと拾うこと。
+本ファイルは、本プロジェクト内の LLM / 開発者（エージェント）が参照する  
+**全体設計ガイドライン**です。  
+最新仕様・気分スライダー・可変スコア軸・Hidden Gem ロジックのすべてを統合しています。
 
 ---
 
-## 2. 技術スタックと構成
+# 1. プロジェクト概要
 
-### フロントエンド
+## ■ プロジェクト名
+**Steam Hidden Gems Finder → Steam Mood & Gems Explorer（仮）**
 
-- React（Vite）
-- 主なページ/コンポーネント：
-  - `src/pages/Index.tsx`  
-    - ホーム。Hidden Gems / Emerging などのレーンを表示。
-  - `src/pages/Rankings.tsx`  
-    - 本命のランキング画面。  
-      フィルタ（期間、価格、レビュー数、プレイ時間、カスタムGemスコアなど）が集中。
-  - `src/pages/GameDetail.tsx`  
-    - 詳細ページ。AI解析結果（サマリ、Pros/Cons、リスク、Hidden Gem判定）を見せる。
-  - `src/components/SearchResultCard.tsx` / `GameCard.tsx`  
-    - 一覧カード。Gemスコア、タグ、AIサマリ、バッジなどを表示。
+## ■ 現在のコンセプト（2025）
+プロジェクトは当初「埋もれた良作発掘アプリ」だったが、現在は以下の形へ進化：
 
-- Supabase クライアント：
-  - `@/lib/supabaseClient`
-  - 外部 Supabase プロジェクト（`steam-hidden-gems-prod`）に接続。
-  - Edge Function （`search-games`, `search-hidden-gems`, `analyze-hidden-gem` など）を叩く。
+> **その日の気分 × 自分に刺さる体験 × 隠れた名作要素**  
+> ――これらを掛け合わせて、“自分だけの名作”を発掘するアプリ。
 
-### バックエンド（Supabase Edge Functions）
+目的は以下の4点：
 
-- 主要な Edge Functions：
-  - `supabase/functions/search-hidden-gems/index.ts`
-    - Steam API からゲーム詳細＋レビューを取得。
-    - OpenAI でレビュー解析。
-    - Hidden Gem 判定 & `game_rankings_cache` に保存。
-  - `supabase/functions/search-games/index.ts`
-    - `game_rankings_cache` を検索・ソートして、
-      ランキング用データを返す（期間フィルタ、ソート、簡易フィルタなど）。
-  - `supabase/functions/analyze-hidden-gem/index.ts`
-    - （新仕様）レビュー解析専用のAI関数。  
-      アップデ前後・最近の状態を意識したフィールドを返すように改良中。
-
-- DB：
-  - 外部 Supabase プロジェクト：`steam-hidden-gems-prod`
-  - テーブル：`game_rankings_cache`
-    - カラム `data` に `RankingGameData` を JSON で保存。
-    - 例：
-      - `data.appId`
-      - `data.title`
-      - `data.positiveRatio`
-      - `data.totalReviews`
-      - `data.estimatedOwners`
-      - `data.analysis`（AI解析）
-      - `data.gemLabel`（Hidden Gem / Highly rated but not hidden / など）
+1. **気分スライダーによる Mood Fit 検索**
+2. **AI による「どんな人に刺さるか」解析**
+3. **Hidden / Improved / Emerging などの隠れ度分類**
+4. **ゲームごとに異なる「可変スコア軸」可視化**
 
 ---
 
-## 3. Hidden Gem の概念と判定
+# 2. ユーザー体験のゴール
 
-### 3.1 基本コンセプト
-
-Hidden Gem ＝
-
-1. **露出が低い（Hidden）**
-2. **ユーザー満足度が高い（Good）**
-3. **レビュー内容的にもAIが推せる（Gem）**
-
-### 3.2 数値側の指標（例）
-
-- `positiveRatio >= 85`（高評価率）
-- `totalReviews` が少なめ（例：40〜400）
-- `estimatedOwners` が少ない（例：〜30,000）
-- 最近のレビューの雰囲気が良い（できれば）
-
-### 3.3 AI 側の指標
-
-`analysis` 内に格納するフィールド例：
-
-- `summary`：AIによる短い要約
-- `labels`：3〜6個の短いタグ
-- `pros` / `cons`：良い点・注意点
-- `riskScore`：買って後悔するリスク
-- `bugRisk`：クラッシュ・技術的問題の多さ
-- `refundMentions`：返金・後悔の言及頻度
-- `reviewQualityScore`：レビューの情報量・信頼性
-
-＋ アップデ前後を意識したフィールド（新仕様）：
-
-- `currentStateSummary`：**今のバージョンの体験**の要約
-- `historicalIssuesSummary`：過去に多かった問題の要約
-- `hasImprovedSinceLaunch`：リリース当初と比べて改善したか
-- `stabilityTrend`: `"Improving" | "Stable" | "Deteriorating"`
-
-### 3.4 gemLabel の例
-
-`search-hidden-gems` / `search-games` から返す `gemLabel` は、  
-将来的に以下を含む：
-
-- `"Hidden Gem"`  
-- `"Improved Hidden Gem"`（昔は微妙だが今は良くなった）
-- `"Emerging Gem"`（埋もれ候補）
-- `"Highly rated but not hidden"`
-- `"Not a hidden gem"`
+- トップページの気分スライダーを動かすだけで「今日の気分に合うゲーム」が並ぶ
+- ゲームカードには **“どんな人に刺さるか”バッジ** が表示される
+- Hidden / Improved / Emerging のレーンで埋もれた良作も発掘可能
+- GameDetail では
+  - 今の状態
+  - 過去の問題
+  - 改善傾向  
+  を AI が読み解いた内容がまとめて表示される
 
 ---
 
-## 4. データフロー
+# 3. 技術構成（最新版）
 
-1. **インポート / 更新**
-   - `search-hidden-gems` に `appId` or `appIds` を渡す
-   - → Steam API（details & appreviews）からデータ取得
-   - → OpenAI で解析（`analyzeGameWithAI` または `analyze-hidden-gem` 相当）
-   - → `RankingGameData` を組み立てて `game_rankings_cache.data` に upsert
+## ■ フロントエンド（React / Vite）
+主要ページ：
 
-2. **検索 / 表示**
-   - フロント（`Index.tsx`, `Rankings.tsx`）から
-     - `supabase.functions.invoke("search-games")`
-   - → 期間・ソート・フィルタを適用した `RankingGameData[]` を取得
-   - → カードや詳細ページで表示
+- **Index.tsx**  
+  - 気分スライダー（常時 3軸 + Advanced 2軸）
+  - Quick Filters（気分プリセット）
+  - Hidden / Improved / Emerging レーン表示
 
----
+- **Rankings.tsx**
+  - Mood Match ソート対応
+  - 隠れ度 / 期間 / 価格 / レビュー数フィルタ
 
-## 5. エージェントにお願いしたいこと（方針）
+- **GameDetail.tsx**
+  - currentStateSummary（今の状態）
+  - historicalIssuesSummary（過去の問題）
+  - stabilityTrend（改善・安定・悪化）
+  - audiencePositive / Negative（刺さるユーザー像）
 
-### 5.1 壊してはいけないもの
-
-- `search-games` のレスポンス構造（RankingGameData の形）
-- `game_rankings_cache.data` の JSON 型構造（特に主要フィールド名）
-- フロントから呼び出している Edge Function 名：
-  - `"search-games"`
-  - `"search-hidden-gems"`
-  - `"analyze-hidden-gem"`（必要に応じて）
-
-**新しいフィールド追加は OK、既存フィールドの削除・大幅な構造変更は NG**。
-
-### 5.2 自由に改善してよいもの
-
-- Steamレビューの取得方法（`filter`, `num_per_page` など）
-- AIへのプロンプト設計
-- OpenAIレスポンスのパースロジック
-- Hidden Gem 判定ロジック内部（ただし返す値の形は維持すること）
-- キャッシュの更新戦略（頻度やフォールバックなど）
-
-### 5.3 特に改善したい現状の課題（優先度高）
-
-1. **analysis が空のまま保存されるケースの解消**
-   - 原因：レビュー0件 or AIレスポンスパース失敗 → `defaultAnalysis`。
-   - ゴール：ほとんどのゲームで `summary` / `labels` / `pros` / `cons` が埋まること。
-
-2. **レビュー取得ロジックの安定化**
-   - `filter=recent` に依存しすぎてレビュー0件になりがちだった。
-   - 古いタイトル・新作でもちゃんとレビューを取れるようにする。
-
-3. **アップデ前後を考慮した Hidden Gem 判定**
-   - `stabilityTrend` / `hasImprovedSinceLaunch` を活かした gemLabel 判定。
-   - 「昔ボロボロ、今は神ゲー」パターンをしっかり拾う。
+- **SearchResultCard / GameCard**
+  - 気分フィットスコア
+  - 可変スコア軸（Hidden / Quality / Mood / Comeback など）
+  - “どんな人に刺さるか” バッジ表示
 
 ---
 
-## 6. ゴールイメージ
+## ■ バックエンド（Supabase Edge Functions）
 
-最終的にこのアプリが目指しているのは：
+- `import-steam-games`  
+  - steam_games → game_rankings_cache へコピー  
+  - Steam API は叩かない  
+  - analysis を上書きするか選択可能
 
-- ユーザーがページを開くだけで、
-  - 「最近の Hidden Gems」
-  - 「復活した名作」
-  - 「埋もれている有望株」
-  が、いい感じに並んでいる状態。
-- ランキング画面のフィルタは「掘りたい人向けのツール」であり、
-  **必須入力ではない**。
-- AIの出す `summary` / `pros` / `cons` / `currentStateSummary` が、
-  Steamストアを巡回する代わりになるレベルで機能していること。
+- `search-games`  
+  - mood_scores を含む RankingGameData を返す
+  - ソート & フィルタ処理
 
-このゴールに近づくために、  
-レビュー取得・AI解析・Hidden Gem ロジックの中身を、壊さず・賢く改善してもらえると嬉しいです。  
-コードの具体的な書き方やアルゴリズム詳細は、自由に提案・調整してください。
+- `analyze-hidden-gem`
+  - Review を OpenAI で解析し analysis フィールドを生成
+  - current/historical の2軸モデルで解析
+
+---
+
+# 4. 気分スライダー設計（Mood Sliders）
+
+アプリの主軸となる 5 軸。
+
+```
+1. operation（Passive ↔ Active）
+2. session（Short ↔ Long）
+3. tension（Cozy ↔ Intense）
+4. story（Play-focused ↔ Narrative）
+5. brain（Simple ↔ Deep）
+```
+
+## ■ ゲーム側の MoodVector 生成
+- Steam タグ → 重みテーブル（TAG_TO_MOOD）→ 生スコア
+- normalize（0〜1）
+- AI解析のテキスト（summary / pros / cons / labels）から ±0.15〜0.25 補正
+
+## ■ ユーザー側 MoodVector
+- スライダー値 0〜4 → 0〜1 に正規化
+
+## ■ マッチングスコア
+`calcMoodMatchScore(game, user)` により 0〜1 の一致度を算出  
+Rankings では moodMatch に応じて並び替え可能。
+
+---
+
+# 5. AI解析（“今と昔”モデル）
+
+analysis の構造：
+
+- summary  
+- pros / cons  
+- labels  
+- audiencePositive / Negative（刺さる人像）
+- currentStateSummary  
+- historicalIssuesSummary  
+- hasImprovedSinceLaunch  
+- stabilityTrend（Improving / Stable / Deteriorating / Unknown）
+
+### ■ 役割
+- 詳細ページの説明（今の状態 vs 過去の問題）
+- 隠れ度分類  
+- 気分スコア補正  
+- “どんな人に刺さるか” UI の生成
+
+---
+
+# 6. Hidden Gem 概念の現在位置づけ
+
+Hidden Gem は “可変スコア軸の 1 つ” として扱う。
+
+### gemLabel 候補
+- Hidden Gem  
+- Improved Hidden Gem  
+- Emerging Gem  
+- Highly Rated but Known  
+- Not a Hidden Gem
+
+Hidden だけでなく、  
+**Mood Fit・Quality・Comeback・Niche** といった複数軸で総合判断する。
+
+---
+
+# 7. 可変スコア軸（Dynamic Scoring Axes）
+
+各タイトルは以下の複数の軸を持ち、  
+**そのタイトル固有に重要な軸だけを UI に出す**。
+
+## ■ 軸一覧
+
+- Hidden Score（埋もれ度）
+- Quality Score（品質）
+- Mood Fit Score（気分一致）
+- Comeback Score（改善度）
+- Niche / Polarizing Score（好みの分かれやすさ）
+- Stability / Polish Score（完成度）
+- Innovation Score（独自性）
+
+## ■ 特徴
+- タイトルごとに「強い軸」が異なる
+- GameCard では **強い軸3つだけ表示**（例：Hidden + Quality + Mood）
+- Steam では見えない独自指標として差別化
+
+---
+
+# 8. 「どんな人に刺さるか」バッジ（Audience Profile Badges）
+
+AI解析の `audiencePositive` から作成。
+
+### 重要ルール
+- **ジャンル名の言い換えは禁止（例：デッキ構築好き）**
+- **ゲーム固有の“体験”に基づく**ユーザー像を書く
+  - 例：
+    - 「テンポの速い反応戦が気持ちいい人」
+    - 「位置取りを詰めて勝つのが好きな人」
+    - 「景観や雰囲気を静かに味わいたい人」
+    - 「ビルド最適化が楽しい人」
+
+UI：
+- GameCard に 1〜3 個のバッジで表示
+- GameDetail で詳細説明
+
+---
+
+# 9. データフロー（最新）
+
+```
+Steam API → steam_games（倉庫）
+     ↓
+import-steam-games → game_rankings_cache（ランキング）
+     ↓
+search-games → mood_scores + 可変スコア軸で一覧返却
+     ↓
+GameDetail → 必要時のみ analyze-hidden-gem を実行
+```
+
+ポイント：
+
+- **AIコスト最適化**：analysis が null のときのみ実行
+- **隠れ度分類・可変スコア・気分一致度はすべてキャッシュから利用**
+
+---
+
+# 10. エージェントに守ってほしいこと
+
+## ■ 壊してはならない部分
+- RankingGameData の基本構造
+- analysis のキー名（summary, pros, cons, …）
+- mood_scores の 5 軸構造
+- gemLabel の仕様
+- Edge Function の I/O 形式
+
+## ■ 改善して良い部分
+- AIプロンプト
+- タグ→気分軸重み
+- 可変スコア軸の計算式
+- 刺さる人像の記述精度
+- Quick Filter のプリセット内容
+
+## ■ 特に優先すべき
+- AI解析の安定化（empty 回避）
+- 気分×AI補正ロジックの精度向上
+- GameCard の差別化（可変軸 3つ表示）
+- audiencePositive の質改善
+
+---
+
+# 11. 今後の発展
+
+- 「あなたの刺さり傾向」ページ（嗜好プロファイル）
+- 気分スライダーの国際化（JP/EN）
+- 体験ベクトルのレーダーチャート可視化
+- Hidden / Mood / Quality の総合 “おすすめスコア” 追加
+
+---
+
+# ✔ 以上が最新版の AGENTS.md です
+これをプロジェクトの **中央ドキュメント**として利用してください。
