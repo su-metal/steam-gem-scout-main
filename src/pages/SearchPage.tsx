@@ -61,6 +61,7 @@ interface RankingGame {
 const GENRE_OPTIONS = [
   "Action",
   "Adventure",
+  "FPS",
   "Roguelike",
   "Deckbuilding",
   "RPG",

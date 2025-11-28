@@ -359,11 +359,25 @@ export const SearchResultCard = ({
 
       <div className="flex flex-col gap-4 p-4 h-full">
         {/* Left: Header Image */}
-        <div className="w-full">
+        <div className="w-full relative">
           <img
             src={headerImageUrl}
             className="w-full aspect-video object-cover rounded-lg"
           />
+          {normalizedMoodScore !== null && (
+            <div className="absolute bottom-3 right-3">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-purple-400 bg-black/70 backdrop-blur-sm shadow-lg flex items-center justify-center">
+                <div className="flex flex-col items-center leading-tight">
+                  <span className="text-[10px] sm:text-xs text-purple-200 font-medium">
+                    Match
+                  </span>
+                  <span className="text-lg sm:text-xl font-bold text-purple-50">
+                    {Math.round(normalizedMoodScore * 100)}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Middle: Title, Metascore, Summary, Tags */}
@@ -416,11 +430,6 @@ export const SearchResultCard = ({
                   {badge.label}
                 </Badge>
               ))}
-              {normalizedMoodScore !== null && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-600/20 text-purple-300 border border-purple-500/40">
-                  {Math.round(normalizedMoodScore * 100)}% Match
-                </span>
-              )}
             </div>
           )}
 
