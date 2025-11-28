@@ -50,6 +50,7 @@ type RankingGame = {
   averagePlaytime: number;
   lastUpdated: string;
   tags: string[];
+  genres?: string[];
   steamUrl: string;
   reviewScoreDesc: string;
   screenshots?: { thumbnail?: string; full?: string }[];
@@ -100,8 +101,11 @@ type ImportSteamGamesRequest =
       // ★ 既存の発売年月フィルタ
       releaseFrom?: string; // "YYYY-MM"
       releaseTo?: string; // "YYYY-MM"
-      // ★ 追加: フィルタ結果の中からフロントで選択された AppID 群
+      // ★ フィルタ結果の中からフロントで選択された AppID 群
       selectedAppIds?: number[];
+      // ★ フィルタモード専用の AppID / タイトル検索
+      filterAppId?: number;
+      titleQuery?: string;
       /** Import 後に AI 解析を実行するかどうか（任意） */
       runAiAnalysisAfterImport?: boolean;
     };
@@ -233,9 +237,19 @@ Deno.serve(async (req) => {
       releaseTo,
       // ★ フロントで選択された AppID 一覧（任意）
       selectedAppIds,
+      // ★フィルタモード専用の AppID / タイトル検索
+      filterAppId,
+      titleQuery,
     } = body as any;
 
+    const hasFilterAppId =
+      typeof filterAppId === "number" && Number.isFinite(filterAppId);
+    const hasTitleQuery =
+      typeof titleQuery === "string" && titleQuery.trim().length > 0;
+
     if (
+      !hasFilterAppId &&
+      !hasTitleQuery &&
       recentDays == null &&
       minPositiveRatio == null &&
       minTotalReviews == null &&
@@ -265,6 +279,8 @@ Deno.serve(async (req) => {
       maxPrice,
       tags,
       limit,
+      filterAppId: hasFilterAppId ? filterAppId : undefined,
+      titleQuery: hasTitleQuery ? titleQuery.trim() : undefined,
       releaseFrom,
       releaseTo,
     });
@@ -363,7 +379,10 @@ type FilterParams = {
   maxPrice?: number;
   tags?: string[];
   limit?: number;
-  // ★ 追加: 発売年月フィルタ（"YYYY-MM" 形式）
+  // フィルタモード専用の AppID / タイトル検索
+  filterAppId?: number;
+  titleQuery?: string;
+  // 発売年月フィルタ（"YYYY-MM" 形式）
   releaseFrom?: string; // 例: "2017-01"
   releaseTo?: string; // 例: "2017-12"
 };
@@ -378,11 +397,10 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   const recentPlayers: number = 0; // steam_games には現状含めていないので 0 で初期化
 
   const price: number =
-    typeof row.price === "number" && Number.isFinite(row.price)
-      ? row.price
-      : 0; // USD (例: 19.99) ※セール適用後の現在価格
+    typeof row.price === "number" && Number.isFinite(row.price) ? row.price : 0; // USD (例: 19.99) ※セール適用後の現在価格
   const priceOriginal: number | null =
-    typeof row.price_original === "number" && Number.isFinite(row.price_original)
+    typeof row.price_original === "number" &&
+    Number.isFinite(row.price_original)
       ? row.price_original
       : typeof row.price === "number"
       ? row.price
@@ -393,9 +411,7 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
       ? row.discount_percent
       : 0;
   const isOnSale: boolean =
-    typeof row.is_on_sale === "boolean"
-      ? row.is_on_sale
-      : discountPercent > 0;
+    typeof row.is_on_sale === "boolean" ? row.is_on_sale : discountPercent > 0;
   const averagePlaytime: number = row.average_playtime ?? 0;
 
   const tags: string[] = Array.isArray(row.tags)
@@ -477,6 +493,7 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     averagePlaytime,
     lastUpdated: nowIso,
     tags,
+    genres: tags,
     steamUrl,
     reviewScoreDesc,
     screenshots,
@@ -710,7 +727,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       // 既に同じ appId の行があれば UPDATE、なければ INSERT
       const { data: existing, error: selectError } = await supabase
         .from("game_rankings_cache")
-        .select("id, data") // ★ 元は "id" だけだった所を変更
+        .select("id, data, tags") // ★ 元は "id" だけだった所を変更
         .eq("data->>appId", appIdStr)
         .maybeSingle();
 
@@ -756,6 +773,49 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         };
       }
 
+      // 🔽 ここから追加：検索・フィルタ用 tags を組み立てる
+
+      // ジャンルベースのタグ（RankingGame.genres があれば優先、なければ tags）
+      const baseGenreTags: string[] = Array.isArray(
+        (rankingGameForUpdate as any).genres
+      )
+        ? (rankingGameForUpdate as any).genres
+        : Array.isArray(rankingGameForUpdate.tags)
+        ? rankingGameForUpdate.tags
+        : [];
+
+      // 既存 JSON data 側に入っている tags（あれば保持）
+      const existingDataTags: string[] =
+        existing && existing.data && Array.isArray((existing.data as any).tags)
+          ? (existing.data as any).tags
+          : [];
+
+      // 既存カラム側の tags（将来手動で触っていた場合にも対応）
+      const existingColumnTags: string[] =
+        existing && Array.isArray((existing as any).tags)
+          ? ((existing as any).tags as string[])
+          : [];
+
+      const mergedTags = [
+        ...baseGenreTags,
+        ...existingDataTags,
+        ...existingColumnTags,
+      ];
+
+      const tagsForCache = Array.from(
+        new Set(
+          mergedTags
+            .map((t) => (typeof t === "string" ? t.trim() : ""))
+            .filter((t) => t.length > 0)
+        )
+      ).slice(0, 32); // 念のため上限 32 個
+
+      // RankingGame 側にも反映して、JSON の data.tags と揃える
+      rankingGameForUpdate = {
+        ...rankingGameForUpdate,
+        tags: tagsForCache,
+      };
+
       if (existing) {
         const { error: updateError } = await supabase
           .from("game_rankings_cache")
@@ -791,11 +851,16 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
             app_id: appId, // ← 追加
             title: rankingGame.title, // ← 追加
             price: rankingGame.price,
-            price_original:
-              rankingGame.priceOriginal ?? rankingGame.price,
+            price_original: rankingGame.priceOriginal ?? rankingGame.price,
             discount_percent: rankingGame.discountPercent ?? 0,
             is_on_sale: rankingGame.isOnSale ?? false,
-            data: rankingGame, // 既存 JSON
+            // 🔸 カラム側 tags
+            tags: baseTagsForInsert,
+            // 🔸 JSON 側 data.tags
+            data: {
+              ...rankingGame,
+              tags: baseTagsForInsert,
+            },
           });
 
         if (insertError) {
@@ -991,6 +1056,8 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
     maxPrice,
     tags,
     limit = 200,
+    filterAppId,
+    titleQuery,
     // ★ 追加
     releaseFrom,
     releaseTo,
@@ -1011,6 +1078,14 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
       `,
     { count: "exact" }
   );
+
+  if (filterAppId != null) {
+    query = query.eq("app_id", filterAppId);
+  }
+
+  if (titleQuery && titleQuery.trim().length > 0) {
+    query = query.ilike("title", `%${titleQuery.trim()}%`);
+  }
 
   // 直近◯日フィルタ（release_date 基準）
   if (recentDays && recentDays > 0) {

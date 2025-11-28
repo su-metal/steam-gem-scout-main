@@ -103,7 +103,18 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
     total_reviews: rankingGame.totalReviews,
     estimated_owners: rankingGame.estimatedOwners,
     average_playtime: rankingGame.averagePlaytime,
-    tags: rankingGame.tags,
+
+    // ❌ これまで: Steam のジャンルを tags に入れてしまっていた
+    // tags: rankingGame.tags,
+
+    // ✅ これから: Steam の genres は store_genres に保存
+    //    ・今回の fetch で genres が取れたらそれを優先
+    //    ・なければ既存行の store_genres を維持
+    store_genres:
+      rankingGame.tags && rankingGame.tags.length > 0
+        ? rankingGame.tags
+        : existing?.store_genres ?? [],
+
     screenshots:
       rankingGame.screenshots ?? (existing ? existing.screenshots : null),
     header_image:
@@ -127,7 +138,6 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
       rankingGame.isAvailableInStore ??
       (existing ? existing.is_available_in_store : true),
 
-    // 取得日時は基本 now。既存の値をそのまま使いたければ existing 側を優先してもよい
     last_steam_fetch_at: existing?.last_steam_fetch_at ?? nowIso,
   };
 
@@ -203,6 +213,77 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
 
   if (error) {
     console.error("steam_games upsert error", error);
+  }
+}
+
+// SteamSpy からタグを取得して steam_games に書き込む
+async function updateSteamSpyTagsForSteamGame(appId: number) {
+  try {
+    const res = await fetch(`${STEAMSPY_APP_DETAILS_URL}${appId}`);
+
+    // Cloudflare などで弾かれているパターン（今回の 403）は「タグ取得できなかった」としてスキップ
+    if (res.status === 403) {
+      console.warn(
+        "SteamSpy blocked this environment with 403. Skipping tags for appId:",
+        appId
+      );
+      return; // tags は空のまま（fallback）
+    }
+
+    if (!res.ok) {
+      console.error(
+        "SteamSpy fetch failed",
+        appId,
+        res.status,
+        await res.text().catch(() => "")
+      );
+      return;
+    }
+
+    const json = (await res.json()) as any;
+    const rawTags = json?.tags;
+
+    // tags がない / 想定外の場合は何もしない
+    if (!rawTags || typeof rawTags !== "object") {
+      console.log("No SteamSpy tags for appId", appId);
+      return;
+    }
+
+    // { "Indie": 400, "RPG": 150, ... } → 重み順にソートして上位 N 件だけ取り出す
+    const entries = Object.entries(rawTags).filter(
+      ([name, weight]) => typeof name === "string" && typeof weight === "number"
+    );
+
+    if (!entries.length) {
+      console.log("SteamSpy tags object is empty for appId", appId);
+      return;
+    }
+
+    const topTags = entries
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 8) // 上位 8 件だけを正規化タグとして使う（必要ならここは調整）
+      .map(([name]) => name);
+
+    const nowIso = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("steam_games")
+      .update({
+        steamspy_tags_raw: rawTags, // 生の {tag: weight} をそのまま保存
+        tags: topTags, // 正規化済みタグ（text[]）
+        steamspy_fetched_at: nowIso, // いつ取得したか
+      })
+      .eq("app_id", appId);
+
+    if (error) {
+      console.error(
+        "steam_games SteamSpy tags update error for appId",
+        appId,
+        error
+      );
+    }
+  } catch (e) {
+    console.error("SteamSpy tags fetch/update failed for appId", appId, e);
   }
 }
 
@@ -395,10 +476,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           continue;
         }
 
-        // ★ ここがポイント：
-        //   もう game_rankings_cache には一切触らず、
-        //   倉庫テーブル（steam_games）にだけ保存する
+        // 1) Steam ストア由来の情報を steam_games に upsert
         await upsertSteamGameFromRanking(rankingGame);
+
+        // 2) 既存の game_rankings_cache レコードがあれば analysis / gemLabel を更新
         await updateGameRankingsCacheFromRanking(rankingGame);
 
         results.push({ appId, status: "ok" });

@@ -356,7 +356,7 @@ export const SearchResultCard = ({
       className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md h-full flex flex-col"
       onClick={handleClick}
     >
-    
+
       <div className="flex flex-col gap-4 p-4 h-full">
         {/* Left: Header Image */}
         <div className="w-full">
@@ -443,32 +443,36 @@ export const SearchResultCard = ({
 
         </div>
 
-        {/* Stats only (Positive, Reviews, Price, Playtime) */}
-        <div className="flex justify-end">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <div className="text-muted-foreground">Positive</div>
-              <div className="font-semibold text-primary">
-                {positiveDisplay}%
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">Reviews</div>
-              <div className="font-semibold">
-                {totalReviews?.toLocaleString?.() ?? "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">Price</div>
-              <div className="font-semibold">{priceDisplay}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground">Playtime</div>
-              <div className="font-semibold">{playtimeDisplay}</div>
-            </div>
+        {/* Stats (Positive, Reviews, Price, Playtime) */}
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <span className="text-[11px] text-muted-foreground">Positive</span>
+            <span className="mt-0.5 text-sm font-semibold text-primary">
+              {positiveDisplay}%
+            </span>
+          </div>
+
+          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <span className="text-[11px] text-muted-foreground">Reviews</span>
+            <span className="mt-0.5 text-sm font-semibold">
+              {totalReviews?.toLocaleString?.() ?? "-"}
+            </span>
+          </div>
+
+          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <span className="text-[11px] text-muted-foreground">Price</span>
+            <span className="mt-0.5 text-sm font-semibold">
+              {priceDisplay}
+            </span>
+          </div>
+
+          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <span className="text-[11px] text-muted-foreground">Playtime</span>
+            <span className="mt-0.5 text-sm font-semibold">
+              {playtimeDisplay}
+            </span>
           </div>
         </div>
-
       </div>
     </Card>
   );

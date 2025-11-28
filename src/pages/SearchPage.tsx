@@ -59,14 +59,19 @@ interface RankingGame {
 // 定数
 // -----------------------------
 const GENRE_OPTIONS = [
+  "Action",
+  "Adventure",
   "Roguelike",
   "Deckbuilding",
   "RPG",
   "Puzzle",
   "Strategy",
+  "Sports",
+  "Racing",
   "Narrative",
   "Relaxing",
   "Horror",
+  "Casual",
   "Indie",
 ];
 
@@ -293,6 +298,27 @@ export default function SearchPage() {
         `After client filters (price<=${maxPrice}, reviews>=${minReviews}, playtime>=${minPlaytime}h): ${filtered.length} games`
       );
 
+      // --- クライアント側ソート（特に Mood Match 用） ---
+      if (selectedSort === "recommended") {
+        // Mood Match（moodScore が高い順）で並び替える
+        filtered = [...filtered].sort((a, b) => {
+          const scoreA =
+            a.moodScore ??
+            a.finalScore ??
+            a.analysis?.statGemScore ??
+            Number.NEGATIVE_INFINITY;
+          const scoreB =
+            b.moodScore ??
+            b.finalScore ??
+            b.analysis?.statGemScore ??
+            Number.NEGATIVE_INFINITY;
+          return scoreB - scoreA;
+        });
+      }
+      // 他の sort（positive-ratio / most-reviews / newest）は
+      // すでに search-games 側で並び替え済み想定なので、ここでは追加処理なし。
+
+
       setGames(filtered);
       toast({
         title: "Search complete",
@@ -386,13 +412,13 @@ export default function SearchPage() {
               </a>
             </Button>
 
-            <Button
+            {/* <Button
               variant="outline"
               asChild
               className="rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
             >
               <a href="/wishlist">Wishlist</a>
-            </Button>
+            </Button> */}
           </div>
         </div>
         {/* === Simple Filter Header (気分プリセット / 今日の気分) === */}
@@ -772,7 +798,7 @@ export default function SearchPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => {
-  
+
 
               return (
                 <div key={game.appId} className="relative h-full">

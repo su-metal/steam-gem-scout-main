@@ -57,6 +57,10 @@ export function ImportSteamGamesPage() {
   const [tagsText, setTagsText] = useState("");
   const [limit, setLimit] = useState("200");
 
+  // AppId / Title フィルター
+  const [filterAppId, setFilterAppId] = useState("");
+  const [filterTitle, setFilterTitle] = useState("");
+
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isFilterImporting, setIsFilterImporting] = useState(false);
   const [previewCandidates, setPreviewCandidates] = useState<
@@ -191,48 +195,88 @@ export function ImportSteamGamesPage() {
     }
   };
 
+
   // 条件インポート用のペイロードを組み立てる
   const buildFilterPayload = (dryRun: boolean) => {
     const payload: any = { dryRun };
 
-    const rd = Number(recentDays);
-    if (Number.isFinite(rd) && rd > 0) payload.recentDays = rd;
-
-    const pos = Number(minPositivePercent);
-    if (Number.isFinite(pos) && pos > 0) {
-      // DB の positive_ratio は 0–100 の数値なので、割らずにそのまま渡す
-      payload.minPositiveRatio = pos;
-    }
-
-    const minRev = Number(minTotalReviews);
-    if (Number.isFinite(minRev) && minRev > 0) payload.minTotalReviews = minRev;
-
-    const maxOwners = Number(maxEstimatedOwners);
-    if (Number.isFinite(maxOwners) && maxOwners > 0)
-      payload.maxEstimatedOwners = maxOwners;
-
-    const maxPrice = Number(maxPriceUsd);
-    if (Number.isFinite(maxPrice) && maxPrice > 0) {
-      // Edge Function 側も USD 単位で比較する
-      payload.maxPrice = maxPrice;
-    }
-
-    const lim = Number(limit);
-    if (Number.isFinite(lim) && lim > 0) payload.limit = lim;
-
+    // ---- まずは Tags / AppID / Title の入力を整理 ----
     const tags = tagsText
       .split(/[,、\s]+/)
       .map((t) => t.trim())
       .filter(Boolean);
-    if (tags.length > 0) payload.tags = tags;
 
-    // ★追加：本番インポート時かつチェックONのときだけフラグを付ける
+    const appIdNum = Number(filterAppId);
+    const hasAppId = Number.isFinite(appIdNum) && appIdNum > 0;
+
+    const titleQuery = filterTitle.trim();
+
+    const hasDirectFilters =
+      tags.length > 0 || hasAppId || titleQuery.length > 0;
+
+    // ====================================================
+    // A. Tags / AppID / Title のどれかが指定されている場合：
+    //    → Hidden Gem 用の数値条件は一切使わない「別軸検索モード」
+    // ====================================================
+    if (hasDirectFilters) {
+      if (tags.length > 0) {
+        payload.tags = tags;
+      }
+      if (hasAppId) {
+        payload.filterAppId = appIdNum;
+      }
+      if (titleQuery.length > 0) {
+        payload.titleQuery = titleQuery;
+      }
+
+      // Limit は「取得上限」でフィルタ条件ではないので、そのまま使う
+      const lim = Number(limit);
+      if (Number.isFinite(lim) && lim > 0) payload.limit = lim;
+    } else {
+      // ============================================
+      // B. 何も直接指定されていない場合：
+      //    → これまで通り Hidden Gem 用の数値条件で絞る
+      // ============================================
+      const rd = Number(recentDays);
+      if (Number.isFinite(rd) && rd > 0) payload.recentDays = rd;
+
+      const pos = Number(minPositivePercent);
+      if (Number.isFinite(pos) && pos > 0) {
+        // DB の positive_ratio は 0–100 の数値なので、割らずにそのまま渡す
+        payload.minPositiveRatio = pos;
+      }
+
+      const minRev = Number(minTotalReviews);
+      if (Number.isFinite(minRev) && minRev > 0) {
+        payload.minTotalReviews = minRev;
+      }
+
+      const maxOwners = Number(maxEstimatedOwners);
+      if (Number.isFinite(maxOwners) && maxOwners > 0) {
+        payload.maxEstimatedOwners = maxOwners;
+      }
+
+      const maxPrice = Number(maxPriceUsd);
+      if (Number.isFinite(maxPrice) && maxPrice > 0) {
+        // Edge Function 側も USD 単位で比較する
+        payload.maxPrice = maxPrice;
+      }
+
+      const lim = Number(limit);
+      if (Number.isFinite(lim) && lim > 0) payload.limit = lim;
+
+      // ※ Hidden Gem 条件モードでは Tags を使わない方針なら
+      //    ここで tags を payload に入れない（今回の要件どおりなら未指定なので実質何もしない）
+    }
+
+    // ★本番インポート時かつチェックONのときだけフラグを付ける
     if (!dryRun && runAiAfterImport) {
       payload.runAiAnalysisAfterImport = true;
     }
 
     return payload;
   };
+
 
   const handlePreviewFilterImport = async () => {
     const payload = buildFilterPayload(true);
@@ -518,6 +562,7 @@ export function ImportSteamGamesPage() {
               />
             </div>
 
+            {/* ---- ここから「別軸」フィルター群 ---- */}
             <div className="space-y-1 md:col-span-3">
               <label className="text-xs font-medium">
                 Tags (comma or space separated, optional)
@@ -526,6 +571,33 @@ export function ImportSteamGamesPage() {
                 value={tagsText}
                 onChange={(e) => setTagsText(e.target.value)}
                 placeholder="Indie, Roguelike, Deckbuilder..."
+              />
+              <p className="text-[11px] text-muted-foreground">
+                ※ Tags / AppID / Title のいずれかを指定すると、上の Hidden Gem 条件
+                （Recent days / Min positive / Min reviews / Max owners / Max price）
+                は無視され、タグ等だけで検索します。
+              </p>
+            </div>
+
+            <div className="space-y-1 md:col-span-3">
+              <label className="text-xs font-medium">
+                Filter by AppID (optional)
+              </label>
+              <Input
+                value={filterAppId}
+                onChange={(e) => setFilterAppId(e.target.value)}
+                placeholder="Exact AppID, e.g. 526870"
+              />
+            </div>
+
+            <div className="space-y-1 md:col-span-3">
+              <label className="text-xs font-medium">
+                Filter by Title (contains, optional)
+              </label>
+              <Input
+                value={filterTitle}
+                onChange={(e) => setFilterTitle(e.target.value)}
+                placeholder="e.g. satisfactory, factory"
               />
             </div>
           </div>
