@@ -23,12 +23,7 @@ interface HiddenGemAnalysis {
 }
 
 
-type GemLabel =
-  | "Hidden Gem"
-  | "Improved Hidden Gem"
-  | "Emerging Gem"
-  | "Highly rated but not hidden"
-  | "Not a hidden gem";
+
 
 
 interface RankingGame {
@@ -48,8 +43,8 @@ interface RankingGame {
   steamUrl: string;
   reviewScoreDesc: string;
   analysis: HiddenGemAnalysis;
-  gemLabel: GemLabel;
-  isStatisticallyHidden: boolean;
+  // gemLabel: GemLabel;
+  // isStatisticallyHidden: boolean;
   moodScore?: number;
   finalScore?: number;
   // Edge Function 側で compositeScore を付ける予定（ここでは未使用）
@@ -139,7 +134,7 @@ const STORAGE_KEYS = {
   minPlaytime: "rankings_minPlaytime",
 } as const;
 
-export default function Rankings() {
+export default function SearchPage() {
   const [games, setGames] = useState<RankingGame[]>([]);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -777,55 +772,11 @@ export default function Rankings() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => {
-              // --- ここから下は元のロジックそのまま ------------------
-              const explicitGemLabel = game.gemLabel as GemLabel | undefined;
-
-              const aiVerdict: "Yes" | "No" | "Unknown" =
-                game.analysis?.hiddenGemVerdict ?? "Unknown";
-
-              const statGemScore =
-                typeof game.analysis?.statGemScore === "number"
-                  ? game.analysis.statGemScore
-                  : null;
-
-              const isStatisticallyHidden =
-                game.isStatisticallyHidden === true;
-
-              const qualifiesAsHiddenGem =
-                isStatisticallyHidden ||
-                aiVerdict === "Yes" ||
-                (statGemScore !== null && statGemScore >= 8);
-
-              const derivedGemLabel: GemLabel | undefined =
-                explicitGemLabel ??
-                (qualifiesAsHiddenGem ? "Hidden Gem" : undefined);
-
-              const gemBadgeClass =
-                derivedGemLabel === "Hidden Gem" ||
-                  derivedGemLabel === "Improved Hidden Gem"
-                  ? "bg-gradient-to-r from-pink-500 to-fuchsia-500 text-slate-950 shadow-[0_10px_30px_rgba(0,0,0,0.7)]"
-                  : derivedGemLabel === "Highly rated but not hidden"
-                    ? "bg-primary/20 text-primary border border-primary/40"
-                    : "bg-muted text-muted-foreground";
+  
 
               return (
                 <div key={game.appId} className="relative h-full">
                   {/* Gem Label Badge */}
-                  {derivedGemLabel && (
-                    <div className="absolute -top-3 left-6 z-10">
-                      <span
-                        className={`inline-block rounded-full px-4 py-1 text-xs font-semibold ${gemBadgeClass}`}
-                      >
-                        {derivedGemLabel}
-                        {isStatisticallyHidden && (
-                          <span className="ml-2 text-[10px] opacity-70">
-                            (&lt;200 reviews or &lt;50K owners)
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  )}
-
                   <SearchResultCard
                     appId={game.appId}
                     title={game.title}

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { DevControls } from "@/components/DevControls";
 import Index from "./pages/Index";
-import Rankings from "./pages/Rankings";
+import SearchPage from "./pages/SearchPage";
 import GameDetail from "./pages/GameDetail";
 import Wishlist from "./pages/Wishlist";
 import NotFound from "./pages/NotFound";
@@ -23,7 +23,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/search" element={<Rankings />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/game/:appId" element={<GameDetail />} />
           <Route path="/wishlist" element={<Wishlist />} />
 

@@ -1,8 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
-import { Heart } from "lucide-react";
-import { useWishlist } from "@/hooks/useWishlist";
+
 
 // Returns the tags that should be displayed on the card
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
@@ -117,9 +116,6 @@ export const SearchResultCard = ({
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
-
-  const { isWished, toggle } = useWishlist();
-  const isInWishlist = isWished(appIdStr);
 
   const handleClick = () => {
     navigate(`/game/${appId}`, {
@@ -360,24 +356,7 @@ export const SearchResultCard = ({
       className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md h-full flex flex-col"
       onClick={handleClick}
     >
-      {/* Wishlist heart button */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation(); // prevent navigation when clicking the heart
-          toggle(appIdStr);
-        }}
-        className="absolute top-3 right-3 rounded-full p-2 bg-background/80 hover:bg-background shadow-sm border border-border/50"
-        aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
-      >
-        <Heart
-          className={`w-4 h-4 ${isInWishlist
-            ? "fill-red-500 text-red-500"
-            : "text-muted-foreground"
-            }`}
-        />
-      </button>
-
+    
       <div className="flex flex-col gap-4 p-4 h-full">
         {/* Left: Header Image */}
         <div className="w-full">

@@ -30,7 +30,7 @@ export function useGameAnalysis(game: RankingGameData | null): UseGameAnalysisRe
       setIsAnalyzing(true);
       setError(null);
 
-      // ★ analyze-hidden-gem の GameData に合わせて payload を組む
+      // ★ analyze-game の GameData に合わせて payload を組む
       const payload = {
         title: game.title,
         appId: game.appId,
@@ -47,21 +47,21 @@ export function useGameAnalysis(game: RankingGameData | null): UseGameAnalysisRe
       };
 
       const { data, error } = await supabase.functions.invoke<HiddenGemAnalysis>(
-        "analyze-hidden-gem",
+        "analyze-game",
         { body: payload }
       );
 
       if (cancelled) return;
 
       if (error) {
-        console.error("analyze-hidden-gem error:", error);
+        console.error("analyze-game error:", error);
         setError(error.message ?? "Failed to analyze game");
         setIsAnalyzing(false);
         return;
       }
 
       if (!data) {
-        setError("No analysis returned from analyze-hidden-gem");
+        setError("No analysis returned from analyze-game");
         setIsAnalyzing(false);
         return;
       }

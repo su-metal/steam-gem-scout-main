@@ -2,7 +2,7 @@
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-const ANALYZE_HIDDEN_GEM_CORS_HEADERS = {
+const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
@@ -477,7 +477,7 @@ function formatReviewBlock(
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: ANALYZE_HIDDEN_GEM_CORS_HEADERS });
+    return new Response(null, { headers: ANALYZE_GAME_CORS_HEADERS });
   }
 
   let fallbackTitle = "Unknown Game";
@@ -514,7 +514,7 @@ Deno.serve(async (req) => {
         JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
         {
           status: 500,
-          headers: ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+          headers: ANALYZE_GAME_CORS_HEADERS,
         }
       );
     }
@@ -710,7 +710,7 @@ IMPORTANT:
             {
               status: 429,
               headers: {
-                ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+                ...ANALYZE_GAME_CORS_HEADERS,
                 "Content-Type": "application/json",
               },
             }
@@ -728,7 +728,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+            ...ANALYZE_GAME_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -745,7 +745,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+            ...ANALYZE_GAME_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -833,7 +833,7 @@ IMPORTANT:
         return new Response(JSON.stringify(fallback), {
           status: 200,
           headers: {
-            ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+            ...ANALYZE_GAME_CORS_HEADERS,
             "Content-Type": "application/json",
           },
         });
@@ -842,7 +842,7 @@ IMPORTANT:
       return new Response(JSON.stringify(analysis), {
         status: 200,
         headers: {
-          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+          ...ANALYZE_GAME_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       });
@@ -874,14 +874,14 @@ IMPORTANT:
       return new Response(JSON.stringify(fallback), {
         status: 200,
         headers: {
-          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+          ...ANALYZE_GAME_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       });
     }
   } catch (error) {
     // Only unrecoverable server-side issues should return 500
-    console.error("Error in analyze-hidden-gem:", error);
+    console.error("Error in analyze-game:", error);
     return new Response(
       JSON.stringify({
         error:
@@ -890,7 +890,7 @@ IMPORTANT:
       {
         status: 500,
         headers: {
-          ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+          ...ANALYZE_GAME_CORS_HEADERS,
           "Content-Type": "application/json",
         },
       }
@@ -898,12 +898,12 @@ IMPORTANT:
   }
 
   // 型システム対策用のフォールバック（ここには通常到達しない）
-  return new Response(
-    JSON.stringify({ error: "Unhandled request in analyze-hidden-gem" }),
+    return new Response(
+    JSON.stringify({ error: "Unhandled request in analyze-game" }),
     {
       status: 500,
       headers: {
-        ...ANALYZE_HIDDEN_GEM_CORS_HEADERS,
+        ...ANALYZE_GAME_CORS_HEADERS,
         "Content-Type": "application/json",
       },
     }

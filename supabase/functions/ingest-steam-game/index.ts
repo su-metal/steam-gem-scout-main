@@ -508,7 +508,7 @@ async function analyzeGameWithAI(params: {
     }
   }
 
-  console.log("History signal (search-hidden-gems)", {
+  console.log("History signal (ingest-steam-game)", {
     appId,
     earlyReviewCount: earlyReviewCountFromStats,
     recentReviewCount: recentReviewCountFromStats,
@@ -1012,7 +1012,7 @@ async function fetchAndBuildRankingGame(
   console.log("Sample reviews fetched", appId, sampleReviews.length);
 
   // ★ Import 時点では AI 解析は走らせない。
-  //    GameDetail 側の analyze-hidden-gem が必要に応じて解析を行う前提。
+  //    GameDetail 側の analyze-game が必要に応じて解析を行う前提。
   const analysis: GameAnalysis = {
     hiddenGemVerdict: "Unknown",
     summary: "",
@@ -1044,7 +1044,7 @@ async function fetchAndBuildRankingGame(
     gemLabel = "Not a hidden gem";
   }
 
-  // trend / improved などは、GameDetail 側の analyze-hidden-gem で
+  // trend / improved などは、GameDetail 側の analyze-game で
   // AI 解析したときにだけ付与される前提。
   const statGemScore = computeStatGemScore({
     positiveRatio,
@@ -1114,7 +1114,7 @@ async function fetchAndBuildRankingGame(
     screenshots,
     // ★ ここがポイント：
     //   DB にはダミー analysis を保存せず、null で渡す。
-    //   実際の AI 解析結果は import-steam-games → analyze-hidden-gem 側で埋める。
+    //   実際の AI 解析結果は import-steam-games → analyze-game 側で埋める。
     analysis: null,
     gemLabel,
     isStatisticallyHidden,

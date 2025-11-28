@@ -85,7 +85,7 @@ export default function Wishlist() {
   const fetchWishlistGames = async (wishlistIds: (string | number)[]) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("search-hidden-gems", {
+      const { data, error } = await supabase.functions.invoke("ingest-steam-game", {
         body: {
           wishlistIds,
         },

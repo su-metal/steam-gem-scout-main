@@ -86,10 +86,10 @@ export function ImportSteamGamesPage() {
       .filter((n) => Number.isInteger(n) && n > 0);
   };
 
-  // 既存：1つの AppID を search-hidden-gems に投げる
+  // 既存：1つの AppID を ingest-steam-game に投げる
   const runImportForAppId = async (appId: number) => {
     const { data, error } = await supabase.functions.invoke<ImportApiResponse>(
-      "search-hidden-gems",
+      "ingest-steam-game",
       {
         body: { appId },
       }
@@ -244,7 +244,7 @@ export function ImportSteamGamesPage() {
     try {
       const { data, error } =
         await supabase.functions.invoke<FilterImportResponse>(
-          "import-steam-games",
+          "publish-steam-games",
           { body: payload }
         );
 
@@ -261,7 +261,7 @@ export function ImportSteamGamesPage() {
       if (!data) {
         toast({
           title: "Preview failed",
-          description: "No response from import-steam-games.",
+          description: "No response from publish-steam-games.",
           variant: "destructive",
         });
         return;
@@ -319,7 +319,7 @@ export function ImportSteamGamesPage() {
     try {
       const { data, error } =
         await supabase.functions.invoke<FilterImportResponse>(
-          "import-steam-games",
+          "publish-steam-games",
           { body: payload }
         );
 
@@ -336,7 +336,7 @@ export function ImportSteamGamesPage() {
       if (!data) {
         toast({
           title: "Import failed",
-          description: "No response from import-steam-games.",
+          description: "No response from publish-steam-games.",
           variant: "destructive",
         });
         return;
@@ -393,7 +393,7 @@ export function ImportSteamGamesPage() {
           <h2 className="text-lg font-semibold">Single AppID Import</h2>
           <p className="text-sm text-muted-foreground">
             Enter a single Steam AppID to import one game (via{" "}
-            <code>search-hidden-gems</code>).
+            <code>ingest-steam-game</code>).
           </p>
 
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
@@ -417,7 +417,7 @@ export function ImportSteamGamesPage() {
           <p className="text-sm text-muted-foreground mb-2">
             Paste multiple Steam AppIDs separated by spaces, commas or new
             lines. They will be imported one by one (via{" "}
-            <code>search-hidden-gems</code>).
+            <code>ingest-steam-game</code>).
           </p>
 
           <Textarea
@@ -437,7 +437,7 @@ export function ImportSteamGamesPage() {
         {/* Filter-based Import (NEW) */}
         <div className="space-y-4 p-4 md:p-6 bg-card rounded-lg border">
           <h2 className="text-lg font-semibold">
-            Auto Import by Filters (via <code>import-steam-games</code>)
+            Auto Import by Filters (via <code>publish-steam-games</code>)
           </h2>
           <p className="text-sm text-muted-foreground mb-2">
             Use your default Hidden Gem criteria to find candidate games from{" "}

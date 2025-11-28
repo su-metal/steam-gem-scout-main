@@ -1,4 +1,4 @@
-// supabase/functions/import-steam-games/index.ts
+// supabase/functions/publish-steam-games/index.ts
 // Steam の AppID を指定して、game_rankings_cache に upsert する Edge Function
 // 単発 (appId) / 複数 (appIds) 両対応
 // @ts-nocheck
@@ -33,7 +33,7 @@ type Analysis = {
 
   // 既存のフィールド（currentStateSummary など）は
   // Analysis 型ではなく HiddenGemAnalysis 側に定義しているので、
-  // import-steam-games 側はここまででOK。
+  // publish-steam-games 側はここまででOK。
 };
 
 type RankingGame = {
@@ -128,11 +128,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
 
-// ★ 追加: analyze-hidden-gem のエンドポイント
-const ANALYZE_HIDDEN_GEM_URL = `${SUPABASE_URL.replace(
+// ★ 追加: analyze-game のエンドポイント
+const ANALYZE_GAME_URL = `${SUPABASE_URL.replace(
   /\/+$/,
   ""
-)}/functions/v1/analyze-hidden-gem`;
+)}/functions/v1/analyze-game`;
 
 // Supabase サーバーサイドクライアント
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -192,11 +192,11 @@ Deno.serve(async (req) => {
 
       if (runAiAnalysisAfterImport && appIds.length > 0) {
         try {
-          console.log("[import-steam-games] Running AI analysis for", appIds);
+          console.log("[publish-steam-games] Running AI analysis for", appIds);
           await runAiAnalysisForAppIds(appIds);
         } catch (e) {
           console.error(
-            "[import-steam-games] runAiAnalysisForAppIds failed",
+            "[publish-steam-games] runAiAnalysisForAppIds failed",
             e
           );
         }
@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
       headers: corsHeaders,
     });
   } catch (e) {
-    console.error("Unexpected error in import-steam-games", e);
+    console.error("Unexpected error in publish-steam-games", e);
     return new Response(
       JSON.stringify({
         error: "Unexpected error",
@@ -556,7 +556,7 @@ async function fetchSteamReviewsForAnalysis(
   const res = await fetch(url);
   if (!res.ok) {
     console.warn(
-      "[import-steam-games] failed to fetch reviews from Steam",
+      "[publish-steam-games] failed to fetch reviews from Steam",
       appId,
       res.status
     );
@@ -696,7 +696,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         }
       } catch (e) {
         console.warn(
-          "[import-steam-games] failed to fetch reviews for appId",
+          "[publish-steam-games] failed to fetch reviews for appId",
           appId,
           e
         );
@@ -825,7 +825,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 }
 
 /**
- * Import 済みの appId 群に対して analyze-hidden-gem を実行し、
+ * Import 済みの appId 群に対して analyze-game を実行し、
  * game_rankings_cache.data.analysis / gemLabel を更新する。
  *
  * - 既に analysis が入っている場合はスキップ
@@ -883,7 +883,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const payload = currentData;
 
-      const res = await fetch(ANALYZE_HIDDEN_GEM_URL, {
+      const res = await fetch(ANALYZE_GAME_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -895,7 +895,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       if (!res.ok) {
         console.error(
-          "runAiAnalysisForAppIds: analyze-hidden-gem failed for appId",
+          "runAiAnalysisForAppIds: analyze-game failed for appId",
           appId,
           await res.text()
         );

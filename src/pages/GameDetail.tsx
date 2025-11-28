@@ -66,7 +66,7 @@ interface AnalysisData {
   | null;
   hasImprovedSinceLaunch?: boolean | null;
 
-  // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-hidden-gem から来る）
+  // ★ 追加: 「現在の状態」「過去の問題」の信頼度（analyze-game から来る）
   currentStateReliability?: "high" | "medium" | "low" | null;
   historicalIssuesReliability?: "high" | "medium" | "low" | null;
 
@@ -157,7 +157,7 @@ export default function GameDetail() {
   const [invalidMediaSrcs, setInvalidMediaSrcs] = useState<string[]>([]);
 
 
-  // ★ 追加: analyze-hidden-gem の結果と状態
+  // ★ 追加: analyze-game の結果と状態
   const [remoteAnalysis, setRemoteAnalysis] = useState<AnalysisData | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -198,7 +198,7 @@ export default function GameDetail() {
       setIsAnalyzing(true);
       setAnalysisError(null);
 
-      // GameDetailState から analyze-hidden-gem に渡すための GameData を組み立て
+      // GameDetailState から analyze-game に渡すための GameData を組み立て
       const source = game.gameData ?? {
         appId: (game.appId as number) || 0,
         title: game.title || "Unknown Game",
@@ -230,14 +230,14 @@ export default function GameDetail() {
       };
 
       const { data, error } = await supabase.functions.invoke<AnalysisData>(
-        "analyze-hidden-gem",
+        "analyze-game",
         { body: payload }
       );
 
       if (cancelled) return;
 
       if (error) {
-        console.error("analyze-hidden-gem error:", error);
+        console.error("analyze-game error:", error);
         setAnalysisError(error.message ?? "AI解析に失敗しました");
         setIsAnalyzing(false);
         return;
@@ -249,7 +249,7 @@ export default function GameDetail() {
         return;
       }
 
-      // ★ analyze-hidden-gem から返ってきた HiddenGemAnalysis をそのまま反映
+      // ★ analyze-game から返ってきた HiddenGemAnalysis をそのまま反映
       setRemoteAnalysis(data);
       setIsAnalyzing(false);
     };
@@ -345,7 +345,7 @@ export default function GameDetail() {
       game.hasImprovedSinceLaunch,
   };
 
-  // ★ analyze-hidden-gem の結果があれば、それを最優先で使う
+  // ★ analyze-game の結果があれば、それを最優先で使う
   const analysisData: AnalysisData = remoteAnalysis ?? baseAnalysisData;
 
 

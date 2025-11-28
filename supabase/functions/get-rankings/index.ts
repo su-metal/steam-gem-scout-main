@@ -251,7 +251,7 @@ Deno.serve(async (req) => {
 
         // Step 3: Analyze with AI
         const { data: analysis, error: analysisError } =
-          await supabase.functions.invoke("analyze-hidden-gem", {
+          await supabase.functions.invoke("analyze-game", {
             body: {
               title: gameData.title,
               positiveRatio: gameData.positiveRatio,
