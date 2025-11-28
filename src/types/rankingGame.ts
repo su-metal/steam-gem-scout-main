@@ -40,6 +40,9 @@ export interface RankingGameData {
   estimatedOwners: number;
   recentPlayers: number;
   price: number; // ドル単位
+  priceOriginal: number | null;
+  discountPercent: number;
+  isOnSale: boolean;
   averagePlaytime: number; // 分単位
   lastUpdated: string; // ISO
   tags: string[];

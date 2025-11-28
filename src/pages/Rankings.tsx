@@ -39,6 +39,9 @@ interface RankingGame {
   estimatedOwners: number;
   recentPlayers: number;
   price: number; // セント単位
+  priceOriginal?: number | null;
+  discountPercent?: number;
+  isOnSale?: boolean;
   averagePlaytime: number;
   lastUpdated: string;
   tags: string[];

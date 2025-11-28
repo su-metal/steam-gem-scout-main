@@ -14,6 +14,9 @@ interface RankingGame {
   estimatedOwners: number;
   recentPlayers: number;
   price: number; // cents
+  priceOriginal?: number | null;
+  discountPercent?: number;
+  isOnSale?: boolean;
   averagePlaytime: number; // minutes
   lastUpdated: string;
   tags: string[];
@@ -50,6 +53,32 @@ const normalizeCacheRow = (row: any): RankingGame => {
       ? payload.header_image
       : null;
 
+  const normalizedPrice =
+    typeof payload.price === "number" && Number.isFinite(payload.price)
+      ? payload.price
+      : 0;
+  const priceOriginal =
+    typeof payload.priceOriginal === "number" && Number.isFinite(payload.priceOriginal)
+      ? payload.priceOriginal
+      : typeof payload.price_original === "number" &&
+        Number.isFinite(payload.price_original)
+      ? payload.price_original
+      : normalizedPrice;
+  const discountPercent =
+    typeof payload.discountPercent === "number" &&
+    Number.isFinite(payload.discountPercent)
+      ? payload.discountPercent
+      : typeof payload.discount_percent === "number" &&
+        Number.isFinite(payload.discount_percent)
+      ? payload.discount_percent
+      : 0;
+  const isOnSale =
+    typeof payload.isOnSale === "boolean"
+      ? payload.isOnSale
+      : typeof payload.is_on_sale === "boolean"
+      ? payload.is_on_sale
+      : discountPercent > 0;
+
   return {
     appId: payload.appId ?? row?.app_id ?? 0,
     title: payload.title ?? "Unknown title",
@@ -57,7 +86,10 @@ const normalizeCacheRow = (row: any): RankingGame => {
     totalReviews: payload.totalReviews ?? 0,
     estimatedOwners: payload.estimatedOwners ?? 0,
     recentPlayers: payload.recentPlayers ?? 0,
-    price: payload.price ?? 0,
+    price: normalizedPrice,
+    priceOriginal,
+    discountPercent,
+    isOnSale,
     averagePlaytime: payload.averagePlaytime ?? 0,
     lastUpdated: payload.lastUpdated ?? row?.updated_at ?? "",
     tags: payload.tags ?? [],

@@ -1,22 +1,62 @@
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
-
+// @ts-ignore - Supabase Edge Runtime では Deno 形式のリモート import をサポートする
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
+
+// Supabase Edge Runtime が提供する Deno グローバルの簡易型（VSCode 用）
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void;
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 // Central list of candidate games - focused on hidden/underrated indie titles (2021-2025)
 const CANDIDATE_GAMES = [
-  { appId: 1408720, title: "Dome Keeper", tags: ["Roguelike", "Mining", "Indie"] },
-  { appId: 1679690, title: "Cobalt Core", tags: ["Deckbuilding", "Roguelike", "Indie"] },
-  { appId: 1324680, title: "Cassette Beasts", tags: ["RPG", "Creature Collector", "Indie"] },
-  { appId: 1785150, title: "ANIMAL WELL", tags: ["Metroidvania", "Puzzle", "Indie"] },
-  { appId: 2566630, title: "Pepper Grinder", tags: ["Action", "Platformer", "Indie"] },
-  { appId: 2379780, title: "Balatro", tags: ["Card Game", "Roguelike", "Indie"] },
-  { appId: 1455840, title: "Dorfromantik", tags: ["Puzzle", "Relaxing", "Strategy"] },
-  { appId: 1578650, title: "Before Your Eyes", tags: ["Narrative", "Emotional", "Indie"] },
+  {
+    appId: 1408720,
+    title: "Dome Keeper",
+    tags: ["Roguelike", "Mining", "Indie"],
+  },
+  {
+    appId: 1679690,
+    title: "Cobalt Core",
+    tags: ["Deckbuilding", "Roguelike", "Indie"],
+  },
+  {
+    appId: 1324680,
+    title: "Cassette Beasts",
+    tags: ["RPG", "Creature Collector", "Indie"],
+  },
+  {
+    appId: 1785150,
+    title: "ANIMAL WELL",
+    tags: ["Metroidvania", "Puzzle", "Indie"],
+  },
+  {
+    appId: 2566630,
+    title: "Pepper Grinder",
+    tags: ["Action", "Platformer", "Indie"],
+  },
+  {
+    appId: 2379780,
+    title: "Balatro",
+    tags: ["Card Game", "Roguelike", "Indie"],
+  },
+  {
+    appId: 1455840,
+    title: "Dorfromantik",
+    tags: ["Puzzle", "Relaxing", "Strategy"],
+  },
+  {
+    appId: 1578650,
+    title: "Before Your Eyes",
+    tags: ["Narrative", "Emotional", "Indie"],
+  },
 ];
 
 // Cache freshness window (in hours)
@@ -53,7 +93,10 @@ interface HiddenGemAnalysis {
   aiError?: boolean;
 }
 
-type GemLabel = "Hidden Gem" | "Highly rated but not hidden" | "Not a hidden gem";
+type GemLabel =
+  | "Hidden Gem"
+  | "Highly rated but not hidden"
+  | "Not a hidden gem";
 
 interface RankingGame {
   appId: number;
@@ -63,6 +106,9 @@ interface RankingGame {
   estimatedOwners: number;
   recentPlayers: number;
   price: number;
+  priceOriginal?: number | null;
+  discountPercent?: number;
+  isOnSale?: boolean;
   averagePlaytime: number;
   lastUpdated: string;
   tags: string[];
@@ -120,7 +166,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("Fetching rankings for", CANDIDATE_GAMES.length, "games with filters - recentDays:", RECENT_DAYS);
+    console.log(
+      "Fetching rankings for",
+      CANDIDATE_GAMES.length,
+      "games with filters - recentDays:",
+      RECENT_DAYS
+    );
 
     const rankings: RankingGame[] = [];
     let cacheHits = 0;
@@ -140,16 +191,25 @@ Deno.serve(async (req) => {
 
         // Check if cache is fresh
         if (cachedData) {
-          const cacheAge = Date.now() - new Date(cachedData.updated_at).getTime();
+          const cacheAge =
+            Date.now() - new Date(cachedData.updated_at).getTime();
           const cacheAgeHours = cacheAge / (1000 * 60 * 60);
 
           if (cacheAgeHours < CACHE_MAX_AGE_HOURS) {
-            console.log(`✓ ${game.title}: Loaded from cache (age: ${cacheAgeHours.toFixed(1)}h)`);
+            console.log(
+              `✓ ${game.title}: Loaded from cache (age: ${cacheAgeHours.toFixed(
+                1
+              )}h)`
+            );
             rankings.push(cachedData.data as RankingGame);
             cacheHits++;
             continue; // Skip fetching and analysis
           } else {
-            console.log(`⟳ ${game.title}: Cache stale (age: ${cacheAgeHours.toFixed(1)}h), refreshing...`);
+            console.log(
+              `⟳ ${game.title}: Cache stale (age: ${cacheAgeHours.toFixed(
+                1
+              )}h), refreshing...`
+            );
           }
         } else {
           console.log(`⟳ ${game.title}: No cache found, fetching...`);
@@ -158,15 +218,16 @@ Deno.serve(async (req) => {
         cacheMisses++;
 
         // Step 2: Fetch Steam data
-        const { data: steamData, error: steamError } = await supabase.functions.invoke(
-          "fetch-steam-game",
-          {
+        const { data: steamData, error: steamError } =
+          await supabase.functions.invoke("fetch-steam-game", {
             body: { appId: game.appId },
-          }
-        );
+          });
 
         if (steamError || !steamData) {
-          console.error(`Failed to fetch Steam data for ${game.title}:`, steamError);
+          console.error(
+            `Failed to fetch Steam data for ${game.title}:`,
+            steamError
+          );
           continue;
         }
 
@@ -189,9 +250,8 @@ Deno.serve(async (req) => {
         }
 
         // Step 3: Analyze with AI
-        const { data: analysis, error: analysisError } = await supabase.functions.invoke(
-          "analyze-hidden-gem",
-          {
+        const { data: analysis, error: analysisError } =
+          await supabase.functions.invoke("analyze-hidden-gem", {
             body: {
               title: gameData.title,
               positiveRatio: gameData.positiveRatio,
@@ -206,8 +266,7 @@ Deno.serve(async (req) => {
               steamUrl: gameData.steamUrl,
               reviewScoreDesc: gameData.reviewScoreDesc,
             },
-          }
-        );
+          });
 
         if (analysisError || !analysis) {
           console.error(`Failed to analyze ${game.title}:`, analysisError);
@@ -247,13 +306,11 @@ Deno.serve(async (req) => {
         rankings.push(rankingGame);
 
         // Step 5: Update cache
-        await supabase
-          .from("game_rankings_cache")
-          .upsert({
-            app_id: game.appId,
-            data: rankingGame,
-            updated_at: new Date().toISOString(),
-          });
+        await supabase.from("game_rankings_cache").upsert({
+          app_id: game.appId,
+          data: rankingGame,
+          updated_at: new Date().toISOString(),
+        });
 
         console.log(`✓ ${game.title}: ${gemLabel} (cached)`);
       } catch (gameError) {
@@ -261,7 +318,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Successfully processed ${rankings.length} games (${cacheHits} from cache, ${cacheMisses} refreshed)`);
+    console.log(
+      `Successfully processed ${rankings.length} games (${cacheHits} from cache, ${cacheMisses} refreshed)`
+    );
 
     // Apply recency filter at response time (if provided)
     let filtered = rankings;
@@ -270,7 +329,7 @@ Deno.serve(async (req) => {
       const now = Date.now();
       const cutoff = now - RECENT_DAYS * 24 * 60 * 60 * 1000;
 
-      filtered = rankings.filter(game => {
+      filtered = rankings.filter((game) => {
         if (!game.releaseDate) {
           // If we don't know the date, consider it NOT recent
           return false;
@@ -283,7 +342,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`Returning ${filtered.length} games after applying filters (recentDays: ${RECENT_DAYS})`);
+    console.log(
+      `Returning ${filtered.length} games after applying filters (recentDays: ${RECENT_DAYS})`
+    );
 
     return new Response(JSON.stringify(filtered), {
       headers: {
@@ -295,7 +356,8 @@ Deno.serve(async (req) => {
     console.error("Error in get-rankings:", error);
     return new Response(
       JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error occurred",
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
       }),
       {
         status: 500,

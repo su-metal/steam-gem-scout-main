@@ -44,6 +44,9 @@ type RankingGame = {
   estimatedOwners: number;
   recentPlayers: number;
   price: number;
+  priceOriginal: number | null;
+  discountPercent: number;
+  isOnSale: boolean;
   averagePlaytime: number;
   lastUpdated: string;
   tags: string[];
@@ -374,7 +377,25 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
   const estimatedOwners: number = row.estimated_owners ?? 0;
   const recentPlayers: number = 0; // steam_games には現状含めていないので 0 で初期化
 
-  const price: number = row.price ?? 0; // USD (例: 19.99)
+  const price: number =
+    typeof row.price === "number" && Number.isFinite(row.price)
+      ? row.price
+      : 0; // USD (例: 19.99) ※セール適用後の現在価格
+  const priceOriginal: number | null =
+    typeof row.price_original === "number" && Number.isFinite(row.price_original)
+      ? row.price_original
+      : typeof row.price === "number"
+      ? row.price
+      : null;
+  const discountPercent: number =
+    typeof row.discount_percent === "number" &&
+    Number.isFinite(row.discount_percent)
+      ? row.discount_percent
+      : 0;
+  const isOnSale: boolean =
+    typeof row.is_on_sale === "boolean"
+      ? row.is_on_sale
+      : discountPercent > 0;
   const averagePlaytime: number = row.average_playtime ?? 0;
 
   const tags: string[] = Array.isArray(row.tags)
@@ -450,6 +471,9 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     estimatedOwners,
     recentPlayers,
     price,
+    priceOriginal,
+    discountPercent,
+    isOnSale,
     averagePlaytime,
     lastUpdated: nowIso,
     tags,
@@ -610,6 +634,9 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         total_reviews,
         estimated_owners,
         price,
+        price_original,
+        discount_percent,
+        is_on_sale,
         average_playtime,
         tags,
         screenshots,  
@@ -735,6 +762,11 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
           .update({
             app_id: appId, // ← 追加
             title: rankingGameForUpdate.title, // ← 追加
+            price: rankingGameForUpdate.price,
+            price_original:
+              rankingGameForUpdate.priceOriginal ?? rankingGameForUpdate.price,
+            discount_percent: rankingGameForUpdate.discountPercent ?? 0,
+            is_on_sale: rankingGameForUpdate.isOnSale ?? false,
             data: rankingGameForUpdate, // 既存 JSON も更新
           })
           .eq("id", existing.id);
@@ -758,6 +790,11 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
           .insert({
             app_id: appId, // ← 追加
             title: rankingGame.title, // ← 追加
+            price: rankingGame.price,
+            price_original:
+              rankingGame.priceOriginal ?? rankingGame.price,
+            discount_percent: rankingGame.discountPercent ?? 0,
+            is_on_sale: rankingGame.isOnSale ?? false,
             data: rankingGame, // 既存 JSON
           });
 

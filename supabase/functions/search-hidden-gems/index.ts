@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
+import { parseSteamPriceOverview } from "../_shared/price.ts";
 
 // Supabase client (use service role key for full DB access inside Edge Function)
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -54,6 +55,9 @@ interface RankingGameData {
   estimatedOwners: number;
   recentPlayers: number;
   price: number; // ドル単位
+  priceOriginal: number | null;
+  discountPercent: number;
+  isOnSale: boolean;
   averagePlaytime: number; // 分単位（平均プレイ時間）
   lastUpdated: string; // ISO 文字列
   tags: string[];
@@ -81,36 +85,124 @@ interface RankingGameData {
 async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
   const nowIso = new Date().toISOString();
 
-  const { error } = await supabase.from("steam_games").upsert(
-    {
-      app_id: rankingGame.appId,
-      title: rankingGame.title,
-      positive_ratio: rankingGame.positiveRatio,
-      total_reviews: rankingGame.totalReviews,
-      estimated_owners: rankingGame.estimatedOwners,
-      price: rankingGame.price,
-      average_playtime: rankingGame.averagePlaytime,
-      tags: rankingGame.tags,
-      screenshots: rankingGame.screenshots ?? null,
-      header_image: rankingGame.headerImage,
-      steam_url: rankingGame.steamUrl,
-      review_score_desc: rankingGame.reviewScoreDesc,
+  // すでに steam_games に行があるか確認（あれば price 系はそちらを優先して維持）
+  const { data: existing, error: existingError } = await supabase
+    .from("steam_games")
+    .select("*")
+    .eq("app_id", rankingGame.appId)
+    .maybeSingle();
 
-      // ★ 追加したカラム
-      release_date: rankingGame.releaseDate ?? nowIso,
-      release_year: rankingGame.releaseYear ?? null,
-      is_statistically_hidden: rankingGame.isStatisticallyHidden ?? false,
-      is_available_in_store: rankingGame.isAvailableInStore ?? true,
+  if (existingError) {
+    console.error("steam_games select error", existingError);
+  }
 
-      // 取得日時
-      last_steam_fetch_at: nowIso,
-    },
-    { onConflict: "app_id" }
-  );
+  const upsertRow: any = {
+    app_id: rankingGame.appId,
+    title: rankingGame.title,
+    positive_ratio: rankingGame.positiveRatio,
+    total_reviews: rankingGame.totalReviews,
+    estimated_owners: rankingGame.estimatedOwners,
+    average_playtime: rankingGame.averagePlaytime,
+    tags: rankingGame.tags,
+    screenshots:
+      rankingGame.screenshots ?? (existing ? existing.screenshots : null),
+    header_image:
+      rankingGame.headerImage ?? (existing ? existing.header_image : null),
+    steam_url: rankingGame.steamUrl ?? (existing ? existing.steam_url : null),
+    review_score_desc:
+      rankingGame.reviewScoreDesc ??
+      (existing ? existing.review_score_desc : null),
+
+    // 発売日まわりは rankingGame 優先、なければ既存、それもなければ now
+    release_date:
+      rankingGame.releaseDate ?? (existing ? existing.release_date : nowIso),
+    release_year:
+      rankingGame.releaseYear ?? (existing ? existing.release_year : null),
+
+    is_statistically_hidden:
+      rankingGame.isStatisticallyHidden ??
+      (existing ? existing.is_statistically_hidden : false),
+
+    is_available_in_store:
+      rankingGame.isAvailableInStore ??
+      (existing ? existing.is_available_in_store : true),
+
+    // 取得日時は基本 now。既存の値をそのまま使いたければ existing 側を優先してもよい
+    last_steam_fetch_at: existing?.last_steam_fetch_at ?? nowIso,
+  };
+
+  // 🔸 price 系の扱い
+  //    ・既存レコードがあれば、基本は既存値を優先
+  //    ・既存値がない場合のみ、rankingGame 側の値で埋める
+  //    ・レコードが存在しない場合（初回）は rankingGame の値を書き込む
+  if (existing) {
+    // price: 既存に数値があればそれを使い、なければ rankingGame.price を利用
+    if (typeof existing.price === "number" && Number.isFinite(existing.price)) {
+      upsertRow.price = existing.price;
+    } else if (
+      typeof rankingGame.price === "number" &&
+      Number.isFinite(rankingGame.price)
+    ) {
+      upsertRow.price = rankingGame.price;
+    }
+
+    // price_original: 既存の元値があれば維持し、なければ rankingGame.priceOriginal を使う
+    if (
+      typeof existing.price_original === "number" &&
+      Number.isFinite(existing.price_original)
+    ) {
+      upsertRow.price_original = existing.price_original;
+    } else if (
+      typeof rankingGame.priceOriginal === "number" &&
+      Number.isFinite(rankingGame.priceOriginal)
+    ) {
+      upsertRow.price_original = rankingGame.priceOriginal;
+    }
+
+    // discount_percent: 既存値があれば維持、なければ rankingGame 側
+    if (
+      typeof existing.discount_percent === "number" &&
+      Number.isFinite(existing.discount_percent)
+    ) {
+      upsertRow.discount_percent = existing.discount_percent;
+    } else {
+      upsertRow.discount_percent = rankingGame.discountPercent ?? 0;
+    }
+
+    // is_on_sale: 既存の boolean があれば維持、なければ rankingGame 側
+    if (typeof existing.is_on_sale === "boolean") {
+      upsertRow.is_on_sale = existing.is_on_sale;
+    } else {
+      upsertRow.is_on_sale = rankingGame.isOnSale ?? false;
+    }
+  } else {
+    // 🔰 steam_games にまだ行がない場合 → rankingGame の情報で初期化
+    if (
+      typeof rankingGame.price === "number" &&
+      Number.isFinite(rankingGame.price)
+    ) {
+      upsertRow.price = rankingGame.price;
+    }
+
+    if (
+      typeof rankingGame.priceOriginal === "number" &&
+      Number.isFinite(rankingGame.priceOriginal)
+    ) {
+      upsertRow.price_original = rankingGame.priceOriginal;
+    }
+
+    upsertRow.discount_percent = rankingGame.discountPercent ?? 0;
+    upsertRow.is_on_sale = rankingGame.isOnSale ?? false;
+  }
+
+  // existing が無い場合は price 系のプロパティ自体を upsertRow に入れない → DB 側は null のまま
+
+  const { error } = await supabase
+    .from("steam_games")
+    .upsert(upsertRow, { onConflict: "app_id" });
 
   if (error) {
     console.error("steam_games upsert error", error);
-    // 必要ならここで throw error; にしてプレビュー側にも失敗を返してもOK
   }
 }
 
@@ -653,10 +745,10 @@ async function fetchAndBuildRankingGame(
   const headerImage: string | null = data?.header_image ?? null;
   const title: string = data.name ?? `App ${appId}`;
 
-  // 🔹 price_overview.final は「セント」なので /100 してドルに統一
-  const price: number =
-    data.price_overview?.final != null ? data.price_overview.final / 100 : 0;
+  const { priceOriginal, priceFinal, discountPercent, isOnSale } =
+    parseSteamPriceOverview(data.price_overview);
 
+  const price: number = priceFinal ?? 0;
   const releaseDateStr: string = data.release_date?.date ?? "";
   const releaseYear: number = parseReleaseYear(releaseDateStr);
 
@@ -1009,6 +1101,11 @@ async function fetchAndBuildRankingGame(
     estimatedOwners,
     recentPlayers: 0,
     price,
+    // 🔽 ここを追加
+    priceOriginal,
+    discountPercent,
+    isOnSale,
+    // 🔼 ここまで追加
     averagePlaytime,
     lastUpdated: nowIso,
     tags,

@@ -383,7 +383,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const positiveRatio = toNumber(g.positiveRatio, 0);
       const totalReviews = toNumber(g.totalReviews, 0);
       const estimatedOwners = toNumber(g.estimatedOwners, 0);
+      // NOTE: price は game_rankings_cache.price（セール後の現在価格）を参照する
       const price = toNumber(g.price, 0);
+      const priceOriginal =
+        typeof g.priceOriginal === "number"
+          ? g.priceOriginal
+          : typeof g.price_original === "number"
+          ? g.price_original
+          : price;
+      const discountPercent = toNumber(
+        g.discountPercent ?? g.discount_percent,
+        0
+      );
+      const isOnSale =
+        typeof g.isOnSale === "boolean"
+          ? g.isOnSale
+          : typeof g.is_on_sale === "boolean"
+          ? g.is_on_sale
+          : discountPercent > 0;
       const averagePlaytime = toNumber(g.averagePlaytime, 0);
       const releaseYear = toNumber(g.releaseYear, 0);
 
@@ -464,6 +481,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         estimatedOwners,
         recentPlayers: toNumber(g.recentPlayers, 0),
         price,
+        priceOriginal,
+        discountPercent,
+        isOnSale,
         averagePlaytime,
         lastUpdated: g.lastUpdated ?? null,
         tags: Array.isArray(g.tags) ? g.tags : [],

@@ -580,7 +580,7 @@ Deno.serve(async (req) => {
 
 {
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
-  "summary": "1〜2文の日本語。このゲーム固有の特徴を必ず1つ含める。",
+  "summary": "4〜5文の日本語。このゲーム固有の特徴を必ず1つ含める。",
   "labels": ["日本語ラベル", ...],
   "pros": ["日本語の強み", ...],
   "cons": ["日本語の弱み", ...],

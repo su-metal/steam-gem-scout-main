@@ -13,6 +13,9 @@ interface RankingGame {
   estimatedOwners: number;
   recentPlayers: number;
   price: number;
+  priceOriginal?: number | null;
+  discountPercent?: number;
+  isOnSale?: boolean;
   averagePlaytime: number;
   lastUpdated: string;
   tags: string[];
