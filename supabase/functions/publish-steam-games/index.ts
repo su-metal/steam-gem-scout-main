@@ -128,6 +128,34 @@ type ImportSteamGamesResult = {
   candidates?: ImportCandidate[];
 };
 
+// タグ配列をトリム・重複除去・最大件数制限する共通ヘルパー
+function normalizeTags(raw: any): string[] {
+  if (!raw) return [];
+
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const cleaned: string[] = [];
+
+  for (const v of arr) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (!t) continue;
+    cleaned.push(t);
+  }
+
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+
+  for (const t of cleaned) {
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(t);
+  }
+
+  // 念のため 32 個までに制限
+  return deduped.slice(0, 32);
+}
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
@@ -774,8 +802,15 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       }
 
       // 🔽 ここから追加：検索・フィルタ用 tags を組み立てる
+      // 1. AI 解析済みなら analysis.aiTags を最優先で使う
+      const aiTagsFromAnalysis: string[] =
+        rankingGameForUpdate &&
+        (rankingGameForUpdate as any).analysis &&
+        Array.isArray((rankingGameForUpdate as any).analysis.aiTags)
+          ? ((rankingGameForUpdate as any).analysis.aiTags as string[])
+          : [];
 
-      // ジャンルベースのタグ（RankingGame.genres があれば優先、なければ tags）
+      // 2. AI タグがない場合のフォールバック: ジャンル / 既存 tags を使う
       const baseGenreTags: string[] = Array.isArray(
         (rankingGameForUpdate as any).genres
       )
@@ -787,7 +822,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       // 既存 JSON data 側に入っている tags（あれば保持）
       const existingDataTags: string[] =
         existing && existing.data && Array.isArray((existing.data as any).tags)
-          ? (existing.data as any).tags
+          ? ((existing.data as any).tags as string[])
           : [];
 
       // 既存カラム側の tags（将来手動で触っていた場合にも対応）
@@ -796,19 +831,12 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
           ? ((existing as any).tags as string[])
           : [];
 
-      const mergedTags = [
-        ...baseGenreTags,
-        ...existingDataTags,
-        ...existingColumnTags,
-      ];
+      const mergedTagsSource: string[] =
+        aiTagsFromAnalysis.length > 0
+          ? aiTagsFromAnalysis
+          : [...baseGenreTags, ...existingDataTags, ...existingColumnTags];
 
-      const tagsForCache = Array.from(
-        new Set(
-          mergedTags
-            .map((t) => (typeof t === "string" ? t.trim() : ""))
-            .filter((t) => t.length > 0)
-        )
-      ).slice(0, 32); // 念のため上限 32 個
+      const tagsForCache = normalizeTags(mergedTagsSource);
 
       // RankingGame 側にも反映して、JSON の data.tags と揃える
       rankingGameForUpdate = {
@@ -827,6 +855,11 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
               rankingGameForUpdate.priceOriginal ?? rankingGameForUpdate.price,
             discount_percent: rankingGameForUpdate.discountPercent ?? 0,
             is_on_sale: rankingGameForUpdate.isOnSale ?? false,
+            // 🔸 カラム側 tags も更新
+            tags: Array.isArray(rankingGameForUpdate.tags)
+              ? rankingGameForUpdate.tags
+              : [],
+            // 🔸 JSON 側 data（data.tags 内もすでに上で揃えている）
             data: rankingGameForUpdate, // 既存 JSON も更新
           })
           .eq("id", existing.id);
@@ -848,19 +881,19 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         const { error: insertError } = await supabase
           .from("game_rankings_cache")
           .insert({
-            app_id: appId, // ← 追加
-            title: rankingGame.title, // ← 追加
-            price: rankingGame.price,
-            price_original: rankingGame.priceOriginal ?? rankingGame.price,
-            discount_percent: rankingGame.discountPercent ?? 0,
-            is_on_sale: rankingGame.isOnSale ?? false,
+            app_id: appId,
+            title: rankingGameForUpdate.title,
+            price: rankingGameForUpdate.price,
+            price_original:
+              rankingGameForUpdate.priceOriginal ?? rankingGameForUpdate.price,
+            discount_percent: rankingGameForUpdate.discountPercent ?? 0,
+            is_on_sale: rankingGameForUpdate.isOnSale ?? false,
             // 🔸 カラム側 tags
-            tags: baseTagsForInsert,
+            tags: Array.isArray(rankingGameForUpdate.tags)
+              ? rankingGameForUpdate.tags
+              : [],
             // 🔸 JSON 側 data.tags
-            data: {
-              ...rankingGame,
-              tags: baseTagsForInsert,
-            },
+            data: rankingGameForUpdate,
           });
 
         if (insertError) {
@@ -991,11 +1024,31 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         }
       }
 
+      // 🔽 ここから追加：AI 解析結果から最終タグを決定
+      const aiTagsFromResult: string[] =
+        aiResult &&
+        typeof aiResult === "object" &&
+        Array.isArray((aiResult as any).aiTags)
+          ? ((aiResult as any).aiTags as string[])
+          : [];
+
+      const existingTagsFromData: string[] = Array.isArray(
+        (baseDataForStorage as any).tags
+      )
+        ? ((baseDataForStorage as any).tags as string[])
+        : [];
+
+      const finalTagsForGame = normalizeTags(
+        aiTagsFromResult.length > 0 ? aiTagsFromResult : existingTagsFromData
+      );
+
       const updatedData: Record<string, any> = {
         // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
         ...baseDataForStorage,
         mood_scores: moodScores,
         analysis: aiResult,
+        // 🔸 JSON 側の tags もここで上書き
+        tags: finalTagsForGame,
       };
 
       // gemLabel（AI側で付与されたラベル）があれば反映
@@ -1018,7 +1071,10 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
-        .update({ data: updatedData })
+        .update({
+          data: updatedData,
+          tags: finalTagsForGame,
+        })
         .eq("id", existing.id);
 
       if (updateError) {

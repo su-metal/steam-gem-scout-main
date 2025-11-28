@@ -114,6 +114,12 @@ interface HiddenGemAnalysis {
    */
   audienceBadges?: AudienceBadge[] | null;
 
+  /** Steam でメジャーな英語タグ（AI生成） */
+  aiTags?: string[] | null;
+
+  /** 代表的な主ジャンル 1 本（任意） */
+  aiPrimaryGenre?: string | null;
+
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
    * 例: true のとき「昔は微妙だったが今は良くなった」系タイトル。
@@ -573,6 +579,24 @@ Deno.serve(async (req) => {
    - pros / cons の文をそのまま繰り返さず、「その特徴を好む人／つらく感じる人」というプレイヤー像に変換する。
    - 主語は必ずプレイヤー（〜な人、〜なタイプのプレイヤー）にする。
 
+   ### TAG RULES（aiTags / aiPrimaryGenre）
+
+- "aiTags" は Steam ストアでよく使われる **英語タグ名** のみを返すこと。
+  - 例: "Roguelike", "Rogue-lite", "Souls-like", "Metroidvania",
+        "City Builder", "Deckbuilder", "Bullet Hell", "FPS", "JRPG",
+        "Survival", "Co-op", "Card Battler" など。
+- 文や説明文は禁止。
+  - NG例: "Fast-paced action roguelike with Greek gods"
+  - OK例: "Roguelike", "Action Roguelike"
+- 自分で新語を作らない。同じ概念は一般的な Steam タグに寄せる。
+  - "First Person Shooter" → "FPS"
+  - "Dark Souls-like" → "Souls-like"
+- 必ず **英語のみ**。日本語タグは禁止。
+- "aiTags" の件数は **5〜10個程度** に制限する。
+- 類似タグや重複タグは避け、できるだけ意味の異なるタグを選ぶ。
+- "aiPrimaryGenre" には、そのゲームを代表する **1つだけ**のタグ名を入れる。
+  - 例: "Roguelike", "City Builder", "Metroidvania" など。
+  - はっきりしない場合は null または空文字を許可する。
 
 ---
 
@@ -594,6 +618,8 @@ Deno.serve(async (req) => {
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
   "currentStateReliability": "high" | "medium" | "low" | null,
   "historicalIssuesReliability": "high" | "medium" | "low" | null,
+  "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
+  "aiPrimaryGenre": "Roguelike" | null,
   "vibes": {
     "active": number,
     "stress": number,
@@ -898,7 +924,7 @@ IMPORTANT:
   }
 
   // 型システム対策用のフォールバック（ここには通常到達しない）
-    return new Response(
+  return new Response(
     JSON.stringify({ error: "Unhandled request in analyze-game" }),
     {
       status: 500,
@@ -995,6 +1021,33 @@ function normalizeAudienceBadges(raw: any): AudienceBadge[] {
   }
 
   return badges;
+}
+
+function normalizeAiTags(raw: any): string[] {
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const result: string[] = [];
+
+  for (const item of arr) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+
+    // 大文字小文字をそのまま残しつつ、重複チェック用に lower を使う
+    result.push(trimmed);
+  }
+
+  // 重複除去 & 10件まで
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of result) {
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(tag);
+    if (deduped.length >= 10) break;
+  }
+
+  return deduped;
 }
 
 function clampInt(value: number, min: number, max: number): number {
@@ -1104,6 +1157,19 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   );
   if (audienceNegative.length > 0) {
     normalized.audienceNegative = audienceNegative;
+  }
+
+  // ★ ここから aiTags / aiPrimaryGenre
+  const aiTags = normalizeAiTags(parsed?.aiTags);
+  if (aiTags.length > 0) {
+    normalized.aiTags = aiTags;
+  }
+
+  if (typeof parsed?.aiPrimaryGenre === "string") {
+    const primary = parsed.aiPrimaryGenre.trim();
+    if (primary) {
+      normalized.aiPrimaryGenre = primary;
+    }
   }
 
   return normalized;
