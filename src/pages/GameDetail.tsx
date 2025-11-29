@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -527,6 +527,44 @@ export default function GameDetail() {
   const playerFitPositiveTags = buildPlayerFitTags(audiencePositive, "positive");
   const playerFitNegativeTags = buildPlayerFitTags(audienceNegative, "negative");
 
+  // ★ Player Fit 全体を 1 本のリストとして扱う
+  const allPlayerFitTags: PlayerFitTag[] = [
+    ...playerFitPositiveTags,
+    ...playerFitNegativeTags,
+  ];
+
+  // ★ アクティブな行（スクロール / タップで切り替え）
+  const [activePlayerFitId, setActivePlayerFitId] = useState<string | null>(
+    allPlayerFitTags[0]?.id ?? null
+  );
+
+
+
+  const activePlayerFitTag =
+    allPlayerFitTags.find((t) => t.id === activePlayerFitId) ??
+    allPlayerFitTags[0] ??
+    null;
+
+  // ★ ヒートマップの色（FOR / NOT FOR とスコアで塗り分け）
+  const getPlayerFitHeatColor = (tag: PlayerFitTag, step: number) => {
+    const isFilled = step <= tag.score;
+    if (!isFilled) return "bg-slate-800";
+
+    if (tag.polarity === "positive") {
+      if (tag.score >= 4) return "bg-emerald-400";
+      if (tag.score === 3) return "bg-sky-400";
+      return "bg-emerald-300";
+    }
+
+    // negative
+    if (tag.score >= 4) return "bg-rose-500";
+    if (tag.score === 3) return "bg-amber-400";
+    return "bg-rose-400";
+  };
+
+
+
+
   const ScoreBar = ({ score }: { score: number }) => (
     <div className="flex items-center gap-1 mt-1">
       {SCORE_STEPS.map((step) => (
@@ -811,7 +849,9 @@ export default function GameDetail() {
       </div>
 
       {/* === Main Content ========================================= */}
+      {/* Main Content ========================================= */}
       <div className="max-w-5xl mx-auto px-4 pb-10 pt-6 md:px-8 md:pb-16 md:pt-10 space-y-6 -mt-6 md:-mt-10">
+
         {/* Header Navigation */}
         <div className="flex flex-wrap items-center gap-4 mt-5">
           <Button
@@ -840,35 +880,48 @@ export default function GameDetail() {
         </div>
 
         {/* Title & Hero Section */}
-        <Card className="mt-2 rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#151326_45%,_#050509_100%)] shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
-          <CardHeader>
-            <div className="space-y-6 min-w-0">
-              {/* タイトル */}
-              <div className="space-y-3">
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                  Hidden Gem Analyzer
-                </p>
-                <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                  {title}
-                </CardTitle>
-              </div>
-
-              {/* ギャラリー：メインメディア（画像 or 動画）＋下にミニサムネ */}
-              {hasMedia && activeMediaSrc && (
+        <div className="-mx-4 sm:mx-0">
+          <Card className="mt-2 rounded-[28px] border border-b-0 border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#151326_45%,_#050509_100%)] shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
+            <CardHeader className="px-4 py-5 sm:px-6 sm:py-6">
+              <div className="space-y-6 min-w-0">
+                {/* タイトル */}
                 <div className="space-y-3">
-                  {/* メインメディア（カード横幅いっぱい） */}
-                  <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-[#050711]">
-                    {activeMedia?.type === "video" ? (
-                      <video
-                        key={activeMediaSrc}
-                        src={activeMediaSrc}
-                        controls
-                        className="w-full h-full object-cover"
-                        // メタデータが読めた段階で duration をチェックして 0 秒付近の動画は無効扱い
-                        onLoadedMetadata={(e) => {
-                          const duration = e.currentTarget.duration;
-                          if (!duration || duration < 1) {
-                            // 今表示中の動画を無効扱いにして、次のメディアへ
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                    Hidden Gem Analyzer
+                  </p>
+                  <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                    {title}
+                  </CardTitle>
+                </div>
+
+                {/* ギャラリー：メインメディア（画像 or 動画）＋下にミニサムネ */}
+                {hasMedia && activeMediaSrc && (
+                  <div className="space-y-3">
+                    {/* メインメディア（カード横幅いっぱい） */}
+                    <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-[#050711]">
+                      {activeMedia?.type === "video" ? (
+                        <video
+                          key={activeMediaSrc}
+                          src={activeMediaSrc}
+                          controls
+                          className="w-full h-full object-cover"
+                          // メタデータが読めた段階で duration をチェックして 0 秒付近の動画は無効扱い
+                          onLoadedMetadata={(e) => {
+                            const duration = e.currentTarget.duration;
+                            if (!duration || duration < 1) {
+                              // 今表示中の動画を無効扱いにして、次のメディアへ
+                              markActiveMediaInvalid();
+                              const nextIndex =
+                                mediaItems.length > 1
+                                  ? (clampedActiveIndex + 1) % mediaItems.length
+                                  : clampedActiveIndex;
+                              if (nextIndex !== clampedActiveIndex) {
+                                setActiveScreenshotIndex(nextIndex);
+                              }
+                            }
+                          }}
+                          // ネットワークエラー等でも同様に無効扱いしてスキップ
+                          onError={() => {
                             markActiveMediaInvalid();
                             const nextIndex =
                               mediaItems.length > 1
@@ -877,317 +930,324 @@ export default function GameDetail() {
                             if (nextIndex !== clampedActiveIndex) {
                               setActiveScreenshotIndex(nextIndex);
                             }
-                          }
-                        }}
-                        // ネットワークエラー等でも同様に無効扱いしてスキップ
-                        onError={() => {
-                          markActiveMediaInvalid();
-                          const nextIndex =
-                            mediaItems.length > 1
-                              ? (clampedActiveIndex + 1) % mediaItems.length
-                              : clampedActiveIndex;
-                          if (nextIndex !== clampedActiveIndex) {
-                            setActiveScreenshotIndex(nextIndex);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <img
-                        src={activeMediaSrc}
-                        alt={`${title} screenshot ${clampedActiveIndex + 1}`}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // メイン画像が壊れている場合はいったん非表示
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
-                    )}
-                    {/* 上にちょっとしたグラデ */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                  </div>
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={activeMediaSrc}
+                          alt={`${title} screenshot ${clampedActiveIndex + 1}`}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // メイン画像が壊れている場合はいったん非表示
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      )}
+                      {/* 上にちょっとしたグラデ */}
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                    </div>
 
-                  {/* ミニサムネ行（Steam風：動画も含む） */}
-                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {mediaItems.map((item, index) => {
-                      const isActive = index === clampedActiveIndex;
-                      const isVideo = item.type === "video";
-                      const thumbSrc = item.thumbnail || item.full;
+                    {/* ミニサムネ行（Steam風：動画も含む） */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                      {mediaItems.map((item, index) => {
+                        const isActive = index === clampedActiveIndex;
+                        const isVideo = item.type === "video";
+                        const thumbSrc = item.thumbnail || item.full;
 
-                      if (!thumbSrc) return null;
+                        if (!thumbSrc) return null;
 
-                      return (
-                        <button
-                          key={`${thumbSrc}-${index}`}
-                          type="button"
-                          onClick={() => setActiveScreenshotIndex(index)}
-                          className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-xl overflow-hidden border bg-[#050711] ${isActive
-                            ? "border-cyan-400 ring-2 ring-cyan-400/60"
-                            : "border-white/10"
-                            }`}
-                        >
-                          <img
-                            src={thumbSrc}
-                            alt={`${title} thumbnail ${index + 1}`}
-                            loading="lazy"
-                            className="w-full h-full object-cover group-hover:brightness-110"
-                            onError={(e) => {
-                              // 壊れたサムネは非表示
-                              const parent = e.currentTarget.parentElement;
-                              if (parent) parent.style.display = "none";
+                        return (
+                          <button
+                            key={`${thumbSrc}-${index}`}
+                            type="button"
+                            onClick={() => setActiveScreenshotIndex(index)}
+                            className={`group relative flex-none h-16 w-28 md:h-20 md:w-36 rounded-xl overflow-hidden border bg-[#050711] ${isActive
+                              ? "border-cyan-400 ring-2 ring-cyan-400/60"
+                              : "border-white/10"
+                              }`}
+                          >
+                            <img
+                              src={thumbSrc}
+                              alt={`${title} thumbnail ${index + 1}`}
+                              loading="lazy"
+                              className="w-full h-full object-cover group-hover:brightness-110"
+                              onError={(e) => {
+                                // 壊れたサムネは非表示
+                                const parent = e.currentTarget.parentElement;
+                                if (parent) parent.style.display = "none";
 
-                              // このサムネに対応するメディアを無効扱いにする
-                              if (thumbSrc) {
-                                setInvalidMediaSrcs((prev) =>
-                                  prev.includes(thumbSrc)
-                                    ? prev
-                                    : [...prev, thumbSrc]
-                                );
-                              }
-                            }}
-                          />
+                                // このサムネに対応するメディアを無効扱いにする
+                                if (thumbSrc) {
+                                  setInvalidMediaSrcs((prev) =>
+                                    prev.includes(thumbSrc)
+                                      ? prev
+                                      : [...prev, thumbSrc]
+                                  );
+                                }
+                              }}
+                            />
 
-                          {/* 動画の場合は再生アイコンを重ねる */}
-                          {isVideo && (
-                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                              <div className="rounded-full bg-black/70 p-2">
-                                <Play className="w-4 h-4 text-white" />
+                            {/* 動画の場合は再生アイコンを重ねる */}
+                            {isVideo && (
+                              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                                <div className="rounded-full bg-black/70 p-2">
+                                  <Play className="w-4 h-4 text-white" />
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
 
-                          {/* アクティブ時の枠オーバーレイ */}
-                          {isActive && (
-                            <div className="pointer-events-none absolute inset-0 ring-2 ring-cyan-400/70" />
-                          )}
-                        </button>
-                      );
-                    })}
+                            {/* アクティブ時の枠オーバーレイ */}
+                            {isActive && (
+                              <div className="pointer-events-none absolute inset-0 ring-2 ring-cyan-400/70" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Summary */}
-              <Card
-                className="
+                {/* Summary */}
+                <Card
+                  className="
     rounded-none border-0 bg-transparent shadow-none
     
   "
-              >
-                <CardContent className="p-0">
-                  <p className="text-sm md:text-base text-slate-200/90 leading-relaxed whitespace-pre-line">
-                    {summary}
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* ギャラリーの下で左右2カラム：左に情報ブロック、右に AI Gem Score */}
-              <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 pt-2">
-                {/* 左：Release / バッジ / 評価テキスト / タグ */}
-                <div className="flex-1 space-y-3 min-w-0">
-                  {formattedReleaseDate && (
-                    <p className="text-xs md:text-sm text-slate-300">
-                      <span className="text-slate-400/80">Release:</span>{" "}
-                      {formattedReleaseDate}
+                >
+                  <CardContent className="p-0">
+                    <p className="text-sm md:text-base text-slate-200/90 leading-relaxed whitespace-pre-line">
+                      {summary}
                     </p>
-                  )}
+                  </CardContent>
+                </Card>
 
-                  {/* 安定度ステータスバッジ */}
-                  {stabilityBadge && (
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                      <Badge
-                        variant="outline"
-                        className={`text-[11px] font-semibold rounded-full border px-3 py-1 ${stabilityBadge.className}`}
-                      >
-                        {stabilityBadge.label}
-                      </Badge>
-                      {stabilityBadge.description && (
-                        <span className="text-xs text-slate-300/80">
-                          {stabilityBadge.description}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                {/* ギャラリーの下で左右2カラム*/}
+                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 pt-2">
+                  {/* 左：Release / バッジ / 評価テキスト / タグ */}
+                  <div className="flex-1 space-y-3 min-w-0">
+                    {formattedReleaseDate && (
+                      <p className="text-xs md:text-sm text-slate-300">
+                        <span className="text-slate-400/80">Release:</span>{" "}
+                        {formattedReleaseDate}
+                      </p>
+                    )}
 
-                  {reviewScoreDesc && (
-                    <p className="text-sm text-slate-200/90">
-                      {reviewScoreDesc}
-                    </p>
-                  )}
-
-                  {displayTags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {displayTags.map((tag, idx) => (
+                    {/* 安定度ステータスバッジ */}
+                    {stabilityBadge && (
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
                         <Badge
-                          key={`${tag}-${idx}`}
-                          variant="secondary"
-                          className="rounded-full bg-[#120f28] border border-white/10 text-[11px] px-3 py-1"
+                          variant="outline"
+                          className={`text-[11px] font-semibold rounded-full border px-3 py-1 ${stabilityBadge.className}`}
                         >
-                          {tag}
+                          {stabilityBadge.label}
                         </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        {stabilityBadge.description && (
+                          <span className="text-xs text-slate-300/80">
+                            {stabilityBadge.description}
+                          </span>
+                        )}
+                      </div>
+                    )}
 
-                {/* 右：Match Score（md 以上で左と横並び） */}
-                <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-[#050713]/90 p-6 rounded-2xl border border-white/15 shadow-lg">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-2">
-                    Match Score
+                    {reviewScoreDesc && (
+                      <p className="text-sm text-slate-200/90">
+                        {reviewScoreDesc}
+                      </p>
+                    )}
+
+                    {displayTags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {displayTags.map((tag, idx) => (
+                          <Badge
+                            key={`${tag}-${idx}`}
+                            variant="secondary"
+                            className="rounded-full bg-[#120f28] border border-white/10 text-[11px] px-3 py-1"
+                          >
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* マッチ度のパーセンテージ表示 */}
-                  <div className="flex items-baseline justify-center gap-1 mb-2">
-                    <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
-                      {matchScorePercent !== null ? matchScorePercent : "N/A"}
-                    </span>
-                    <span className="text-2xl text-slate-400">%</span>
+                  {/* 右：Match Score（md 以上で左と横並び） */}
+                  <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-[#050713]/90 p-6 rounded-2xl border border-white/15 shadow-lg">
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-2">
+                      Match Score
+                    </div>
+
+                    {/* マッチ度のパーセンテージ表示 */}
+                    <div className="flex items-baseline justify-center gap-1 mb-2">
+                      <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
+                        {matchScorePercent !== null ? matchScorePercent : "N/A"}
+                      </span>
+                      <span className="text-2xl text-slate-400">%</span>
+                    </div>
+
+                    {/* Hidden Gem / Improved Hidden Gem などのラベル */}
+                    {gemLabel && (
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        {gemLabel === "Hidden Gem" ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        ) : gemLabel === "Highly rated but not hidden" ? (
+                          <CheckCircle2 className="w-5 h-5 text-sky-400" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-slate-500" />
+                        )}
+                        <span className="font-semibold text-sm">{gemLabel}</span>
+                      </div>
+                    )}
+
+                    {/* Match Score の意味説明（気分フィット度） */}
+                    <p className="text-[11px] text-slate-300/90 mt-2 leading-relaxed">
+                      このゲームが「いまのあなたの気分」にどれだけフィットするかを
+                      AI が推定したスコアです。
+                    </p>
+                    {/* Match Score 状態別の補足 */}
+                    {matchScorePercent !== null && (
+                      <p className="text-[11px] text-slate-400/80 mt-1 leading-relaxed">
+                        {matchScorePercent >= 80 &&
+                          "あなたの気分に強くマッチしています。今まさに “刺さる” 可能性が高いです。"}
+                        {matchScorePercent >= 60 && matchScorePercent < 80 &&
+                          "いまの気分にかなり合いそうな要素が多く含まれています。"}
+                        {matchScorePercent >= 40 && matchScorePercent < 60 &&
+                          "一部はあなたの気分に刺さる可能性がありますが、好みが分かれるかもしれません。"}
+                        {matchScorePercent < 40 &&
+                          "現在の気分とはやや方向性が違うかもしれません。"}
+                      </p>
+                    )}
+
                   </div>
 
-                  {/* Hidden Gem / Improved Hidden Gem などのラベル */}
-                  {gemLabel && (
-                    <div className="flex items-center justify-center gap-2 mb-1">
-                      {gemLabel === "Hidden Gem" ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      ) : gemLabel === "Highly rated but not hidden" ? (
-                        <CheckCircle2 className="w-5 h-5 text-sky-400" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-slate-500" />
-                      )}
-                      <span className="font-semibold text-sm">{gemLabel}</span>
-                    </div>
-                  )}
-
-                  {/* Verdict テキスト（AI 判定文はそのまま使用） */}
-                  <p className="text-[11px] text-slate-300/90 mt-2 leading-relaxed">
-                    AI verdict:&nbsp;
-                    {hiddenGemVerdict === "Yes" &&
-                      "かなり安心しておすすめできる隠れた良作です。"}
-                    {hiddenGemVerdict === "Unknown" &&
-                      "良作の可能性は高そうですが、まだ慎重に見たほうがよさそうです。"}
-                    {hiddenGemVerdict === "No" &&
-                      "レビュー内容から見ると、好みを選ぶ／注意が必要なタイトルです。"}
-                    {!hiddenGemVerdict &&
-                      "AIの判定情報はまだ十分ではありません。"}
-                  </p>
                 </div>
-
               </div>
-            </div>
-          </CardHeader>
-        </Card>
-
+            </CardHeader>
+          </Card>
+        </div>
 
 
         {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
         {(playerFitPositiveTags.length > 0 ||
           playerFitNegativeTags.length > 0) && (
-            <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
-              <CardHeader>
+            <Card className="rounded-[24px] border-none bg-[#070716]/95 shadow-lg">
+              <CardHeader className="px-0 py-5 sm:px-6 sm:py-6">
                 <CardTitle className="text-xl">
-                  プレイヤーとの相性（Who this game is for）
+                  Player Match
                 </CardTitle>
-                <p className="mt-1 text-xs text-slate-300/85">
-                  絵文字タグ＋一言サブテキスト＋刺さり度スコア＋理由テキストで、
-                  「どんなタイプのプレイヤーに刺さる / 刺さらないか」を直感的に確認できます。
+                <p className="text-xs text-slate-400 mt-1">
+                  プレイヤータイプごとの「このゲームとの相性」を色の濃淡とポップアップで可視化します。
                 </p>
               </CardHeader>
-              <CardContent>
-                <div className="max-w-4xl mx-auto space-y-8 md:space-y-10">
-                  {/* FOR グループ */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 text-[12px] md:text-xs font-semibold text-emerald-300">
-                      <ThumbsUp className="w-3 h-3 md:w-4 md:h-4" />
-                      <span>こんなプレイヤーに刺さりやすい</span>
-                    </div>
+              <CardContent className="px-0">
+                {allPlayerFitTags.length === 0 ? (
+                  <p className="text-[11px] text-slate-400">
+                    まだ「どんなプレイヤーに刺さるか／刺さらないか」の傾向は十分に抽出されていません。
+                  </p>
+                ) : (
+                  <div className="max-w-4xl mx-auto space-y-5 md:space-y-6">
+                    {/* レジェンド（FOR / NOT FOR） */}
+                    {/* <div className="flex flex-wrap gap-3 text-[11px] md:text-xs">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/40 text-emerald-300">
+          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+          <span>FOR：刺さりやすいプレイヤータイプ</span>
+        </div>
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/40 text-rose-300">
+          <span className="h-2 w-2 rounded-full bg-rose-400" />
+          <span>NOT FOR：ミスマッチになりやすいタイプ</span>
+        </div>
+      </div> */}
 
-                    {playerFitPositiveTags.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
-                        {playerFitPositiveTags.map((t) => (
-                          <div
-                            key={t.id}
-                            className="bg-[#111]/70 border border-white/10 p-3 md:p-4 rounded-2xl shadow-md"
+                    {/* マップ UI 本体：左＝グリッド / 右＝詳細カード */}
+                    <div className="grid gap-5 md:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)] md:items-start">
+                      {/* 左：2〜3列のヒートマップグリッド */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {allPlayerFitTags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => setActivePlayerFitId(tag.id)}
+                            className={`relative rounded-2xl p-3 text-left transition transform hover:-translate-y-0.5 hover:shadow-lg ${activePlayerFitId === tag.id
+                                ? "ring-2 ring-emerald-400/80 bg-emerald-500/10"
+                                : "bg-slate-800/60"
+                              }`}
                           >
-                            <div className="flex items-center gap-2 mb-1 text-xs md:text-sm">
-                              <span className="text-base md:text-lg">
-                                {t.icon}
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">{tag.icon}</span>
+                              <span className="text-[13px] font-semibold ">
+                                {tag.label}
                               </span>
-                              <div className="flex flex-col">
-                                <span className="font-semibold text-white leading-tight">
-                                  {t.label}
-                                </span>
-                                {/* <span className="text-[10px] text-white/70 leading-tight">
-                                  {t.sub}
-                                </span> */}
-                              </div>
                             </div>
 
-                            <ScoreBar score={t.score} />
-
-                            <p className="text-[10px] md:text-[11px] text-slate-300 leading-snug md:leading-relaxed mt-2">
-                              {t.reason}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400">
-                        まだ「どんなプレイヤーに刺さっているか」の傾向は十分に抽出されていません。
-                      </p>
-                    )}
-                  </div>
-
-                  {/* NOT グループ */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 text-[12px] md:text-xs font-semibold text-rose-300">
-                      <ThumbsDown className="w-3 h-3 md:w-4 md:h-4" />
-                      <span>こんなプレイヤーには不向き</span>
-                    </div>
-
-                    {playerFitNegativeTags.length > 0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
-                        {playerFitNegativeTags.map((t) => (
-                          <div
-                            key={t.id}
-                            className="bg-[#111]/70 border border-white/10 p-3 md:p-4 rounded-2xl shadow-md"
-                          >
-                            <div className="flex items-center gap-2 mb-1 text-xs md:text-sm">
-                              <span className="text-base md:text-lg">
-                                {t.icon}
-                              </span>
-                              <div className="flex flex-col">
-                                <span className="font-semibold text-white leading-tight">
-                                  {t.label}
-                                </span>
-                                {/* <span className="text-[10px] text-white/70 leading-tight">
-                                  {t.sub}
-                                </span> */}
-                              </div>
+                            {/* 小さいヒートバー（1〜5段階） */}
+                            <div className="flex gap-1 mb-2">
+                              {SCORE_STEPS.map((step) => (
+                                <div
+                                  key={step}
+                                  className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
+                                    tag,
+                                    step
+                                  )}`}
+                                />
+                              ))}
                             </div>
 
-                            <ScoreBar score={t.score} />
-
-                            <p className="text-[10px] md:text-[11px] text-slate-300 leading-snug md:leading-relaxed mt-2">
-                              {t.reason}
-                            </p>
-                          </div>
+                            {/* サブテキスト（あれば） */}
+                            {/* <div className="text-[10px] text-slate-300 line-clamp-2">
+                              {tag.sub ||
+                                tag.reason ||
+                                (tag.polarity === "positive"
+                                  ? "このタイプとは特に相性が良い傾向です。"
+                                  : "このタイプとはややミスマッチになりやすい傾向です。")}
+                            </div> */}
+                          </button>
                         ))}
                       </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-400">
-                        「どんなプレイヤーには向いていないか」の明確な傾向は、まだあまり見えていません。
-                      </p>
-                    )}
+
+                      {/* 右：選択中タイプの詳細カード（SP では下に回る） */}
+                      <div className="mt-4 md:mt-0">
+                        {activePlayerFitTag ? (
+                          <div className="rounded-2xl bg-slate-900/95 border border-slate-700 px-4 py-3 shadow-xl text-[12px] text-slate-100">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-xl">{activePlayerFitTag.icon}</span>
+                              <div className="flex flex-col">
+                                <span className="font-semibold">
+                                  {activePlayerFitTag.label}
+                                </span>
+                                {activePlayerFitTag.sub && (
+                                  <span className="text-[11px] text-slate-300">
+                                    {activePlayerFitTag.sub}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-relaxed">
+                              このゲームとの相性スコアは{" "}
+                              <span className="font-semibold">
+                                {activePlayerFitTag.score}/5
+                              </span>
+                              。{activePlayerFitTag.reason}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 px-4 py-3 text-[11px] text-slate-400">
+                            グリッドのいずれかのタイプをタップすると、ここに詳しい解説が表示されます。
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </CardContent>
+
+
             </Card>
           )}
 
         {/* Pros & Cons */}
         <div className="grid md:grid-cols-2 gap-6">
           <Card className="rounded-[24px] border-emerald-500/30 bg-[#041510]/95 shadow-lg">
-            <CardHeader>
+            <CardHeader className="px-4 py-5 sm:px-6 sm:py-6">
               <CardTitle className="text-xl flex items-center gap-2 text-emerald-400">
                 <ThumbsUp className="w-5 h-5" />
                 Strengths
