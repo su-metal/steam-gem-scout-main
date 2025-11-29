@@ -18,15 +18,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 
 // Returns the tags that should be displayed on the detail page.
-// Priority: analysis.labels (AI labels) -> fallback to raw tags.
+// Hidden Gem Analyzer では DB 上の tags（game_rankings_cache.tags）だけを使う。
 const getDisplayTags = (
-  game: { analysis?: { labels?: string[] }; tags?: string[] },
+  game: { tags?: string[] },
   limit?: number
 ): string[] => {
-  const baseTags =
-    (game.analysis?.labels && game.analysis.labels.length > 0
-      ? game.analysis.labels
-      : game.tags ?? []) || [];
+  const baseTags = game.tags ?? [];
 
   if (!limit || baseTags.length <= limit) {
     return baseTags;
@@ -34,6 +31,7 @@ const getDisplayTags = (
 
   return baseTags.slice(0, limit);
 };
+
 
 // gemLabel のバリエーション（将来の拡張も考えて一元管理）
 type GemLabel =
@@ -71,16 +69,28 @@ interface AnalysisData {
   historicalIssuesReliability?: "high" | "medium" | "low" | null;
 
   // ★ 追加: プレイヤータイプ（ポジ／ネガ）
+  // Deep Emoji Tags 用に icon / sub / fitScore / reason を拡張
   audiencePositive?: {
     id: string;
     label: string;
     description?: string;
+
+    icon?: string;      // 絵文字 or シンプルなアイコン文字
+    sub?: string;       // 一言サブテキスト
+    fitScore?: number;  // 1〜5 想定の「刺さり度」
+    reason?: string;    // なぜ刺さるのか
   }[];
   audienceNegative?: {
     id: string;
     label: string;
     description?: string;
+
+    icon?: string;
+    sub?: string;
+    fitScore?: number;
+    reason?: string;
   }[];
+
 }
 
 interface SteamScreenshot {
@@ -100,6 +110,7 @@ interface GameDetailState {
     estimatedOwners: number;
     price: number;
     averagePlaytime: number;
+    moodScore?: number; // 0〜1 のマッチ度（SearchResultCard から渡す）
     tags?: string[];
     steamUrl?: string;
     reviewScoreDesc?: string;
@@ -356,15 +367,27 @@ export default function GameDetail() {
   const labels = Array.isArray(analysisData.labels) ? analysisData.labels : [];
 
   // プレイヤータイプ配列を安全に整形するヘルパー
+  type NormalizedAudience = {
+    id: string;
+    label: string;
+    description?: string;
+    icon?: string;
+    sub?: string;
+    fitScore?: number;
+    reason?: string;
+  };
+
+  // プレイヤータイプ配列を安全に整形するヘルパー
   const normalizeAudienceSegmentList = (
     value: AnalysisData["audiencePositive"]
-  ) => {
+  ): NormalizedAudience[] => {
     if (!Array.isArray(value)) return [];
-    const result: { id: string; label: string; description?: string }[] = [];
+    const result: NormalizedAudience[] = [];
 
     for (const item of value) {
       if (!item) continue;
 
+      // 文字列だけ渡ってきた場合 → ラベルとして扱う
       if (typeof (item as any) === "string") {
         const label = (item as unknown as string).trim();
         if (!label) continue;
@@ -376,25 +399,54 @@ export default function GameDetail() {
       }
 
       if (typeof item === "object") {
+        const raw = item as any;
         const label =
-          typeof item.label === "string" && item.label.trim()
-            ? item.label.trim()
-            : typeof item.id === "string" && item.id.trim()
-              ? item.id.trim()
+          typeof raw.label === "string" && raw.label.trim()
+            ? raw.label.trim()
+            : typeof raw.id === "string" && raw.id.trim()
+              ? raw.id.trim()
               : "";
         if (!label) continue;
 
         const id =
-          typeof item.id === "string" && item.id.trim()
-            ? item.id.trim()
+          typeof raw.id === "string" && raw.id.trim()
+            ? raw.id.trim()
             : label.toLowerCase().replace(/\s+/g, "_").slice(0, 48);
 
         const description =
-          typeof item.description === "string" && item.description.trim()
-            ? item.description.trim()
+          typeof raw.description === "string" && raw.description.trim()
+            ? raw.description.trim()
             : undefined;
 
-        result.push({ id, label, ...(description ? { description } : {}) });
+        const icon =
+          typeof raw.icon === "string" && raw.icon.trim()
+            ? raw.icon.trim()
+            : undefined;
+
+        const sub =
+          typeof raw.sub === "string" && raw.sub.trim()
+            ? raw.sub.trim()
+            : undefined;
+
+        const fitScore =
+          typeof raw.fitScore === "number" && Number.isFinite(raw.fitScore)
+            ? raw.fitScore
+            : undefined;
+
+        const reason =
+          typeof raw.reason === "string" && raw.reason.trim()
+            ? raw.reason.trim()
+            : undefined;
+
+        result.push({
+          id,
+          label,
+          ...(description ? { description } : {}),
+          ...(icon ? { icon } : {}),
+          ...(sub ? { sub } : {}),
+          ...(fitScore !== undefined ? { fitScore } : {}),
+          ...(reason ? { reason } : {}),
+        });
       }
     }
 
@@ -407,6 +459,86 @@ export default function GameDetail() {
   const audienceNegative = normalizeAudienceSegmentList(
     analysisData.audienceNegative
   );
+
+  // Deep Emoji Tags 用タグ型
+  type PlayerFitTag = {
+    id: string;
+    icon: string;
+    label: string;
+    sub: string;
+    score: number; // 1〜5
+    reason: string;
+    polarity: "positive" | "negative";
+  };
+
+  const SCORE_STEPS = [1, 2, 3, 4, 5] as const;
+
+  const clampScore = (value: number | undefined, fallback: number) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+    return Math.min(5, Math.max(1, Math.round(value)));
+  };
+
+  const DEFAULT_POSITIVE_ICONS = ["🧠", "🧭", "🎯", "🐢", "🎮"];
+  const DEFAULT_NEGATIVE_ICONS = ["⚡", "⏩", "📦", "🤹‍♂️", "💤"];
+
+  const buildPlayerFitTags = (
+    list: NormalizedAudience[],
+    polarity: "positive" | "negative"
+  ): PlayerFitTag[] => {
+    return list.map((item, index) => {
+      const fallbackIcon =
+        polarity === "positive"
+          ? DEFAULT_POSITIVE_ICONS[index % DEFAULT_POSITIVE_ICONS.length]
+          : DEFAULT_NEGATIVE_ICONS[index % DEFAULT_NEGATIVE_ICONS.length];
+
+      const icon = item.icon || fallbackIcon;
+      const label = item.label;
+      const sub =
+        item.sub ||
+        item.description ||
+        (polarity === "positive"
+          ? "このタイプとは特に相性が良い傾向です。"
+          : "このタイプとはややミスマッチになりやすい傾向です。");
+
+      const score = clampScore(
+        item.fitScore,
+        polarity === "positive" ? 4 : 2
+      );
+
+      const reason =
+        item.reason ||
+        item.description ||
+        (polarity === "positive"
+          ? "レビューから、このプレイスタイルと特に噛み合っていると判断されています。"
+          : "レビューから、このプレイスタイルだとストレスを感じやすい可能性があると判断されています。");
+
+      return {
+        id: item.id,
+        icon,
+        label,
+        sub,
+        score,
+        reason,
+        polarity,
+      };
+    });
+  };
+
+  const playerFitPositiveTags = buildPlayerFitTags(audiencePositive, "positive");
+  const playerFitNegativeTags = buildPlayerFitTags(audienceNegative, "negative");
+
+  const ScoreBar = ({ score }: { score: number }) => (
+    <div className="flex items-center gap-1 mt-1">
+      {SCORE_STEPS.map((step) => (
+        <div
+          key={step}
+          className={`h-1.5 w-4 rounded-sm ${step <= score ? "bg-white" : "bg-white/20"
+            }`}
+        />
+      ))}
+    </div>
+  );
+
 
 
   // Safe values with defaults
@@ -440,21 +572,50 @@ export default function GameDetail() {
   const hasImprovedSinceLaunch = analysisData.hasImprovedSinceLaunch ?? null;
 
 
+  // --- レビュー品質スコア（1〜10） ---
   const reviewQualityScore =
     typeof analysisData.reviewQualityScore === "number"
       ? analysisData.reviewQualityScore
       : null;
 
-  // ★ 統計ベースの隠れた名作度スコア（1〜10）
+  // --- マッチ度スコア（0〜1）を抽出 ---
+  const rawMoodScore =
+    typeof (game as any).moodScore === "number"
+      ? (game as any).moodScore
+      : typeof (baseGame as any).moodScore === "number"
+        ? (baseGame as any).moodScore
+        : typeof (analysisData as any).moodScore === "number"
+          ? (analysisData as any).moodScore
+          : null;
+
+  const normalizedMoodScore =
+    typeof rawMoodScore === "number" && Number.isFinite(rawMoodScore)
+      ? Math.max(0, Math.min(1, rawMoodScore))
+      : null;
+
+  // --- 統計ベースの隠れた名作度スコア（1〜10） ---
   const statGemScore =
     typeof analysisData.statGemScore === "number"
       ? analysisData.statGemScore
       : null;
 
-  // …price / tags などの定義の前でOK
+  // GEM SCORE は「統計ベース」優先で、なければレビュー品質
   const aiGemScore = statGemScore ?? reviewQualityScore ?? null;
 
+  // --- 表示用マッチ度％（0〜100） ---
+  const rawMatchScoreForDisplay =
+    normalizedMoodScore !== null
+      ? normalizedMoodScore
+      : aiGemScore !== null
+        ? Math.max(0, Math.min(1, aiGemScore / 10))
+        : null;
 
+  const matchScorePercent =
+    rawMatchScoreForDisplay !== null
+      ? Math.round(rawMatchScoreForDisplay * 100)
+      : null;
+
+  // --- リスク系スコア ---
   const riskScore =
     typeof analysisData.riskScore === "number"
       ? analysisData.riskScore
@@ -467,6 +628,7 @@ export default function GameDetail() {
     typeof analysisData.refundMentions === "number"
       ? analysisData.refundMentions
       : null;
+
 
   const positiveRatio = baseGame.positiveRatio || 0;
   const totalReviews = baseGame.totalReviews || 0;
@@ -556,8 +718,8 @@ export default function GameDetail() {
     game.gemLabel ||
     (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
 
-  // Tags to display under the title (same logic as GameCard / Home)
-  const displayTags = getDisplayTags({ analysis: analysisData, tags });
+  // Tags to display under the title（game_rankings_cache.tags をそのまま使う）
+  const displayTags = getDisplayTags({ tags });
 
   const getScoreColor = (score: number | null) => {
     const value = score ?? 0;
@@ -805,6 +967,20 @@ export default function GameDetail() {
                 </div>
               )}
 
+              {/* Summary */}
+              <Card
+                className="
+    rounded-none border-0 bg-transparent shadow-none
+    
+  "
+              >
+                <CardContent className="p-0">
+                  <p className="text-sm md:text-base text-slate-200/90 leading-relaxed whitespace-pre-line">
+                    {summary}
+                  </p>
+                </CardContent>
+              </Card>
+
               {/* ギャラリーの下で左右2カラム：左に情報ブロック、右に AI Gem Score */}
               <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 pt-2">
                 {/* 左：Release / バッジ / 評価テキスト / タグ */}
@@ -854,18 +1030,21 @@ export default function GameDetail() {
                   )}
                 </div>
 
-                {/* 右：AI Gem Score（md 以上で左と横並び） */}
+                {/* 右：Match Score（md 以上で左と横並び） */}
                 <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-[#050713]/90 p-6 rounded-2xl border border-white/15 shadow-lg">
                   <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-2">
-                    AI Gem Score
-                  </div>
-                  <div className="flex items-baseline justify-center gap-1 mb-2">
-                    <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
-                      {aiGemScore !== null ? aiGemScore.toFixed(1) : "N/A"}
-                    </span>
-                    <span className="text-2xl text-slate-400">/10</span>
+                    Match Score
                   </div>
 
+                  {/* マッチ度のパーセンテージ表示 */}
+                  <div className="flex items-baseline justify-center gap-1 mb-2">
+                    <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
+                      {matchScorePercent !== null ? matchScorePercent : "N/A"}
+                    </span>
+                    <span className="text-2xl text-slate-400">%</span>
+                  </div>
+
+                  {/* Hidden Gem / Improved Hidden Gem などのラベル */}
                   {gemLabel && (
                     <div className="flex items-center justify-center gap-2 mb-1">
                       {gemLabel === "Hidden Gem" ? (
@@ -875,12 +1054,11 @@ export default function GameDetail() {
                       ) : (
                         <XCircle className="w-5 h-5 text-slate-500" />
                       )}
-                      <span className="font-semibold text-sm">
-                        {gemLabel}
-                      </span>
+                      <span className="font-semibold text-sm">{gemLabel}</span>
                     </div>
                   )}
 
+                  {/* Verdict テキスト（AI 判定文はそのまま使用） */}
                   <p className="text-[11px] text-slate-300/90 mt-2 leading-relaxed">
                     AI verdict:&nbsp;
                     {hiddenGemVerdict === "Yes" &&
@@ -893,22 +1071,118 @@ export default function GameDetail() {
                       "AIの判定情報はまだ十分ではありません。"}
                   </p>
                 </div>
+
               </div>
             </div>
           </CardHeader>
         </Card>
 
-        {/* Summary */}
-        <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-xl">Analysis Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm md:text-base text-slate-200/90 leading-relaxed whitespace-pre-line">
-              {summary}
-            </p>
-          </CardContent>
-        </Card>
+
+
+        {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
+        {(playerFitPositiveTags.length > 0 ||
+          playerFitNegativeTags.length > 0) && (
+            <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-xl">
+                  プレイヤーとの相性（Who this game is for）
+                </CardTitle>
+                <p className="mt-1 text-xs text-slate-300/85">
+                  絵文字タグ＋一言サブテキスト＋刺さり度スコア＋理由テキストで、
+                  「どんなタイプのプレイヤーに刺さる / 刺さらないか」を直感的に確認できます。
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="max-w-4xl mx-auto space-y-8 md:space-y-10">
+                  {/* FOR グループ */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 text-[12px] md:text-xs font-semibold text-emerald-300">
+                      <ThumbsUp className="w-3 h-3 md:w-4 md:h-4" />
+                      <span>こんなプレイヤーに刺さりやすい</span>
+                    </div>
+
+                    {playerFitPositiveTags.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
+                        {playerFitPositiveTags.map((t) => (
+                          <div
+                            key={t.id}
+                            className="bg-[#111]/70 border border-white/10 p-3 md:p-4 rounded-2xl shadow-md"
+                          >
+                            <div className="flex items-center gap-2 mb-1 text-xs md:text-sm">
+                              <span className="text-base md:text-lg">
+                                {t.icon}
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-white leading-tight">
+                                  {t.label}
+                                </span>
+                                {/* <span className="text-[10px] text-white/70 leading-tight">
+                                  {t.sub}
+                                </span> */}
+                              </div>
+                            </div>
+
+                            <ScoreBar score={t.score} />
+
+                            <p className="text-[10px] md:text-[11px] text-slate-300 leading-snug md:leading-relaxed mt-2">
+                              {t.reason}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        まだ「どんなプレイヤーに刺さっているか」の傾向は十分に抽出されていません。
+                      </p>
+                    )}
+                  </div>
+
+                  {/* NOT グループ */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 text-[12px] md:text-xs font-semibold text-rose-300">
+                      <ThumbsDown className="w-3 h-3 md:w-4 md:h-4" />
+                      <span>こんなプレイヤーには不向き</span>
+                    </div>
+
+                    {playerFitNegativeTags.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
+                        {playerFitNegativeTags.map((t) => (
+                          <div
+                            key={t.id}
+                            className="bg-[#111]/70 border border-white/10 p-3 md:p-4 rounded-2xl shadow-md"
+                          >
+                            <div className="flex items-center gap-2 mb-1 text-xs md:text-sm">
+                              <span className="text-base md:text-lg">
+                                {t.icon}
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-white leading-tight">
+                                  {t.label}
+                                </span>
+                                {/* <span className="text-[10px] text-white/70 leading-tight">
+                                  {t.sub}
+                                </span> */}
+                              </div>
+                            </div>
+
+                            <ScoreBar score={t.score} />
+
+                            <p className="text-[10px] md:text-[11px] text-slate-300 leading-snug md:leading-relaxed mt-2">
+                              {t.reason}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        「どんなプレイヤーには向いていないか」の明確な傾向は、まだあまり見えていません。
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
         {/* Pros & Cons */}
         <div className="grid md:grid-cols-2 gap-6">
@@ -998,80 +1272,6 @@ export default function GameDetail() {
               </Card>
             )}
           </div>
-        )}
-
-        {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
-        {(audiencePositive.length > 0 || audienceNegative.length > 0) && (
-          <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-xl">
-                プレイヤーとの相性（Who this game is for）
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* 刺さっているプレイヤー像 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <ThumbsUp className="w-4 h-4 text-emerald-400" />
-                    <span className="text-sm font-semibold text-emerald-300">
-                      こんなプレイヤーに刺さっています
-                    </span>
-                  </div>
-                  {audiencePositive.length > 0 ? (
-                    <ul className="space-y-3 text-sm">
-                      {audiencePositive.map((seg) => (
-                        <li key={seg.id} className="space-y-1">
-                          <div className="font-semibold text-slate-50">
-                            {seg.label}
-                          </div>
-                          {seg.description && (
-                            <p className="text-xs text-slate-300/85 leading-relaxed">
-                              {seg.description}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      まだ「どんなプレイヤーに刺さっているか」の傾向は十分に抽出されていません。
-                    </p>
-                  )}
-                </div>
-
-                {/* 刺さりにくいプレイヤー像 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <ThumbsDown className="w-4 h-4 text-rose-400" />
-                    <span className="text-sm font-semibold text-rose-300">
-                      こんなプレイヤーにはやや不向きかもしれません
-                    </span>
-                  </div>
-                  {audienceNegative.length > 0 ? (
-                    <ul className="space-y-3 text-sm">
-                      {audienceNegative.map((seg) => (
-                        <li key={seg.id} className="space-y-1">
-                          <div className="font-semibold text-slate-50">
-                            {seg.label}
-                          </div>
-                          {seg.description && (
-                            <p className="text-xs text-slate-300/85 leading-relaxed">
-                              {seg.description}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      「どんなプレイヤーには向いていないか」の明確な傾向は、まだあまり見えていません。
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         )}
 
 
