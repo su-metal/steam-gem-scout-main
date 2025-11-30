@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   ThumbsUp,
   ThumbsDown,
@@ -539,15 +540,53 @@ export default function GameDetail() {
     allPlayerFitTags[0]?.id ?? null
   );
 
+  // ★ 右スライドカードの「外側スワイプで閉じる」用
+  const rightSlideOverlayStartYRef = useRef<number | null>(null);
+
+  const handleRightSlideOverlayTouchStart = (
+    e: React.TouchEvent<HTMLDivElement>
+  ) => {
+    if (e.touches.length === 0) return;
+    rightSlideOverlayStartYRef.current = e.touches[0].clientY;
+  };
+
+  const handleRightSlideOverlayTouchMove = (
+    e: React.TouchEvent<HTMLDivElement>
+  ) => {
+    const startY = rightSlideOverlayStartYRef.current;
+    if (startY == null) return;
+    if (e.touches.length === 0) return;
+
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - startY;
+
+    const THRESHOLD = 40; // 40px 以上スワイプしたら「閉じる」
+
+    if (Math.abs(deltaY) >= THRESHOLD) {
+      setShowMobilePlayerDetail(false);
+      rightSlideOverlayStartYRef.current = null;
+      // このジェスチャー分はページスクロールさせない
+      e.preventDefault();
+    }
+  };
+
+  const handleRightSlideOverlayTouchEnd = () => {
+    rightSlideOverlayStartYRef.current = null;
+  };
+
+
   // ★ 追加: モバイル判定 & ボトムシート表示フラグ
   const [isMobile, setIsMobile] = useState(false);
   const [showMobilePlayerDetail, setShowMobilePlayerDetail] = useState(false);
 
-  // ★ スワイプ検出用
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
-  // ★ 追加: Player Match セクションの DOM を参照する ref
+
+  // ★ Player Match セクションの DOM を参照する ref
   const playerMatchSectionRef = useRef<HTMLDivElement | null>(null);
+
+  // ★ スクロールベースのカード切り替え用 - 最後のスクロール位置
+  const lastScrollYRef = useRef<number | null>(null);
+
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -581,7 +620,7 @@ export default function GameDetail() {
   }, []);
 
 
-  // ★ Player Match セクションに入ったらボトムシートを自動オープン / 離れたらクローズ
+  // ★ Player Match セクションが画面外に出たら、モバイルの右スライドカードを閉じる
   useEffect(() => {
     if (!isMobile) return;
     if (typeof IntersectionObserver === "undefined") return;
@@ -594,25 +633,13 @@ export default function GameDetail() {
         const entry = entries[0];
         if (!entry) return;
 
-        // セクションがある程度見えてきたらボトムシートを自動で開く
-        if (entry.isIntersecting && entry.intersectionRatio >= 0.2) {
-          if (!showMobilePlayerDetail) {
-            setShowMobilePlayerDetail(true);
-          }
-
-          // アクティブカードが未設定なら先頭を選択
-          if (!activePlayerFitId && allPlayerFitTags[0]) {
-            setActivePlayerFitId(allPlayerFitTags[0].id);
-          }
-        }
-
-        // 画面から外れたらボトムシートを閉じる
+        // Player Match セクションが一定以上見えなくなったら閉じる
         if (!entry.isIntersecting) {
           setShowMobilePlayerDetail(false);
         }
       },
       {
-        threshold: [0.1, 0.4, 1.0],
+        threshold: 0.1, // 少しでも外れたら「画面外」とみなす
       }
     );
 
@@ -621,72 +648,7 @@ export default function GameDetail() {
     return () => {
       observer.disconnect();
     };
-  }, [isMobile, showMobilePlayerDetail, activePlayerFitId, allPlayerFitTags]);
-
-
-
- 
-
-  // ★ Player Match 内のスワイプ → カード切り替えロジック
-  const handlePlayerMatchTouchStart = (
-    e: React.TouchEvent<HTMLDivElement>
-  ) => {
-    // モバイルかつ、ボトムシート表示中のときだけ「専用モード」にする
-    if (!isMobile || !showMobilePlayerDetail) return;
-    if (e.touches.length > 0) {
-      setTouchStartY(e.touches[0].clientY);
-    }
-  };
-
-  const handlePlayerMatchTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-  if (!isMobile || !showMobilePlayerDetail) return;
-  if (touchStartY == null) return;
-  if (e.touches.length === 0) return;
-
-  const currentY = e.touches[0].clientY;
-  const deltaY = currentY - touchStartY;
-  const threshold = 10; // 20px ごとに 1 カードくらいのイメージ
-
-  // まだしきい値に達していない → 何もしない
-  if (Math.abs(deltaY) < threshold) return;
-
-  const currentIndex = allPlayerFitTags.findIndex(
-    (t) => t.id === activePlayerFitId
-  );
-  if (currentIndex === -1) return;
-
-  // 上にスワイプ（指を上に動かす） → 次のカードへ
-  const direction = deltaY < 0 ? 1 : -1;
-  let nextIndex = currentIndex + direction;
-
-  // 範囲外はクランプしつつ、ページスクロールは殺さない
-  if (nextIndex < 0) {
-    // 先頭よりさらに下へスワイプ → ページスクロールに任せる
-    return;
-  }
-  if (nextIndex >= allPlayerFitTags.length) {
-    // 末尾よりさらに上へスワイプ → ページスクロールに任せる
-    return;
-  }
-
-  const nextTag = allPlayerFitTags[nextIndex];
-  if (!nextTag) return;
-
-  // カードを1枚進める / 戻す
-  setActivePlayerFitId(nextTag.id);
-
-  // 基準位置を更新 → 同じスワイプ中にさらに 20px 動けば、また次のカードに行く
-  setTouchStartY(currentY);
-
-  // このジェスチャー分はページスクロールさせない
-  e.preventDefault();
-};
-
-
-  const handlePlayerMatchTouchEnd = () => {
-    setTouchStartY(null);
-    
-  };
+  }, [isMobile]);
 
 
   const activePlayerFitTag =
@@ -712,6 +674,67 @@ export default function GameDetail() {
   };
 
 
+  // ★ モバイルポップアップ内スワイプ検出用
+  const [popupTouchStartX, setPopupTouchStartX] = useState<number | null>(null);
+  const [popupTouchStartY, setPopupTouchStartY] = useState<number | null>(null);
+
+  const handlePopupTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || !showMobilePlayerDetail) return;
+    if (e.touches.length === 0) return;
+
+    const touch = e.touches[0];
+    setPopupTouchStartX(touch.clientX);
+    setPopupTouchStartY(touch.clientY);
+  };
+
+  const handlePopupTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isMobile || !showMobilePlayerDetail) return;
+    if (popupTouchStartX == null || popupTouchStartY == null) return;
+    if (e.touches.length === 0) return;
+
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - popupTouchStartX;
+    const deltaY = touch.clientY - popupTouchStartY;
+
+    // 縦方向の動きが大きいときは「スクロール」とみなして何もしない
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+    const threshold = 50; // だいたい 50px 以上でスワイプと判定
+    if (Math.abs(deltaX) < threshold) return;
+
+    const currentIndex = allPlayerFitTags.findIndex(
+      (t) => t.id === activePlayerFitId
+    );
+    if (currentIndex === -1) return;
+
+    // 左スワイプ（指を左へ）→ 次のカード / 右スワイプ → 前のカード
+    const direction = deltaX < 0 ? 1 : -1;
+    const nextIndex = currentIndex + direction;
+
+    if (nextIndex < 0 || nextIndex >= allPlayerFitTags.length) {
+      // 範囲外なら何もしない（ただし連発防止のため基点だけ更新）
+      setPopupTouchStartX(touch.clientX);
+      setPopupTouchStartY(touch.clientY);
+      return;
+    }
+
+    const nextTag = allPlayerFitTags[nextIndex];
+    if (!nextTag) return;
+
+    setActivePlayerFitId(nextTag.id);
+
+    // 連続スワイプに対応するため、基点を更新
+    setPopupTouchStartX(touch.clientX);
+    setPopupTouchStartY(touch.clientY);
+
+    // このジェスチャー分は下のスクロールに流さない
+    e.preventDefault();
+  };
+
+  const handlePopupTouchEnd = () => {
+    setPopupTouchStartX(null);
+    setPopupTouchStartY(null);
+  };
 
 
   const ScoreBar = ({ score }: { score: number }) => (
@@ -1296,197 +1319,265 @@ export default function GameDetail() {
                     まだ「どんなプレイヤーに刺さるか／刺さらないか」の傾向は十分に抽出されていません。
                   </p>
                 ) : (
-                  <div
-  className="max-w-4xl mx-auto space-y-5 md:space-y-6"
-  onTouchStart={handlePlayerMatchTouchStart}
-  onTouchMove={handlePlayerMatchTouchMove}
-  onTouchEnd={handlePlayerMatchTouchEnd}
->
-                    {/* セクション全体もスクロールインでふわっと表示 */}
-                    <motion.div
-                      initial={{ opacity: 0, y: 18 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      transition={{ type: "spring", stiffness: 140, damping: 16 }}
-                      viewport={{ once: true, amount: 0.2 }}
-                      className="grid gap-5 md:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)] md:items-start"
-                    >
-                      {/* 左：ポップなヒートマップカード群 */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {allPlayerFitTags.map((tag, index) => (
-                          <motion.button
-                            key={tag.id}
-                            type="button"
-                            onClick={() => {
-                              setActivePlayerFitId(tag.id);
-                              if (isMobile) {
-                                setShowMobilePlayerDetail(true);
-                              }
-                            }}
-                            initial={{ opacity: 0, scale: 0.85, y: 14 }}
-                            whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                            whileHover={{ scale: 1.05 }}
-                            animate={
-                              activePlayerFitId === tag.id
-                                ? {
-                                  scale: [1, 1.03, 1],
-                                  transition: { duration: 0.6, repeat: Infinity },
+                  <motion.div
+                    initial={{ opacity: 0, y: 18 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 140, damping: 16 }}
+                    viewport={{ once: true, amount: 0.2 }}
+                    className="relative max-w-5xl mx-auto flex gap-4 md:gap-6 overflow-hidden"
+                  >
+                    {/* 左：プレイヤータイプカード一覧 */}
+                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
+                      {allPlayerFitTags.map((tag, index) => {
+                        const isActive = activePlayerFitId === tag.id;
+
+                        // モバイルは 2 カラムで最後の 2 枚を最終行とみなす
+                        const isLastRow = index >= allPlayerFitTags.length - 2;
+                        const bubblePositionClass = isLastRow
+                          ? "bottom-full mb-2"
+                          : "top-full mt-2";
+
+                        return (
+                          <div key={tag.id} className="relative">
+                            <motion.button
+                              type="button"
+                              onClick={() => {
+                                setActivePlayerFitId(tag.id);
+                                if (isMobile) {
+                                  setShowMobilePlayerDetail(true);
                                 }
-                                : {}
-                            }
-                            transition={{
-                              type: "spring",
-                              stiffness: 140,
-                              damping: 12,
-                              delay: index * 0.06,
-                            }}
-                            viewport={{ once: true, amount: 0.25 }}
-                            className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden
-            ${activePlayerFitId === tag.id
-                                ? "ring-2 ring-emerald-400/80 bg-emerald-500/10"
-                                : "bg-slate-900/70"
-                              }`}
-                          >
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-lg">{tag.icon}</span>
-                              <span className="text-[13px] font-semibold leading-snug">
-                                {tag.label}
-                              </span>
-                            </div>
+                              }}
+                              initial={{ opacity: 0, scale: 0.85, y: 14 }}
+                              whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                              whileHover={{ scale: 1.05 }}
+                              animate={
+                                isActive
+                                  ? {
+                                    scale: [1, 1.03, 1],
+                                    transition: { duration: 0.6, repeat: Infinity },
+                                  }
+                                  : {}
+                              }
+                              transition={{
+                                type: "spring",
+                                stiffness: 140,
+                                damping: 12,
+                                delay: index * 0.06,
+                              }}
+                              viewport={{ once: true, amount: 0.25 }}
+                              className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
+                                ? "border-2 border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
+                                : "border border-white/5 bg-slate-900/70"
+                                }`}
+                            >
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-lg">{tag.icon}</span>
+                                <span className="text-[13px] font-semibold leading-snug">
+                                  {tag.label}
+                                </span>
+                              </div>
 
-                            <div className="flex gap-1 mb-2">
-                              {SCORE_STEPS.map((step) => (
+                              {/* {tag.sub && (
+                                <p className="text-[11px] text-slate-300 mb-2 line-clamp-1">
+                                  {tag.sub}
+                                </p>
+                              )} */}
+
+                              <div className="flex gap-1 mb-1">
+                                {SCORE_STEPS.map((step) => (
+                                  <div
+                                    key={step}
+                                    className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
+                                      tag,
+                                      step
+                                    )}`}
+                                  />
+                                ))}
+                              </div>
+
+                              {/* うっすら光のグラデーション */}
+                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
+                            </motion.button>
+
+                            {/* ★ モバイル用：カードの近くにふきだし表示（既存挙動を維持） */}
+                            {isMobile && showMobilePlayerDetail && isActive && (
+                              <motion.div
+                                initial={{ x: "100%", opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                exit={{ x: "100%", opacity: 0 }}
+                                transition={{ type: "spring", stiffness: 240, damping: 24 }}
+                                className="fixed inset-0 z-40 flex items-center justify-center px-4"
+                                onTouchStart={handlePopupTouchStart}
+                                onTouchMove={handlePopupTouchMove}
+                                onTouchEnd={handlePopupTouchEnd}
+                              >
+                                {/* 背景の暗幕（タップ or スワイプで閉じる） */}
                                 <div
-                                  key={step}
-                                  className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
-                                    tag,
-                                    step
-                                  )}`}
+                                  className="absolute inset-0"
+                                  onClick={() => setShowMobilePlayerDetail(false)}
+                                  onTouchStart={handleRightSlideOverlayTouchStart}
+                                  onTouchMove={handleRightSlideOverlayTouchMove}
+                                  onTouchEnd={handleRightSlideOverlayTouchEnd}
                                 />
-                              ))}
+
+                                {/* 右からスライドインするパネル本体 */}
+                                {/* 右スライド詳細パネル（Pattern A ミニマル） */}
+                                <div className="relative z-10 w-full flex justify-center">
+                                  <div
+                                    className="
+        w-[min(100vw-40px,380px)]
+        max-h-[70vh]
+        rounded-2xl
+        border border-slate-700
+        bg-slate-900/95
+        shadow-lg
+        px-5 py-5
+        text-[12px]
+        text-slate-50
+        overflow-y-auto
+      "
+                                  >
+                                    {/* ヘッダー ＋ 前後矢印付き */}
+                                    <div className="flex items-center justify-between mb-4">
+                                      {/* ← 前へ */}
+                                      <button
+                                        type="button"
+                                        disabled={index === 0}
+                                        onClick={() => {
+                                          const prev = allPlayerFitTags[index - 1];
+                                          if (prev) {
+                                            setActivePlayerFitId(prev.id);
+                                          }
+                                        }}
+                                        className="p-2 text-slate-500 disabled:opacity-20 disabled:pointer-events-none"
+                                      >
+                                        <ArrowLeft className="w-5 h-5" />
+                                      </button>
+
+                                      {/* アイコン＋タイトル */}
+                                      <div className="flex items-center gap-3 flex-1 px-1">
+                                        <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
+                                          <span>{tag.icon}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="text-[11px] uppercase tracking-widest text-slate-400">
+                                            DETAIL
+                                          </div>
+                                          <div className="font-semibold text-[15px] leading-snug line-clamp-2">
+                                            {tag.label}
+                                          </div>
+
+                                          {/* Match スコア（控えめ） */}
+                                          <div className="mt-1 text-[11px] text-slate-400 flex items-center gap-2">
+                                            <span className="font-semibold text-slate-200">
+                                              Match {tag.score} / 5
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* → 次へ */}
+                                      <button
+                                        type="button"
+                                        disabled={index === allPlayerFitTags.length - 1}
+                                        onClick={() => {
+                                          const next = allPlayerFitTags[index + 1];
+                                          if (next) {
+                                            setActivePlayerFitId(next.id);
+                                          }
+                                        }}
+                                        className="p-2 text-slate-500 disabled:opacity-20 disabled:pointer-events-none"
+                                      >
+                                        <ArrowRight className="w-5 h-5" />
+                                      </button>
+                                    </div>
+
+                                    {/* 仕切り線：サイトメイングラデと揃えた細いライン */}
+                                    <div className="h-[1px] bg-gradient-to-r from-fuchsia-400/40 to-violet-300/40 mb-3" />
+
+                                    {/* 本文：サマリ + 理由 */}
+                                    {tag.sub && (
+                                      <p className="text-[12px] text-slate-300 leading-relaxed mb-2">
+                                        {tag.sub}
+                                      </p>
+                                    )}
+
+                                    {/* <p className="text-[12px] text-slate-200 leading-relaxed">
+                                      {tag.reason}
+                                    </p> */}
+
+                                    {/* 閉じるボタン（シンプル） */}
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowMobilePlayerDetail(false)}
+                                      className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:bg-slate-800/60 transition"
+                                    >
+                                      閉じる
+                                    </button>
+                                  </div>
+                                </div>
+
+                              </motion.div>
+                            )}
+
+
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
+                    {!isMobile && activePlayerFitTag && (
+                      <>
+                        {/* 右側のグラデーションオーバーレイ */}
+                        <div className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[44%] bg-gradient-to-l from-slate-950 via-slate-900/95 to-transparent" />
+
+                        {/* 右からスッと出てくる詳細パネル */}
+                        <div className="pointer-events-none absolute top-0 right-0 h-full w-full md:w-[42%] flex items-center justify-end pr-2 md:pr-4">
+                          <motion.div
+                            key={activePlayerFitTag.id}
+                            initial={{ x: 40, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 180, damping: 20 }}
+                            className="pointer-events-auto w-full md:w-[320px] rounded-2xl bg-slate-950/95 border border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.5)] px-4 py-4 text-xs space-y-2"
+                          >
+                            <div className="flex items-start gap-2">
+                              <div className="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-300/70 flex items-center justify-center text-lg">
+                                {activePlayerFitTag.icon}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/90 mb-1">
+                                  DETAIL
+                                </div>
+                                <div className="font-semibold text-sm text-emerald-100 mb-0.5 truncate">
+                                  {activePlayerFitTag.label}
+                                </div>
+                                <div className="flex items-center gap-1 text-[11px] text-emerald-200">
+                                  <span>Match {activePlayerFitTag.score} / 5</span>
+                                  <span className="text-emerald-300/70">
+                                    {"● ".repeat(Math.max(0, activePlayerFitTag.score - 1))}
+                                    {activePlayerFitTag.score > 0 ? "◐" : ""}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
 
-                            {/* サブテキスト：2行でトリム */}
-                            {/* {tag.sub && (
-                              <p className="text-[10px] text-slate-300 line-clamp-2">
-                                {tag.sub}
+                            {/* {activePlayerFitTag.sub && (
+                              <p className="text-[11px] text-slate-200 leading-relaxed">
+                                {activePlayerFitTag.sub}
                               </p>
                             )} */}
 
-                            {/* 光のグラデーションをうっすら重ねる */}
-                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
-                          </motion.button>
-                        ))}
-                      </div>
-
-                      {/* 右：選択中タグのポップアップ詳細カード */}
-                      <div className="mt-4 md:mt-0 hidden md:block">
-                        {activePlayerFitTag ? (
-                          <motion.div
-                            key={activePlayerFitTag.id}
-                            initial={{ opacity: 0, y: 12 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            transition={{ type: "spring", stiffness: 140, damping: 14 }}
-                            viewport={{ once: true, amount: 0.3 }}
-                            className="rounded-2xl bg-slate-950/95 border border-slate-700 px-4 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.8)] text-[12px] text-slate-100"
-                          >
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-400/20 via-fuchsia-400/20 to-cyan-400/20 border border-white/10">
-                                <span className="text-xl">{activePlayerFitTag.icon}</span>
-                              </div>
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-semibold text-[13px]">
-                                  {activePlayerFitTag.label}
-                                </span>
-                                {activePlayerFitTag.sub && (
-                                  <span className="text-[11px] text-slate-300">
-                                    {activePlayerFitTag.sub}
-                                  </span>
-                                )}
-                                <div className="flex items-center gap-1 text-[11px] mt-1">
-                                  <span className="uppercase tracking-[0.16em] text-slate-400">
-                                    Match
-                                  </span>
-                                  <span className="font-semibold">
-                                    {activePlayerFitTag.score}/5
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <p className="text-[11px] text-slate-200 leading-relaxed">
-                              {activePlayerFitTag.reason}
-                            </p>
-                          </motion.div>
-                        ) : (
-                          <div className="rounded-2xl bg-slate-900/80 border border-slate-800 px-4 py-3 text-[11px] text-slate-400">
-                            グリッドのいずれかのタイプをタップすると、ここに詳しい解説が表示されます。
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-
-                     {/* ★ 追加：モバイル専用ボトムシート */}
-                      {isMobile && showMobilePlayerDetail && activePlayerFitTag && (
-                        <div className="fixed inset-x-0 bottom-0 z-40">
-                          {/* 背景オーバーレイ */}
-                          <div
-                            className="absolute inset-0 bg-black/40"
-                            onClick={() => setShowMobilePlayerDetail(false)}
-                          />
-
-                          {/* 本体 */}
-                          <motion.div
-                            initial={{ y: "100%", opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ type: "spring", stiffness: 160, damping: 20 }}
-                            className="relative max-h-[70vh] rounded-t-2xl bg-slate-950/95 border border-slate-700 px-4 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.9)] text-[12px] text-slate-100 overflow-y-auto"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-400/20 via-fuchsia-400/20 to-cyan-400/20 border border-white/10">
-                                  <span className="text-xl">{activePlayerFitTag.icon}</span>
-                                </div>
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="font-semibold text-[13px]">
-                                    {activePlayerFitTag.label}
-                                  </span>
-                                  {/* {activePlayerFitTag.sub && (
-                                    <span className="text-[11px] text-slate-300">
-                                      {activePlayerFitTag.sub}
-                                    </span>
-                                  )} */}
-                                  <div className="flex items-center gap-1 text-[11px] mt-1">
-                                    <span className="uppercase tracking-[0.16em] text-slate-400">
-                                      Match
-                                    </span>
-                                    <span className="font-semibold">
-                                      {activePlayerFitTag.score}/5
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <button
-                                type="button"
-                                onClick={() => setShowMobilePlayerDetail(false)}
-                                className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1"
-                              >
-                                閉じる
-                              </button>
-                            </div>
-
-                            <p className="text-[11px] text-slate-200 leading-relaxed">
+                            <p className="text-[11px] text-slate-100 leading-relaxed">
                               {activePlayerFitTag.reason}
                             </p>
                           </motion.div>
                         </div>
-                      )}
-                   
-                  </div>
-
+                      </>
+                    )}
+                  </motion.div>
                 )}
               </CardContent>
-
 
             </Card>
           )}
