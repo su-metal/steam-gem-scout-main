@@ -442,10 +442,11 @@ function buildRankingGameFromSteamRow(row: any): RankingGame {
     typeof row.is_on_sale === "boolean" ? row.is_on_sale : discountPercent > 0;
   const averagePlaytime: number = row.average_playtime ?? 0;
 
-  const tags: string[] = Array.isArray(row.tags)
-    ? row.tags
-    : typeof row.tags === "string"
-    ? row.tags
+  // SteamSpy の tags カラムではなく、公式 API 由来の store_genres を使う
+  const tags: string[] = Array.isArray(row.store_genres)
+    ? row.store_genres
+    : typeof row.store_genres === "string"
+    ? row.store_genres
         .split(",")
         .map((t: string) => t.trim())
         .filter(Boolean)
@@ -683,7 +684,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
         discount_percent,
         is_on_sale,
         average_playtime,
-        tags,
+        store_genres,
         screenshots,  
         steam_url,
         review_score_desc,
@@ -971,11 +972,8 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         ...baseDataForStorage
       } = currentData || {};
 
-      // mood_scores 再計算用に tags と既存スコアを控えておく
-      const tagsForMood: string[] = Array.isArray(baseDataForStorage.tags)
-        ? baseDataForStorage.tags
-        : [];
-
+      // mood_scores 再計算用に既存スコアを控えておく
+  
       let moodScores: MoodVector | null =
         baseDataForStorage.mood_scores ?? null;
 
@@ -1010,6 +1008,25 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         continue;
       }
 
+            // 🔽 AI 解析結果から mood_scores 用のタグを決定
+      const aiTagsFromResult: string[] =
+        aiResult &&
+        typeof aiResult === "object" &&
+        Array.isArray((aiResult as any).aiTags)
+          ? ((aiResult as any).aiTags as string[])
+          : [];
+
+      // 既存の data.tags があれば優先し、無ければ aiTags を使う
+      let tagsForMood: string[] = Array.isArray(
+        (baseDataForStorage as any).tags
+      )
+        ? ((baseDataForStorage as any).tags as string[])
+        : [];
+
+      if (tagsForMood.length === 0 && aiTagsFromResult.length > 0) {
+        tagsForMood = aiTagsFromResult;
+      }
+
       // ★ AI 解析結果を踏まえて mood_scores を再計算
       if (tagsForMood.length > 0) {
         try {
@@ -1024,13 +1041,20 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         }
       }
 
-      // 🔽 ここから追加：AI 解析結果から最終タグを決定
-      const aiTagsFromResult: string[] =
-        aiResult &&
-        typeof aiResult === "object" &&
-        Array.isArray((aiResult as any).aiTags)
-          ? ((aiResult as any).aiTags as string[])
-          : [];
+
+      // ★ AI 解析結果を踏まえて mood_scores を再計算
+      if (tagsForMood.length > 0) {
+        try {
+          moodScores = buildMoodFromTagsAndAnalysis(tagsForMood, aiResult);
+        } catch (e) {
+          console.error(
+            "runAiAnalysisForAppIds: failed to rebuild mood_scores",
+            appId,
+            e
+          );
+          // 失敗した場合は既存の moodScores をそのまま残す
+        }
+      }
 
       const existingTagsFromData: string[] = Array.isArray(
         (baseDataForStorage as any).tags
@@ -1127,7 +1151,7 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
         total_reviews,
         estimated_owners,
         price,
-        tags,
+        store_genres,
         release_date,
         release_year,
         last_steam_fetch_at
@@ -1210,7 +1234,7 @@ async function fetchCandidateGamesByFilters(params: FilterParams): Promise<{
       totalReviews: row.total_reviews ?? 0,
       estimatedOwners: row.estimated_owners ?? 0,
       price: row.price ?? 0,
-      tags: row.tags ?? [],
+      tags: row.store_genres ?? [],
       // ★ 発売日があればそちらを優先、なければ取得日時
       releaseDate: row.release_date ?? row.last_steam_fetch_at ?? undefined,
     })) ?? [];

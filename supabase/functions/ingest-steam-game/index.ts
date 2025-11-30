@@ -266,14 +266,14 @@ async function updateSteamSpyTagsForSteamGame(appId: number) {
 
     const nowIso = new Date().toISOString();
 
-    const { error } = await supabase
-      .from("steam_games")
-      .update({
-        steamspy_tags_raw: rawTags, // 生の {tag: weight} をそのまま保存
-        tags: topTags, // 正規化済みタグ（text[]）
-        steamspy_fetched_at: nowIso, // いつ取得したか
-      })
-      .eq("app_id", appId);
+    // const { error } = await supabase
+    //   .from("steam_games")
+    //   .update({
+    //     steamspy_tags_raw: rawTags, // 生の {tag: weight} をそのまま保存
+    //     tags: topTags, // 正規化済みタグ（text[]）
+    //     steamspy_fetched_at: nowIso, // いつ取得したか
+    //   })
+    //   .eq("app_id", appId);
 
     if (error) {
       console.error(
