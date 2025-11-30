@@ -73,6 +73,19 @@ interface AudienceSegment {
   id: string;
   label: string;
   description?: string;
+
+  // Player Match 用
+  sub?: string;
+  fitScore?: number;
+  reason?: string;
+
+  // 代表レビュー（最大2件分をこの4本に入れる）
+  // audiencePositive では主に hit 系を使用
+  // audienceNegative では主に miss 系を使用
+  hitReviewOriginal?: string;
+  hitReviewParaphrased?: string;
+  missReviewOriginal?: string;
+  missReviewParaphrased?: string;
 }
 
 interface HiddenGemAnalysis {
@@ -579,7 +592,43 @@ Deno.serve(async (req) => {
    - pros / cons の文をそのまま繰り返さず、「その特徴を好む人／つらく感じる人」というプレイヤー像に変換する。
    - 主語は必ずプレイヤー（〜な人、〜なタイプのプレイヤー）にする。
 
-   ### TAG RULES（aiTags / aiPrimaryGenre）
+───────────────────────────────
+【A. 出力件数】
+───────────────────────────────
+- audiencePositive：最大4件（2〜4件）
+- audienceNegative：最大4件（2〜4件）
+- ただし品質を最優先し、無理に4件にする必要はない。
+
+───────────────────────────────
+【G. 代表レビュー（hit/miss）】
+───────────────────────────────
+● すべて日本語に翻訳し、自然文で要約する。
+● 元レビューが英語・中国語・その他でも必ず日本語に変換する。
+● 生文の引用・「”」などの引用符・ユーザー名は禁止。
+● 最大2件（観点の異なるレビュー）を要約文として生成する。
+● audiencePositive では hit 系を、audienceNegative では miss 系を優先し埋める。
+
+
+
+9. **代表レビュー（hit/miss）は、プレイヤー像ごとに最大 2 件まで出す。**
+   - "hitReviewParaphrased" / "hitReviewOriginal" は、それぞれ **内容の異なる「刺さった代表レビュー（要約文）」** を入れる。
+   - "missReviewParaphrased" / "missReviewOriginal" は、それぞれ **内容の異なる「刺さらなかった代表レビュー（要約文）」** を入れる。
+   - 原文が英語・中国語・その他多言語であっても、絶対に原文をそのまま出力しない。
+   - いずれも **日本語で 1〜2 文程度**。ユーザー名や引用記号（「」や “”）は使わない。
+   - audiencePositive の各要素では、基本的に **hit 系を優先して埋め、miss 系は空または null** とする。
+   - audienceNegative の各要素では、基本的に **miss 系を優先して埋め、hit 系は空または null** とする。
+   - 中国語・英語ほか多言語レビューの“原文コピペ”は禁止（違反した場合は評価をやり直す）。
+   - 2件必要な場合は、**別々のレビュー内容を日本語要約として2つ用意する**。supabase functions deploy analyze-game --project-ref gfejumzkviknhyhjdpxn 
+   - 元レビューがどの言語で書かれていても、AI は必ず日本語のみで返答すること。
+   - 多言語レビューの原文引用は禁止。必ず日本語として再構成し、自然な文に直す。
+
+
+   これにより、フロント側では:
+   - ポジティブカード → hit 系 2 件のみ表示
+   - ネガティブカード → miss 系 2 件のみ表示
+   となる。
+
+### TAG RULES（aiTags / aiPrimaryGenre）
 
 - "aiTags" は Steam ストアでよく使われる **英語タグ名** のみを返すこと。
   - 例: "Roguelike", "Rogue-lite", "Souls-like", "Metroidvania",
@@ -604,7 +653,7 @@ Deno.serve(async (req) => {
 
 {
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
-  "summary": "4〜5文の日本語。このゲーム固有の特徴を必ず1つ含める。",
+  "summary": "2〜3文の日本語。このゲーム固有の特徴を必ず1つ含める。あくまで客観的な特徴を述べるに留めることを必ず守る。",
   "labels": ["日本語ラベル", ...],
   "pros": ["日本語の強み", ...],
   "cons": ["日本語の弱み", ...],
@@ -632,14 +681,28 @@ Deno.serve(async (req) => {
     {
       "id": string,
       "label": string,
-      "description": string
+      "description": string | "" | null,
+      "sub": string | "" | null,
+      "fitScore": number | null,
+      "reason": string | "" | null,
+      "hitReviewParaphrased": string | "" | null,
+      "hitReviewOriginal": string | "" | null,
+      "missReviewParaphrased": string | "" | null,
+      "missReviewOriginal": string | "" | null
     }
   ],
   "audienceNegative": [
     {
       "id": string,
       "label": string,
-      "description": string
+      "description": string | "" | null,
+      "sub": string | "" | null,
+      "fitScore": number | null,
+      "reason": string | "" | null,
+      "hitReviewParaphrased": string | "" | null,
+      "hitReviewOriginal": string | "" | null,
+      "missReviewParaphrased": string | "" | null,
+      "missReviewOriginal": string | "" | null
     }
   ]
 }
@@ -650,6 +713,9 @@ Deno.serve(async (req) => {
 - id は英数字とアンダースコアのみ。
 - label は短い日本語。
 - description は 1〜2 文。
+- sub はカード下の一言要約。1 文以内で簡潔に。
+- fitScore は 1〜5 の整数（プレイヤーとの相性）。不明な場合は null。
+- reason は「なぜそのタイプと相性が良い／悪いか」を説明する 2〜3 文。
 
 - **以下は禁止：**
   - ジャンル名をそのまま使っただけのもの（例: デッキ構築好き、ローグライク好き）。
@@ -659,9 +725,13 @@ Deno.serve(async (req) => {
 - **以下必須：**
   - レビュー内の固有の褒めポイント・欠点からプレイヤー像を構成する。
   - このゲーム独自のメカニクス・テンポ・戦闘・UI・成長曲線・緊張感・遊び方が反映される多角的な評価をする。
-  - pros / cons とは別軸の評価で、レビューの内容から「それを好む／苦手とするプレイヤー」を具体的に描写する。
-  - それぞれの件数は **2～5個** に制限する。特筆すべきものがない場合は無理に捻出しないこと。しかしベースの件数は4件を目安とする。
+  - それぞれの件数は **3～5個** に制限する。特筆すべきものがない場合は無理に捻出しないこと（ただし 0 件はできるだけ避ける）。
 
+- **代表レビューのルール：**
+  - hitReviewParaphrased / hitReviewOriginal / missReviewParaphrased / missReviewOriginal は、それぞれ **個別の代表レビュー要約文** を入れる。
+  - audiencePositive の場合、できるだけ hit 系 2 件を埋め、miss 系は空のままでよい。
+  - audienceNegative の場合、できるだけ miss 系 2 件を埋め、hit 系は空のままでよい。
+  - 同じ内容をコピペして重複させない。
 
 Always respond with raw JSON only.`;
 
@@ -1184,9 +1254,11 @@ function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
   for (const item of value) {
     if (!item) continue;
 
+    // 文字列だけ渡ってきた場合は label として扱う
     if (typeof item === "string") {
       const trimmed = item.trim();
       if (!trimmed) continue;
+
       result.push({
         id: trimmed.toLowerCase().replace(/\s+/g, "_").slice(0, 48),
         label: trimmed,
@@ -1196,13 +1268,13 @@ function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
 
     if (typeof item === "object") {
       const obj = item as any;
+
       const labelRaw =
-        typeof obj.label === "string"
+        typeof obj.label === "string" && obj.label.trim()
           ? obj.label.trim()
-          : typeof obj.id === "string"
+          : typeof obj.id === "string" && obj.id.trim()
           ? obj.id.trim()
           : "";
-
       if (!labelRaw) continue;
 
       const idRaw =
@@ -1211,13 +1283,66 @@ function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
           : labelRaw.toLowerCase().replace(/\s+/g, "_").slice(0, 48);
 
       const descriptionRaw =
-        typeof obj.description === "string" ? obj.description.trim() : "";
+        typeof obj.description === "string" && obj.description.trim()
+          ? obj.description.trim()
+          : "";
 
-      result.push({
+      const subRaw =
+        typeof obj.sub === "string" && obj.sub.trim() ? obj.sub.trim() : "";
+
+      const fitScoreRaw =
+        typeof obj.fitScore === "number" && Number.isFinite(obj.fitScore)
+          ? obj.fitScore
+          : undefined;
+
+      const reasonRaw =
+        typeof obj.reason === "string" && obj.reason.trim()
+          ? obj.reason.trim()
+          : "";
+
+      const hitReviewOriginalRaw =
+        typeof obj.hitReviewOriginal === "string" &&
+        obj.hitReviewOriginal.trim()
+          ? obj.hitReviewOriginal.trim()
+          : "";
+
+      const hitReviewParaphrasedRaw =
+        typeof obj.hitReviewParaphrased === "string" &&
+        obj.hitReviewParaphrased.trim()
+          ? obj.hitReviewParaphrased.trim()
+          : "";
+
+      const missReviewOriginalRaw =
+        typeof obj.missReviewOriginal === "string" &&
+        obj.missReviewOriginal.trim()
+          ? obj.missReviewOriginal.trim()
+          : "";
+
+      const missReviewParaphrasedRaw =
+        typeof obj.missReviewParaphrased === "string" &&
+        obj.missReviewParaphrased.trim()
+          ? obj.missReviewParaphrased.trim()
+          : "";
+
+      const segment: AudienceSegment = {
         id: idRaw,
         label: labelRaw,
-        ...(descriptionRaw ? { description: descriptionRaw } : {}),
-      });
+      };
+
+      if (descriptionRaw) segment.description = descriptionRaw;
+      if (subRaw) segment.sub = subRaw;
+      if (fitScoreRaw !== undefined) segment.fitScore = fitScoreRaw;
+      if (reasonRaw) segment.reason = reasonRaw;
+      if (hitReviewOriginalRaw)
+        segment.hitReviewOriginal = hitReviewOriginalRaw;
+      if (hitReviewParaphrasedRaw)
+        segment.hitReviewParaphrased = hitReviewParaphrasedRaw;
+      if (missReviewOriginalRaw)
+        segment.missReviewOriginal = missReviewOriginalRaw;
+      if (missReviewParaphrasedRaw)
+        segment.missReviewParaphrased = missReviewParaphrasedRaw;
+
+      result.push(segment);
     }
   }
 

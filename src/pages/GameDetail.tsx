@@ -71,7 +71,7 @@ interface AnalysisData {
   historicalIssuesReliability?: "high" | "medium" | "low" | null;
 
   // ★ 追加: プレイヤータイプ（ポジ／ネガ）
-  // Deep Emoji Tags 用に icon / sub / fitScore / reason を拡張
+  // Deep Emoji Tags 用に icon / sub / fitScore / reason + 代表レビューを拡張
   audiencePositive?: {
     id: string;
     label: string;
@@ -81,6 +81,12 @@ interface AnalysisData {
     sub?: string;       // 一言サブテキスト
     fitScore?: number;  // 1〜5 想定の「刺さり度」
     reason?: string;    // なぜ刺さるのか
+
+    // 代表的なレビュー
+    hitReviewOriginal?: string;
+    hitReviewParaphrased?: string;
+    missReviewOriginal?: string;
+    missReviewParaphrased?: string;
   }[];
   audienceNegative?: {
     id: string;
@@ -91,6 +97,11 @@ interface AnalysisData {
     sub?: string;
     fitScore?: number;
     reason?: string;
+
+    hitReviewOriginal?: string;
+    hitReviewParaphrased?: string;
+    missReviewOriginal?: string;
+    missReviewParaphrased?: string;
   }[];
 
 }
@@ -377,7 +388,13 @@ export default function GameDetail() {
     sub?: string;
     fitScore?: number;
     reason?: string;
+
+    hitReviewOriginal?: string;
+    hitReviewParaphrased?: string;
+    missReviewOriginal?: string;
+    missReviewParaphrased?: string;
   };
+
 
   // プレイヤータイプ配列を安全に整形するヘルパー
   const normalizeAudienceSegmentList = (
@@ -440,6 +457,30 @@ export default function GameDetail() {
             ? raw.reason.trim()
             : undefined;
 
+        const hitReviewOriginal =
+          typeof raw.hitReviewOriginal === "string" &&
+            raw.hitReviewOriginal.trim()
+            ? raw.hitReviewOriginal.trim()
+            : undefined;
+
+        const hitReviewParaphrased =
+          typeof raw.hitReviewParaphrased === "string" &&
+            raw.hitReviewParaphrased.trim()
+            ? raw.hitReviewParaphrased.trim()
+            : undefined;
+
+        const missReviewOriginal =
+          typeof raw.missReviewOriginal === "string" &&
+            raw.missReviewOriginal.trim()
+            ? raw.missReviewOriginal.trim()
+            : undefined;
+
+        const missReviewParaphrased =
+          typeof raw.missReviewParaphrased === "string" &&
+            raw.missReviewParaphrased.trim()
+            ? raw.missReviewParaphrased.trim()
+            : undefined;
+
         result.push({
           id,
           label,
@@ -448,12 +489,17 @@ export default function GameDetail() {
           ...(sub ? { sub } : {}),
           ...(fitScore !== undefined ? { fitScore } : {}),
           ...(reason ? { reason } : {}),
+          ...(hitReviewOriginal ? { hitReviewOriginal } : {}),
+          ...(hitReviewParaphrased ? { hitReviewParaphrased } : {}),
+          ...(missReviewOriginal ? { missReviewOriginal } : {}),
+          ...(missReviewParaphrased ? { missReviewParaphrased } : {}),
         });
       }
     }
 
     return result;
   };
+
 
   const audiencePositive = normalizeAudienceSegmentList(
     analysisData.audiencePositive
@@ -471,6 +517,28 @@ export default function GameDetail() {
     score: number; // 1〜5
     reason: string;
     polarity: "positive" | "negative";
+
+    hitReviewOriginal?: string;
+    hitReviewParaphrased?: string;
+    missReviewOriginal?: string;
+    missReviewParaphrased?: string;
+  };
+
+  // ★ 代表レビューを最大2件までのリストに整形するヘルパー
+  const buildReviewList = (
+    primary?: string,
+    secondary?: string
+  ): string[] => {
+    const list: string[] = [];
+
+    const p = typeof primary === "string" ? primary.trim() : "";
+    const s = typeof secondary === "string" ? secondary.trim() : "";
+
+    if (p) list.push(p);
+    if (s && s !== p) list.push(s);
+
+    // 最大2件まで
+    return list.slice(0, 2);
   };
 
   const SCORE_STEPS = [1, 2, 3, 4, 5] as const;
@@ -522,7 +590,20 @@ export default function GameDetail() {
         score,
         reason,
         polarity,
+        ...(item.hitReviewOriginal
+          ? { hitReviewOriginal: item.hitReviewOriginal }
+          : {}),
+        ...(item.hitReviewParaphrased
+          ? { hitReviewParaphrased: item.hitReviewParaphrased }
+          : {}),
+        ...(item.missReviewOriginal
+          ? { missReviewOriginal: item.missReviewOriginal }
+          : {}),
+        ...(item.missReviewParaphrased
+          ? { missReviewParaphrased: item.missReviewParaphrased }
+          : {}),
       };
+
     });
   };
 
@@ -655,6 +736,37 @@ export default function GameDetail() {
     allPlayerFitTags.find((t) => t.id === activePlayerFitId) ??
     allPlayerFitTags[0] ??
     null;
+
+  // ★ 詳細カード用の代表レビュー（最大2件／極性ごと）
+  const activePositiveReviews =
+    activePlayerFitTag && activePlayerFitTag.polarity === "positive"
+      ? [
+        ...(activePlayerFitTag.hitReviewParaphrased
+          ? [activePlayerFitTag.hitReviewParaphrased]
+          : []),
+        ...(activePlayerFitTag.hitReviewOriginal &&
+          activePlayerFitTag.hitReviewOriginal !==
+          activePlayerFitTag.hitReviewParaphrased
+          ? [activePlayerFitTag.hitReviewOriginal]
+          : []),
+      ]
+      : [];
+
+  const activeNegativeReviews =
+    activePlayerFitTag && activePlayerFitTag.polarity === "negative"
+      ? [
+        ...(activePlayerFitTag.missReviewParaphrased
+          ? [activePlayerFitTag.missReviewParaphrased]
+          : []),
+        ...(activePlayerFitTag.missReviewOriginal &&
+          activePlayerFitTag.missReviewOriginal !==
+          activePlayerFitTag.missReviewParaphrased
+          ? [activePlayerFitTag.missReviewOriginal]
+          : []),
+      ]
+      : [];
+
+
 
   // ★ ヒートマップの色（FOR / NOT FOR とスコアで塗り分け）
   const getPlayerFitHeatColor = (tag: PlayerFitTag, step: number) => {
@@ -1004,21 +1116,44 @@ export default function GameDetail() {
       <div className="w-full border-b border-white/5 bg-gradient-to-b from-black/70 via-black/40 to-transparent">
         <div className="max-w-5xl mx-auto">
           <div className="relative w-full h-[260px] md:h-[320px] overflow-hidden rounded-b-[32px] border-x border-b border-white/10 shadow-[0_32px_80px_rgba(0,0,0,0.85)] bg-black">
-            <img
-              src={headerImageUrl}
-              alt={title}
-              loading="lazy"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                // 画像が存在しない場合は非表示
-                e.currentTarget.style.display = "none";
-              }}
-            />
-            {/* 上から薄いグラデをかけて LP の Hero っぽく */}
+            <div className="relative w-full h-[260px] md:h-[320px] overflow-hidden rounded-b-[32px] border-x border-b border-white/10 shadow-[0_32px_80px_rgba(0,0,0,0.85)] bg-black">
+              <img
+                src={headerImageUrl}
+                alt={title}
+                loading="lazy"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+
+              {/* グラデオーバーレイ */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+              {/* Match Score 丸バッジ */}
+              {matchScorePercent !== null && (
+                <div className="absolute bottom-4 right-4 z-10 flex items-center justify-center">
+                  <div className="flex flex-col items-center justify-center rounded-full border-2 border-fuchsia-300/80 bg-black/80 backdrop-blur-sm shadow-[0_0_30px_rgba(236,72,153,0.7)] w-20 h-20 md:w-24 md:h-24">
+                    <span className="text-[10px] md:text-[11px] uppercase tracking-[0.18em] text-slate-200/90 mb-1">
+                      Match
+                    </span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xl md:text-2xl font-extrabold bg-gradient-to-r from-fuchsia-400 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
+                        {matchScorePercent}
+                      </span>
+                      <span className="text-xs text-slate-200">%</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 2枚目のグラデ（今のコードどおりでOK） */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           </div>
         </div>
       </div>
+
 
       {/* === Main Content ========================================= */}
       {/* Main Content ========================================= */}
@@ -1194,106 +1329,117 @@ export default function GameDetail() {
                   </CardContent>
                 </Card>
 
-                {/* ギャラリーの下で左右2カラム*/}
-                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 pt-2">
-                  {/* 左：Release / バッジ / 評価テキスト / タグ */}
-                  <div className="flex-1 space-y-3 min-w-0">
-                    {formattedReleaseDate && (
-                      <p className="text-xs md:text-sm text-slate-300">
-                        <span className="text-slate-400/80">Release:</span>{" "}
-                        {formattedReleaseDate}
-                      </p>
-                    )}
 
-                    {/* 安定度ステータスバッジ */}
-                    {stabilityBadge && (
-                      <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <Badge
-                          variant="outline"
-                          className={`text-[11px] font-semibold rounded-full border px-3 py-1 ${stabilityBadge.className}`}
-                        >
-                          {stabilityBadge.label}
-                        </Badge>
-                        {stabilityBadge.description && (
-                          <span className="text-xs text-slate-300/80">
-                            {stabilityBadge.description}
-                          </span>
-                        )}
+                {/* 左：統合サマリー（Stats + Tags + 評価バッジ） */}
+                <div className="flex-1 space-y-4 min-w-0">
+                  {/* 統合サマリーカード：Stats + Tags */}
+                  <div className="rounded-[24px] bg-gradient-to-br from-[#07031f] via-[#050313] to-[#050510] border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] px-4 py-4 md:px-5 md:py-5 space-y-4">
+                    {/* 上段：Game Statistics（6項目グリッド） */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">
+                          Positive Reviews
+                        </div>
+                        <div className="text-lg md:text-xl font-bold text-cyan-300">
+                          {positiveRatioDisplay}%
+                        </div>
                       </div>
-                    )}
 
-                    {reviewScoreDesc && (
-                      <p className="text-sm text-slate-200/90">
-                        {reviewScoreDesc}
-                      </p>
-                    )}
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">
+                          Total Reviews
+                        </div>
+                        <div className="text-lg md:text-xl font-semibold">
+                          {totalReviews?.toLocaleString() ?? "-"}
+                        </div>
+                      </div>
 
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">Price</div>
+                        <div className="text-lg md:text-xl font-bold text-emerald-300">
+                          {priceDisplay}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">
+                          Avg Playtime
+                        </div>
+                        <div className="text-lg md:text-xl font-semibold">
+                          {averagePlaytimeHours !== "N/A"
+                            ? `${averagePlaytimeHours}h`
+                            : "N/A"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">
+                          Estimated Owners
+                        </div>
+                        <div className="text-base md:text-lg font-semibold">
+                          {estimatedOwners?.toLocaleString() ?? "-"}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-[11px] text-slate-400 mb-0.5">Release</div>
+                        <div className="text-base md:text-lg">
+                          {formattedReleaseDate ?? "-"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 中段：Tags（大きめ・目立つバッジ） */}
                     {displayTags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-2">
+                      <div className="flex flex-wrap gap-2 pt-1">
                         {displayTags.map((tag, idx) => (
                           <Badge
                             key={`${tag}-${idx}`}
                             variant="secondary"
-                            className="rounded-full bg-[#120f28] border border-white/10 text-[11px] px-3 py-1"
+                            className="rounded-full bg-[#1b1438] border border-white/20 text-[12px] md:text-sm font-medium px-3.5 py-1.5"
                           >
                             {tag}
                           </Badge>
                         ))}
                       </div>
                     )}
+                       {/* レビュー評価バッジ（Very Positive など） */}
+                  {reviewScoreDesc && (
+                    <Badge
+                      variant="outline"
+                      className="inline-flex items-center gap-1 rounded-full border-amber-400/80 bg-amber-500/15 text-[11px] md:text-xs text-amber-50 px-3 py-1"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>{reviewScoreDesc}</span>
+                    </Badge>
+                  )}
+
+                  {/* 復活したタイトルなどの安定度ステータス */}
+                  {stabilityBadge && (
+                    <div className="space-y-1">
+                      {/* ★ バッジと説明文を“縦にセット”で表示する */}
+                      <Badge
+                        variant="outline"
+                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] md:text-xs font-semibold ${stabilityBadge.className}`}
+                      >
+                        <span>{stabilityBadge.label}</span>
+                      </Badge>
+
+                      {stabilityBadge.description && (
+                        <p className="text-xs md:text-[13px] text-slate-300/80 leading-relaxed">
+                          {stabilityBadge.description}
+                        </p>
+                      )}
+                    </div>
+                  )}
                   </div>
 
-                  {/* 右：Match Score（md 以上で左と横並び） */}
-                  <div className="mt-4 md:mt-0 w-full md:w-auto md:max-w-xs text-center bg-[#050713]/90 p-6 rounded-2xl border border-white/15 shadow-lg">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400 mb-2">
-                      Match Score
-                    </div>
-
-                    {/* マッチ度のパーセンテージ表示 */}
-                    <div className="flex items-baseline justify-center gap-1 mb-2">
-                      <span className="text-5xl font-extrabold bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
-                        {matchScorePercent !== null ? matchScorePercent : "N/A"}
-                      </span>
-                      <span className="text-2xl text-slate-400">%</span>
-                    </div>
-
-                    {/* Hidden Gem / Improved Hidden Gem などのラベル */}
-                    {gemLabel && (
-                      <div className="flex items-center justify-center gap-2 mb-1">
-                        {gemLabel === "Hidden Gem" ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                        ) : gemLabel === "Highly rated but not hidden" ? (
-                          <CheckCircle2 className="w-5 h-5 text-sky-400" />
-                        ) : (
-                          <XCircle className="w-5 h-5 text-slate-500" />
-                        )}
-                        <span className="font-semibold text-sm">{gemLabel}</span>
-                      </div>
-                    )}
-
-                    {/* Match Score の意味説明（気分フィット度） */}
-                    <p className="text-[11px] text-slate-300/90 mt-2 leading-relaxed">
-                      このゲームが「いまのあなたの気分」にどれだけフィットするかを
-                      AI が推定したスコアです。
-                    </p>
-                    {/* Match Score 状態別の補足 */}
-                    {matchScorePercent !== null && (
-                      <p className="text-[11px] text-slate-400/80 mt-1 leading-relaxed">
-                        {matchScorePercent >= 80 &&
-                          "あなたの気分に強くマッチしています。今まさに “刺さる” 可能性が高いです。"}
-                        {matchScorePercent >= 60 && matchScorePercent < 80 &&
-                          "いまの気分にかなり合いそうな要素が多く含まれています。"}
-                        {matchScorePercent >= 40 && matchScorePercent < 60 &&
-                          "一部はあなたの気分に刺さる可能性がありますが、好みが分かれるかもしれません。"}
-                        {matchScorePercent < 40 &&
-                          "現在の気分とはやや方向性が違うかもしれません。"}
-                      </p>
-                    )}
-
-                  </div>
-
+               
                 </div>
+
+
               </div>
+
             </CardHeader>
           </Card>
         </div>
@@ -1304,7 +1450,7 @@ export default function GameDetail() {
           playerFitNegativeTags.length > 0) && (
             <Card
               ref={playerMatchSectionRef}
-              className="rounded-[24px] border-none bg-[#070716]/95 shadow-lg">
+              className="rounded-[24px] border-none bg-[#070716]">
               <CardHeader className="px-0 py-5 sm:px-6 sm:py-6">
                 <CardTitle className="text-xl">
                   Player Match
@@ -1377,12 +1523,6 @@ export default function GameDetail() {
                                 </span>
                               </div>
 
-                              {/* {tag.sub && (
-                                <p className="text-[11px] text-slate-300 mb-2 line-clamp-1">
-                                  {tag.sub}
-                                </p>
-                              )} */}
-
                               <div className="flex gap-1 mb-1">
                                 {SCORE_STEPS.map((step) => (
                                   <div
@@ -1394,6 +1534,13 @@ export default function GameDetail() {
                                   />
                                 ))}
                               </div>
+
+                              {tag.sub && (
+                                <p className="mt-1 text-[11px] text-slate-200 mb-1 line-clamp-2">
+                                  {tag.sub}
+                                </p>
+                              )}
+
 
                               {/* うっすら光のグラデーション */}
                               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
@@ -1437,8 +1584,131 @@ export default function GameDetail() {
         overflow-y-auto
       "
                                   >
-                                    {/* ヘッダー ＋ 前後矢印付き */}
-                                    <div className="flex items-center justify-between mb-4">
+
+                                    {/* ヘッダー（タイトルのみ） */}
+                                    <div className="flex items-center gap-3 mb-4">
+                                      <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
+                                        <span>{tag.icon}</span>
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-[11px] uppercase tracking-widest text-slate-400">
+                                          DETAIL
+                                        </div>
+                                        <div className="font-semibold text-[15px] leading-snug line-clamp-2">
+                                          {tag.label}
+                                        </div>
+
+                                        {/* Match スコア（控えめ） */}
+                                        <div className="mt-1 text-[11px] text-slate-400 flex items-center gap-2">
+                                          <span className="font-semibold text-slate-200">
+                                            Match {tag.score} / 5
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+
+                                    {/* 仕切り線：サイトメイングラデと揃えた細いライン */}
+                                    <div className="h-[1px] bg-gradient-to-r from-fuchsia-400/40 to-violet-300/40 mb-3" />
+
+
+                                    {/* 本文：サマリ + 理由 */}
+                                    {tag.sub && (
+                                      <p className="text-[15px] text-slate-300 leading-relaxed mb-2">
+                                        {tag.sub}
+                                      </p>
+                                    )}
+
+                                    {tag.reason && (
+                                      <p className="text-[14px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
+                                        {tag.reason}
+                                      </p>
+                                    )}
+
+
+                                    {/* 代表レビュー（モバイル） */}
+                                    {(() => {
+                                      const positiveReviews =
+                                        tag.polarity === "positive"
+                                          ? [
+                                            ...(tag.hitReviewParaphrased
+                                              ? [tag.hitReviewParaphrased]
+                                              : []),
+                                            ...(tag.hitReviewOriginal &&
+                                              tag.hitReviewOriginal !==
+                                              tag.hitReviewParaphrased
+                                              ? [tag.hitReviewOriginal]
+                                              : []),
+                                          ]
+                                          : [];
+                                      const negativeReviews =
+                                        tag.polarity === "negative"
+                                          ? [
+                                            ...(tag.missReviewParaphrased
+                                              ? [tag.missReviewParaphrased]
+                                              : []),
+                                            ...(tag.missReviewOriginal &&
+                                              tag.missReviewOriginal !==
+                                              tag.missReviewParaphrased
+                                              ? [tag.missReviewOriginal]
+                                              : []),
+                                          ]
+                                          : [];
+
+                                      if (
+                                        positiveReviews.length === 0 &&
+                                        negativeReviews.length === 0
+                                      ) {
+                                        return null;
+                                      }
+
+                                      return (
+                                        <div className="mt-1 space-y-2 border-t border-slate-700/80 pt-2">
+                                          {/* ポジティブタイプ → 刺さった理由だけ */}
+                                          {tag.polarity === "positive" &&
+                                            positiveReviews.length > 0 && (
+                                              <div>
+                                                <div className="text-[16px] font-semibold text-emerald-300/90 mb-3">
+                                                  刺さった理由（代表的なレビュー）
+                                                </div>
+                                                {positiveReviews.map(
+                                                  (text, idx) => (
+                                                    <p
+                                                      key={idx}
+                                                      className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                    >
+                                                      {text}
+                                                    </p>
+                                                  )
+                                                )}
+                                              </div>
+                                            )}
+
+                                          {/* ネガティブタイプ → 刺さらなかった理由だけ */}
+                                          {tag.polarity === "negative" &&
+                                            negativeReviews.length > 0 && (
+                                              <div>
+                                                <div className="text-[16px] font-semibold text-rose-300/90 mt-1 mb-3">
+                                                  刺さらなかった理由（代表的なレビュー）
+                                                </div>
+                                                {negativeReviews.map(
+                                                  (text, idx) => (
+                                                    <p
+                                                      key={idx}
+                                                      className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                    >
+                                                      {text}
+                                                    </p>
+                                                  )
+                                                )}
+                                              </div>
+                                            )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* 下部ナビゲーション：← 閉じる → */}
+                                    <div className="mt-4 flex items-center justify-center gap-4">
                                       {/* ← 前へ */}
                                       <button
                                         type="button"
@@ -1449,32 +1719,19 @@ export default function GameDetail() {
                                             setActivePlayerFitId(prev.id);
                                           }
                                         }}
-                                        className="p-2 text-slate-500 disabled:opacity-20 disabled:pointer-events-none"
+                                        className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
                                       >
                                         <ArrowLeft className="w-5 h-5" />
                                       </button>
 
-                                      {/* アイコン＋タイトル */}
-                                      <div className="flex items-center gap-3 flex-1 px-1">
-                                        <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
-                                          <span>{tag.icon}</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="text-[11px] uppercase tracking-widest text-slate-400">
-                                            DETAIL
-                                          </div>
-                                          <div className="font-semibold text-[15px] leading-snug line-clamp-2">
-                                            {tag.label}
-                                          </div>
-
-                                          {/* Match スコア（控えめ） */}
-                                          <div className="mt-1 text-[11px] text-slate-400 flex items-center gap-2">
-                                            <span className="font-semibold text-slate-200">
-                                              Match {tag.score} / 5
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
+                                      {/* 閉じる */}
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowMobilePlayerDetail(false)}
+                                        className="px-4 py-1.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-800/60 transition"
+                                      >
+                                        閉じる
+                                      </button>
 
                                       {/* → 次へ */}
                                       <button
@@ -1486,34 +1743,12 @@ export default function GameDetail() {
                                             setActivePlayerFitId(next.id);
                                           }
                                         }}
-                                        className="p-2 text-slate-500 disabled:opacity-20 disabled:pointer-events-none"
+                                        className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
                                       >
                                         <ArrowRight className="w-5 h-5" />
                                       </button>
                                     </div>
 
-                                    {/* 仕切り線：サイトメイングラデと揃えた細いライン */}
-                                    <div className="h-[1px] bg-gradient-to-r from-fuchsia-400/40 to-violet-300/40 mb-3" />
-
-                                    {/* 本文：サマリ + 理由 */}
-                                    {tag.sub && (
-                                      <p className="text-[12px] text-slate-300 leading-relaxed mb-2">
-                                        {tag.sub}
-                                      </p>
-                                    )}
-
-                                    {/* <p className="text-[12px] text-slate-200 leading-relaxed">
-                                      {tag.reason}
-                                    </p> */}
-
-                                    {/* 閉じるボタン（シンプル） */}
-                                    <button
-                                      type="button"
-                                      onClick={() => setShowMobilePlayerDetail(false)}
-                                      className="mt-4 inline-flex items-center justify-center rounded-full border border-slate-600 px-3 py-1 text-[11px] text-slate-200 hover:bg-slate-800/60 transition"
-                                    >
-                                      閉じる
-                                    </button>
                                   </div>
                                 </div>
 
@@ -1562,15 +1797,57 @@ export default function GameDetail() {
                               </div>
                             </div>
 
-                            {/* {activePlayerFitTag.sub && (
+                            {activePlayerFitTag.sub && (
                               <p className="text-[11px] text-slate-200 leading-relaxed">
                                 {activePlayerFitTag.sub}
                               </p>
-                            )} */}
+                            )}
 
                             <p className="text-[11px] text-slate-100 leading-relaxed">
                               {activePlayerFitTag.reason}
                             </p>
+
+                            {(activePositiveReviews.length > 0 ||
+                              activeNegativeReviews.length > 0) && (
+                                <div className="mt-3 space-y-2 border-t border-emerald-500/20 pt-2">
+                                  {/* ポジティブタイプ → 刺さった理由だけ */}
+                                  {activePlayerFitTag?.polarity === "positive" &&
+                                    activePositiveReviews.length > 0 && (
+                                      <div>
+                                        <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
+                                          刺さった理由（代表的なレビュー）
+                                        </div>
+                                        {activePositiveReviews.map((text, idx) => (
+                                          <p
+                                            key={idx}
+                                            className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                          >
+                                            {text}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                  {/* ネガティブタイプ → 刺さらなかった理由だけ */}
+                                  {activePlayerFitTag?.polarity === "negative" &&
+                                    activeNegativeReviews.length > 0 && (
+                                      <div>
+                                        <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
+                                          刺さらなかった理由（代表的なレビュー）
+                                        </div>
+                                        {activeNegativeReviews.map((text, idx) => (
+                                          <p
+                                            key={idx}
+                                            className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                          >
+                                            {text}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    )}
+                                </div>
+                              )}
+
                           </motion.div>
                         </div>
                       </>
@@ -1756,57 +2033,7 @@ export default function GameDetail() {
             </CardContent>
           </Card>
 
-          {/* Game Stats */}
-          <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-xl">Game Statistics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-slate-300/80 mb-1">
-                    Positive Reviews
-                  </div>
-                  <div className="text-2xl font-bold text-cyan-300">
-                    {positiveRatioDisplay}%
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-slate-300/80 mb-1">
-                    Total Reviews
-                  </div>
-                  <div className="text-2xl font-bold">
-                    {totalReviews.toLocaleString()}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-slate-300/80 mb-1">Price</div>
-                  <div className="text-2xl font-bold text-emerald-300">
-                    {priceDisplay}
-                  </div>
-                </div>
 
-                <div>
-                  <div className="text-sm text-slate-300/80 mb-1">
-                    Avg Playtime
-                  </div>
-                  <div className="text-2xl font-bold">
-                    {averagePlaytimeHours !== "N/A"
-                      ? `${averagePlaytimeHours}h`
-                      : "N/A"}
-                  </div>
-                </div>
-              </div>
-              <div className="pt-2">
-                <div className="text-sm text-slate-300/80 mb-1">
-                  Estimated Owners
-                </div>
-                <div className="text-xl font-semibold">
-                  {estimatedOwners.toLocaleString()}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* CTA */}
