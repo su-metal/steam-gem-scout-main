@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { SimilarGemsSection } from "@/components/SimilarGemsSection";
 import { supabase } from "@/integrations/supabase/client";
+import { motion } from "framer-motion";
 
 
 // Returns the tags that should be displayed on the detail page.
@@ -538,6 +539,154 @@ export default function GameDetail() {
     allPlayerFitTags[0]?.id ?? null
   );
 
+  // ★ 追加: モバイル判定 & ボトムシート表示フラグ
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobilePlayerDetail, setShowMobilePlayerDetail] = useState(false);
+
+  // ★ スワイプ検出用
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+
+  // ★ 追加: Player Match セクションの DOM を参照する ref
+  const playerMatchSectionRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(max-width: 640px)");
+
+    const update = () => {
+      const mobile = mq.matches;
+      setIsMobile(mobile);
+      if (!mobile) {
+        // 画面が広くなったらボトムシートは閉じる
+        setShowMobilePlayerDetail(false);
+      }
+    };
+
+    update();
+
+    if (mq.addEventListener) {
+      mq.addEventListener("change", update);
+    } else {
+      mq.addListener(update);
+    }
+
+    return () => {
+      if (mq.removeEventListener) {
+        mq.removeEventListener("change", update);
+      } else {
+        mq.removeListener(update);
+      }
+    };
+  }, []);
+
+
+  // ★ Player Match セクションに入ったらボトムシートを自動オープン / 離れたらクローズ
+  useEffect(() => {
+    if (!isMobile) return;
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const target = playerMatchSectionRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+
+        // セクションがある程度見えてきたらボトムシートを自動で開く
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.2) {
+          if (!showMobilePlayerDetail) {
+            setShowMobilePlayerDetail(true);
+          }
+
+          // アクティブカードが未設定なら先頭を選択
+          if (!activePlayerFitId && allPlayerFitTags[0]) {
+            setActivePlayerFitId(allPlayerFitTags[0].id);
+          }
+        }
+
+        // 画面から外れたらボトムシートを閉じる
+        if (!entry.isIntersecting) {
+          setShowMobilePlayerDetail(false);
+        }
+      },
+      {
+        threshold: [0.1, 0.4, 1.0],
+      }
+    );
+
+    observer.observe(target);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isMobile, showMobilePlayerDetail, activePlayerFitId, allPlayerFitTags]);
+
+
+
+ 
+
+  // ★ Player Match 内のスワイプ → カード切り替えロジック
+  const handlePlayerMatchTouchStart = (
+    e: React.TouchEvent<HTMLDivElement>
+  ) => {
+    // モバイルかつ、ボトムシート表示中のときだけ「専用モード」にする
+    if (!isMobile || !showMobilePlayerDetail) return;
+    if (e.touches.length > 0) {
+      setTouchStartY(e.touches[0].clientY);
+    }
+  };
+
+  const handlePlayerMatchTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+  if (!isMobile || !showMobilePlayerDetail) return;
+  if (touchStartY == null) return;
+  if (e.touches.length === 0) return;
+
+  const currentY = e.touches[0].clientY;
+  const deltaY = currentY - touchStartY;
+  const threshold = 10; // 20px ごとに 1 カードくらいのイメージ
+
+  // まだしきい値に達していない → 何もしない
+  if (Math.abs(deltaY) < threshold) return;
+
+  const currentIndex = allPlayerFitTags.findIndex(
+    (t) => t.id === activePlayerFitId
+  );
+  if (currentIndex === -1) return;
+
+  // 上にスワイプ（指を上に動かす） → 次のカードへ
+  const direction = deltaY < 0 ? 1 : -1;
+  let nextIndex = currentIndex + direction;
+
+  // 範囲外はクランプしつつ、ページスクロールは殺さない
+  if (nextIndex < 0) {
+    // 先頭よりさらに下へスワイプ → ページスクロールに任せる
+    return;
+  }
+  if (nextIndex >= allPlayerFitTags.length) {
+    // 末尾よりさらに上へスワイプ → ページスクロールに任せる
+    return;
+  }
+
+  const nextTag = allPlayerFitTags[nextIndex];
+  if (!nextTag) return;
+
+  // カードを1枚進める / 戻す
+  setActivePlayerFitId(nextTag.id);
+
+  // 基準位置を更新 → 同じスワイプ中にさらに 20px 動けば、また次のカードに行く
+  setTouchStartY(currentY);
+
+  // このジェスチャー分はページスクロールさせない
+  e.preventDefault();
+};
+
+
+  const handlePlayerMatchTouchEnd = () => {
+    setTouchStartY(null);
+    
+  };
 
 
   const activePlayerFitTag =
@@ -1130,7 +1279,9 @@ export default function GameDetail() {
         {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
         {(playerFitPositiveTags.length > 0 ||
           playerFitNegativeTags.length > 0) && (
-            <Card className="rounded-[24px] border-none bg-[#070716]/95 shadow-lg">
+            <Card
+              ref={playerMatchSectionRef}
+              className="rounded-[24px] border-none bg-[#070716]/95 shadow-lg">
               <CardHeader className="px-0 py-5 sm:px-6 sm:py-6">
                 <CardTitle className="text-xl">
                   Player Match
@@ -1145,41 +1296,63 @@ export default function GameDetail() {
                     まだ「どんなプレイヤーに刺さるか／刺さらないか」の傾向は十分に抽出されていません。
                   </p>
                 ) : (
-                  <div className="max-w-4xl mx-auto space-y-5 md:space-y-6">
-                    {/* レジェンド（FOR / NOT FOR） */}
-                    {/* <div className="flex flex-wrap gap-3 text-[11px] md:text-xs">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/40 text-emerald-300">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span>FOR：刺さりやすいプレイヤータイプ</span>
-        </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/40 text-rose-300">
-          <span className="h-2 w-2 rounded-full bg-rose-400" />
-          <span>NOT FOR：ミスマッチになりやすいタイプ</span>
-        </div>
-      </div> */}
-
-                    {/* マップ UI 本体：左＝グリッド / 右＝詳細カード */}
-                    <div className="grid gap-5 md:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)] md:items-start">
-                      {/* 左：2〜3列のヒートマップグリッド */}
+                  <div
+  className="max-w-4xl mx-auto space-y-5 md:space-y-6"
+  onTouchStart={handlePlayerMatchTouchStart}
+  onTouchMove={handlePlayerMatchTouchMove}
+  onTouchEnd={handlePlayerMatchTouchEnd}
+>
+                    {/* セクション全体もスクロールインでふわっと表示 */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 18 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ type: "spring", stiffness: 140, damping: 16 }}
+                      viewport={{ once: true, amount: 0.2 }}
+                      className="grid gap-5 md:grid-cols-[minmax(0,1.6fr),minmax(0,1.1fr)] md:items-start"
+                    >
+                      {/* 左：ポップなヒートマップカード群 */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {allPlayerFitTags.map((tag) => (
-                          <button
+                        {allPlayerFitTags.map((tag, index) => (
+                          <motion.button
                             key={tag.id}
                             type="button"
-                            onClick={() => setActivePlayerFitId(tag.id)}
-                            className={`relative rounded-2xl p-3 text-left transition transform hover:-translate-y-0.5 hover:shadow-lg ${activePlayerFitId === tag.id
+                            onClick={() => {
+                              setActivePlayerFitId(tag.id);
+                              if (isMobile) {
+                                setShowMobilePlayerDetail(true);
+                              }
+                            }}
+                            initial={{ opacity: 0, scale: 0.85, y: 14 }}
+                            whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                            whileHover={{ scale: 1.05 }}
+                            animate={
+                              activePlayerFitId === tag.id
+                                ? {
+                                  scale: [1, 1.03, 1],
+                                  transition: { duration: 0.6, repeat: Infinity },
+                                }
+                                : {}
+                            }
+                            transition={{
+                              type: "spring",
+                              stiffness: 140,
+                              damping: 12,
+                              delay: index * 0.06,
+                            }}
+                            viewport={{ once: true, amount: 0.25 }}
+                            className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden
+            ${activePlayerFitId === tag.id
                                 ? "ring-2 ring-emerald-400/80 bg-emerald-500/10"
-                                : "bg-slate-800/60"
+                                : "bg-slate-900/70"
                               }`}
                           >
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-lg">{tag.icon}</span>
-                              <span className="text-[13px] font-semibold ">
+                              <span className="text-[13px] font-semibold leading-snug">
                                 {tag.label}
                               </span>
                             </div>
 
-                            {/* 小さいヒートバー（1〜5段階） */}
                             <div className="flex gap-1 mb-2">
                               {SCORE_STEPS.map((step) => (
                                 <div
@@ -1192,26 +1365,36 @@ export default function GameDetail() {
                               ))}
                             </div>
 
-                            {/* サブテキスト（あれば） */}
-                            {/* <div className="text-[10px] text-slate-300 line-clamp-2">
-                              {tag.sub ||
-                                tag.reason ||
-                                (tag.polarity === "positive"
-                                  ? "このタイプとは特に相性が良い傾向です。"
-                                  : "このタイプとはややミスマッチになりやすい傾向です。")}
-                            </div> */}
-                          </button>
+                            {/* サブテキスト：2行でトリム */}
+                            {/* {tag.sub && (
+                              <p className="text-[10px] text-slate-300 line-clamp-2">
+                                {tag.sub}
+                              </p>
+                            )} */}
+
+                            {/* 光のグラデーションをうっすら重ねる */}
+                            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
+                          </motion.button>
                         ))}
                       </div>
 
-                      {/* 右：選択中タイプの詳細カード（SP では下に回る） */}
-                      <div className="mt-4 md:mt-0">
+                      {/* 右：選択中タグのポップアップ詳細カード */}
+                      <div className="mt-4 md:mt-0 hidden md:block">
                         {activePlayerFitTag ? (
-                          <div className="rounded-2xl bg-slate-900/95 border border-slate-700 px-4 py-3 shadow-xl text-[12px] text-slate-100">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xl">{activePlayerFitTag.icon}</span>
-                              <div className="flex flex-col">
-                                <span className="font-semibold">
+                          <motion.div
+                            key={activePlayerFitTag.id}
+                            initial={{ opacity: 0, y: 12 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            transition={{ type: "spring", stiffness: 140, damping: 14 }}
+                            viewport={{ once: true, amount: 0.3 }}
+                            className="rounded-2xl bg-slate-950/95 border border-slate-700 px-4 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.8)] text-[12px] text-slate-100"
+                          >
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-400/20 via-fuchsia-400/20 to-cyan-400/20 border border-white/10">
+                                <span className="text-xl">{activePlayerFitTag.icon}</span>
+                              </div>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-[13px]">
                                   {activePlayerFitTag.label}
                                 </span>
                                 {activePlayerFitTag.sub && (
@@ -1219,24 +1402,88 @@ export default function GameDetail() {
                                     {activePlayerFitTag.sub}
                                   </span>
                                 )}
+                                <div className="flex items-center gap-1 text-[11px] mt-1">
+                                  <span className="uppercase tracking-[0.16em] text-slate-400">
+                                    Match
+                                  </span>
+                                  <span className="font-semibold">
+                                    {activePlayerFitTag.score}/5
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                            <p className="text-[11px] text-slate-300 leading-relaxed">
-                              このゲームとの相性スコアは{" "}
-                              <span className="font-semibold">
-                                {activePlayerFitTag.score}/5
-                              </span>
-                              。{activePlayerFitTag.reason}
+
+                            <p className="text-[11px] text-slate-200 leading-relaxed">
+                              {activePlayerFitTag.reason}
                             </p>
-                          </div>
+                          </motion.div>
                         ) : (
                           <div className="rounded-2xl bg-slate-900/80 border border-slate-800 px-4 py-3 text-[11px] text-slate-400">
                             グリッドのいずれかのタイプをタップすると、ここに詳しい解説が表示されます。
                           </div>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
+
+                     {/* ★ 追加：モバイル専用ボトムシート */}
+                      {isMobile && showMobilePlayerDetail && activePlayerFitTag && (
+                        <div className="fixed inset-x-0 bottom-0 z-40">
+                          {/* 背景オーバーレイ */}
+                          <div
+                            className="absolute inset-0 bg-black/40"
+                            onClick={() => setShowMobilePlayerDetail(false)}
+                          />
+
+                          {/* 本体 */}
+                          <motion.div
+                            initial={{ y: "100%", opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ type: "spring", stiffness: 160, damping: 20 }}
+                            className="relative max-h-[70vh] rounded-t-2xl bg-slate-950/95 border border-slate-700 px-4 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.9)] text-[12px] text-slate-100 overflow-y-auto"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-400/20 via-fuchsia-400/20 to-cyan-400/20 border border-white/10">
+                                  <span className="text-xl">{activePlayerFitTag.icon}</span>
+                                </div>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-semibold text-[13px]">
+                                    {activePlayerFitTag.label}
+                                  </span>
+                                  {/* {activePlayerFitTag.sub && (
+                                    <span className="text-[11px] text-slate-300">
+                                      {activePlayerFitTag.sub}
+                                    </span>
+                                  )} */}
+                                  <div className="flex items-center gap-1 text-[11px] mt-1">
+                                    <span className="uppercase tracking-[0.16em] text-slate-400">
+                                      Match
+                                    </span>
+                                    <span className="font-semibold">
+                                      {activePlayerFitTag.score}/5
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowMobilePlayerDetail(false)}
+                                className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1"
+                              >
+                                閉じる
+                              </button>
+                            </div>
+
+                            <p className="text-[11px] text-slate-200 leading-relaxed">
+                              {activePlayerFitTag.reason}
+                            </p>
+                          </motion.div>
+                        </div>
+                      )}
+                   
                   </div>
+
                 )}
               </CardContent>
 
