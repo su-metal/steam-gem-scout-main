@@ -19,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 
 
+
 // Returns the tags that should be displayed on the detail page.
 // Hidden Gem Analyzer では DB 上の tags（game_rankings_cache.tags）だけを使う。
 const getDisplayTags = (
@@ -34,6 +35,23 @@ const getDisplayTags = (
   return baseTags.slice(0, limit);
 };
 
+// mood_scores のキーを表示用ラベルに整形
+const MOOD_LABEL_MAP: Record<string, string> = {
+  cozy: "Cozy",
+  chill: "Chill",
+  relaxing: "Relaxing",
+  intense: "Intense",
+  strategic: "Strategic",
+  story_focused: "Story-focused",
+  grindy: "Grindy",
+};
+
+const formatMoodLabel = (key: string): string => {
+  const normalized = key.toLowerCase();
+  if (MOOD_LABEL_MAP[normalized]) return MOOD_LABEL_MAP[normalized];
+  // マップにないものは snake_case → 空白区切りにしてそのまま出す
+  return key.replace(/_/g, " ");
+};
 
 // gemLabel のバリエーション（将来の拡張も考えて一元管理）
 type GemLabel =
@@ -937,6 +955,38 @@ export default function GameDetail() {
       ? Math.round(rawMatchScoreForDisplay * 100)
       : null;
 
+  // --- mood_scores からムード別スコアを抽出（0〜1 を想定） ---
+  const rawMoodScores =
+    // ① analyze-game の解析結果（analysisData）優先
+    (analysisData as any)?.mood_scores ??
+    (analysisData as any)?.moodScores ??
+    // ② Ranking / Search から渡ってきた gameData 側
+    (baseGame as any)?.mood_scores ??
+    (baseGame as any)?.moodScores ??
+    // ③ さらに念のため、location.state の直下も見る
+    (game as any)?.mood_scores ??
+    (game as any)?.moodScores ??
+    null;
+
+
+  type MoodScoreItem = { key: string; value: number };
+
+  const moodScoreItems: MoodScoreItem[] =
+    rawMoodScores && typeof rawMoodScores === "object"
+      ? Object.entries(rawMoodScores as Record<string, unknown>)
+        .map(([key, value]) => {
+          const num =
+            typeof value === "number" && Number.isFinite(value)
+              ? Math.max(0, Math.min(1, value)) // 0〜1 にクリップ
+              : 0;
+          return { key, value: num };
+        })
+        .filter((item) => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 5) // ★ 上位5件まで表示（brain / story / session / tension / operation を想定）
+      : [];
+
+
   // --- リスク系スコア ---
   const riskScore =
     typeof analysisData.riskScore === "number"
@@ -950,6 +1000,48 @@ export default function GameDetail() {
     typeof analysisData.refundMentions === "number"
       ? analysisData.refundMentions
       : null;
+
+  // --- Match Score Breakdown 用 内訳スコア --------------------
+
+  // ① Mood match（0-100%）
+  const moodMatchPercent =
+    normalizedMoodScore !== null
+      ? Math.round(normalizedMoodScore * 100)
+      : null;
+
+  // ② Playstyle fit（Player Match のポジティブ側スコアから算出：1〜5 → 0〜100%）
+  const playstyleFitPercent = (() => {
+    if (playerFitPositiveTags.length === 0) return null;
+    const sum = playerFitPositiveTags.reduce((acc, tag) => acc + (tag.score ?? 0), 0);
+    const avg = sum / (playerFitPositiveTags.length * 5); // 0〜1
+    return Math.round(Math.max(0, Math.min(1, avg)) * 100);
+  })();
+
+  // ③ Stability & sentiment（Risk 系 0〜10 を「健全度％」に変換して平均）
+  const stabilitySentimentPercent = (() => {
+    const rawScores = [riskScore, bugRisk, refundMentions].filter(
+      (v): v is number => typeof v === "number" && Number.isFinite(v)
+    );
+    if (rawScores.length === 0) return null;
+
+    // 0（リスク無し） → 100%、10（最大リスク） → 0% として正規化
+    const goodnessList = rawScores.map((v) => {
+      const clamped = Math.max(0, Math.min(10, v));
+      return (10 - clamped) / 10; // 0〜1
+    });
+
+    const avgGoodness =
+      goodnessList.reduce((acc, v) => acc + v, 0) / goodnessList.length;
+    return Math.round(Math.max(0, Math.min(1, avgGoodness)) * 100);
+  })();
+
+  // Breakdown 表示用リスト（value が null のものは非表示）
+  const matchBreakdownItems: { label: string; value: number }[] = [
+    { label: "Mood match", value: moodMatchPercent ?? 0 },
+    { label: "Playstyle fit", value: playstyleFitPercent ?? 0 },
+    { label: "Stability & sentiment", value: stabilitySentimentPercent ?? 0 },
+  ].filter((item) => item.value > 0);
+
 
 
   const positiveRatio = baseGame.positiveRatio || 0;
@@ -1067,6 +1159,20 @@ export default function GameDetail() {
     if (value >= 4) return "text-warning";
     return "text-success";
   };
+
+  const SHOW_STABILITY_BADGE = false;
+  const SHOW_TAGS_SECTION = false;
+  const SHOW_PROS_AND_CONS = false;
+
+
+  // Strengths 用カラー縦バー（Pattern B）
+  const strengthColorClasses = [
+    "bg-emerald-200",
+    "bg-lime-200",
+    "bg-sky-200",
+    "bg-violet-200",
+  ];
+
 
   // タイトル付近に出す「安定度バッジ」の内容を決める
   const getStabilityBadge = () => {
@@ -1347,22 +1453,78 @@ export default function GameDetail() {
                   </CardContent>
                 </Card>
 
-                {/* Match Score（Overview の上に表示） */}
+                {/* Match Score — Pattern B: 極太バー + 円形エンブレム + mood_scores ピル */}
                 {matchScorePercent !== null && (
-                  <div className="flex justify-center mt-3 mb-1">
-                    <div className="flex flex-col items-center justify-center rounded-full border-2 border-fuchsia-300/80 bg-black/80  w-20 h-20 md:w-24 md:h-24">
-                      <span className="text-[10px] md:text-[11px] uppercase tracking-[0.18em] text-slate-200/90 mb-1">
-                        Match
-                      </span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-xl md:text-2xl font-extrabold bg-gradient-to-r from-fuchsia-400 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
-                          {matchScorePercent}
-                        </span>
-                        <span className="text-xs text-slate-200">%</span>
+                  <div className="mt-4 mb-3">
+                    <div className="rounded-3xl bg-[#050816] border border-white/10 px-4 py-4 md:px-6 md:py-6 flex flex-row items-center gap-4 md:gap-6">
+                      {/* 左：極太バー＋円形スコアバッジ */}
+                      <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
+                        {/* 極太サイドメーター */}
+                        <div className="flex flex-col items-center w-16 md:w-20">
+                          <div className="h-32 md:h-40 w-7 md:w-8 bg-slate-900 rounded-full overflow-hidden relative shadow-[0_0_0_1px_rgba(148,163,184,0.4)]">
+                            <div
+                              className="absolute bottom-0 w-full bg-gradient-to-t from-cyan-400 via-fuchsia-400 to-emerald-300"
+                              style={{ height: `${matchScorePercent}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* 円形エンブレム */}
+                        <div className="flex flex-col items-center justify-center">
+                          <div className="relative w-20 h-20 md:w-24 md:h-24 flex items-center justify-center rounded-full bg-slate-900 border border-white/20 shadow-[0_0_40px_rgba(59,130,246,0.25)]">
+                            <div className="absolute inset-[4px] rounded-full bg-gradient-to-br from-fuchsia-500/25 via-slate-900 to-cyan-400/25" />
+                            <div className="relative flex flex-col items-center justify-center">
+                              <p className="text-[9px] md:text-[10px] tracking-[0.18em] text-slate-300 uppercase mb-0.5">
+                                Match
+                              </p>
+                              <div className="flex items-baseline gap-0.5">
+                                <span className="text-2xl md:text-3xl font-extrabold bg-gradient-to-b from-fuchsia-200 via-purple-200 to-cyan-100 bg-clip-text text-transparent">
+                                  {matchScorePercent}
+                                </span>
+                                <span className="text-sm md:text-base text-slate-200">
+                                  %
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* 右：mood_scores をピルで表示（5本まで） */}
+                      {moodScoreItems.length > 0 && (
+                        <div className="flex-1 text-[11px] md:text-xs">
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            {moodScoreItems.map((mood) => {
+                              const percent = Math.round(mood.value * 100);
+                              return (
+                                <div
+                                  key={mood.key}
+                                  className="inline-flex items-center gap-2 rounded-full bg-slate-950/70 border border-slate-700 px-2.5 py-1"
+                                >
+                                  <span className="text-slate-200 whitespace-nowrap">
+                                    {formatMoodLabel(mood.key)}
+                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <div className="w-8 h-[3px] rounded-full bg-slate-800 overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-300"
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-slate-500">
+                                      {percent}%
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
+
 
                 {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
                 {(playerFitPositiveTags.length > 0 ||
@@ -1431,8 +1593,8 @@ export default function GameDetail() {
                                       }}
                                       viewport={{ once: true, amount: 0.25 }}
                                       className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
-                                          ? "border-2 border-fuchsia-300/80 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.45)]"
-                                          : "border border-white/5 bg-slate-900/70"
+                                        ? "border-2 border-fuchsia-300/80 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.45)]"
+                                        : "border border-white/5 bg-slate-900/70"
                                         }`}
 
                                     >
@@ -1455,11 +1617,11 @@ export default function GameDetail() {
                                         ))}
                                       </div>
 
-                                      {tag.sub && (
+                                      {/* {tag.sub && (
                                         <p className="mt-1 text-[11px] text-slate-200 mb-1 line-clamp-2">
                                           {tag.sub}
                                         </p>
-                                      )}
+                                      )} */}
 
 
                                       {/* うっすら光のグラデーション */}
@@ -1778,51 +1940,167 @@ export default function GameDetail() {
                     </Card>
                   )}
 
-                {/* 「今」と「昔」を分けて表示 */}
+                {/* 「今」と「昔」を分けて表示（Timeline Strip版） */}
                 {(shouldShowCurrentState || shouldShowHistoricalIssues) && (
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {/* 現在の状態 */}
-                    {shouldShowCurrentState && (
-                      <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-                        <CardHeader>
-                          <CardTitle className="text-lg">
-                            現在の状態（Current state）
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-slate-200/90 whitespace-pre-line">
+                  <div className="rounded-2xl bg-[#070b1a] border border-white/10 p-5 space-y-4">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Past → Now</span>
+                      <span>Update history overview</span>
+                    </div>
+
+                    <div className="relative mt-3">
+                      {/* 中央のタイムライン */}
+                      <div className="h-[2px] w-full bg-slate-700 rounded-full" />
+
+                      {/* 左側：過去の問題 */}
+                      {shouldShowHistoricalIssues && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 flex flex-col items-start gap-2">
+                          <div className="h-3 w-3 rounded-full bg-rose-400" />
+                          <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs max-w-xs">
+                            <p className="font-semibold text-rose-200 mb-0.5">
+                              Historical issues
+                            </p>
+                            <p className="text-[11px] text-slate-300 whitespace-pre-line">
+                              {historicalIssuesText}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 右側：現在の状態 */}
+                      {shouldShowCurrentState && (
+                        <div className="mt-3 flex flex-col gap-3 md:gap-4">
+                          <div className="inline-flex items-center gap-1.5 text-[11px] md:text-xs text-sky-200/95">
+                            <span className="h-1.5 w-6 rounded-full bg-gradient-to-r from-sky-400 via-cyan-300 to-blue-400" />
+                            <span className="uppercase tracking-[0.17em] text-[12px] text-slate-300">
+                              Current state
+                            </span>
+                          </div>
+                          <p className="text-[13px] md:text-[12px] leading-relaxed text-slate-100/90 py-2.75 ">
                             {currentStateText}
                           </p>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* 過去の問題・初期評価 */}
-                    {shouldShowHistoricalIssues && (
-                      <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-                        <CardHeader>
-                          <CardTitle className="text-lg">
-                            過去の問題・初期評価（Historical issues）
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                            {historicalIssuesText}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-
               </div>
-
             </CardHeader>
           </Card>
         </div>
 
+        {/* 左：統合サマリー（Stats + Tags + 評価バッジ） */}
+        <div className="flex-1 space-y-4 min-w-0">
+          {/* 統合サマリーカード：Stats + Tags */}
+          <div className="rounded-[24px] bg-gradient-to-br from-[#07031f] via-[#050313] to-[#050510] border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] px-4 py-4 md:px-5 md:py-5 space-y-4">
+            {/* Overview セクションタイトル */}
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-lg font-semibold text-slate-100">
+                Overview
+              </h3>
+            </div>
+            {/* 上段：Game Statistics（6項目グリッド） */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              {/* Positive Reviews */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-baseline justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400">
+                    Positive Reviews
+                  </span>
+                  <span className="text-lg md:text-xl font-bold text-cyan-300">
+                    {positiveRatioDisplay}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Reviews */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400">
+                    Total Reviews
+                  </span>
+                  <span className="text-lg md:text-xl font-semibold">
+                    {totalReviews?.toLocaleString() ?? "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Price */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-baseline justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400">Price</span>
+                  <span className="text-lg md:text-xl font-bold text-emerald-300">
+                    {priceDisplay}
+                  </span>
+                </div>
+              </div>
+
+              {/* Playtime */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-baseline justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400">Playtime</span>
+                  <span className="text-lg md:text-xl font-semibold">
+                    {averagePlaytimeHours !== "N/A"
+                      ? `${averagePlaytimeHours}h`
+                      : "N/A"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Estimated Owners（ラベルは2行に） */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400 leading-tight">
+                    Estimated
+                    <br />
+                    Owners
+                  </span>
+                  <span className="text-base md:text-lg font-semibold">
+                    {estimatedOwners?.toLocaleString() ?? "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Release（年 / 月日 を2段表示・英語表記） */}
+              <div className="rounded-2xl border border-white/15 bg-black/30 px-3 py-2 flex items-center h-full">
+                <div className="flex items-center justify-between gap-2 w-full">
+                  <span className="text-[11px] text-slate-400">Release</span>
+                  <span className="flex flex-col items-end text-base md:text-lg leading-tight">
+                    <span>{releaseYearString ?? "-"}</span>
+                    {releaseMonthDayString && (
+                      <span className="text-sm md:text-base text-slate-100">
+                        {releaseMonthDayString}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+
+            {/* 復活したタイトルなどの安定度ステータス */}
+            {SHOW_STABILITY_BADGE && stabilityBadge && (
+              <div className="space-y-1">
+                {/* ★ バッジと説明文を“縦にセット”で表示する */}
+                <Badge
+                  variant="outline"
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] md:text-xs font-semibold ${stabilityBadge.className}`}
+                >
+                  <span>{stabilityBadge.label}</span>
+                </Badge>
+
+                {stabilityBadge.description && (
+                  <p className="text-xs md:text-[13px] text-slate-300/80 leading-relaxed">
+                    {stabilityBadge.description}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* 中段：Tags セクション（Overview 内で独立カード風） */}
-        {displayTags.length > 0 && (
+        {SHOW_TAGS_SECTION && displayTags.length > 0 && (
           <div className="mt-2 px-3 py-3">
             <div className="text-[11px] font-semibold text-slate-100 mb-2">
               Tags
@@ -1842,59 +2120,92 @@ export default function GameDetail() {
         )}
 
 
-        {/* Pros & Cons */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="rounded-[24px] border-emerald-500/30 bg-[#041510]/95 shadow-lg">
-            <CardHeader className="px-4 py-5 sm:px-6 sm:py-6">
-              <CardTitle className="text-xl flex items-center gap-2 text-emerald-400">
-                <ThumbsUp className="w-5 h-5" />
-                Strengths
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {pros.length > 0 ? (
-                <ul className="space-y-3">
-                  {pros.map((pro, idx) => (
-                    <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-emerald-400 mt-0.5">●</span>
-                      <span className="text-slate-200/90">{pro}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-300/80">
-                  レビューから特徴的な「良い点」はまだ抽出されていません。
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        {/* Pros & Cons – Pattern B : Color Block Deck */}
+        {SHOW_PROS_AND_CONS && (
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Strengths Deck（ダーク＋サイトカラー寄せ） */}
+            <Card className="rounded-[26px] bg-[#050716]/95 border border-white/12 p-6 space-y-4 shadow-[0_24px_70px_rgba(0,0,0,0.9)]">
+              <CardHeader className="px-0 pt-0 pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2 text-emerald-200">
+                    <ThumbsUp className="w-4 h-4 text-emerald-300" />
+                    Strengths
+                  </CardTitle>
+                  <span className="px-2.5 py-1 rounded-full text-[11px] bg-emerald-500/15 text-emerald-200 font-medium border border-emerald-300/40">
+                    What it does best
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
+                {pros.length > 0 ? (
+                  <div className="grid gap-3">
+                    {pros.map((pro, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-3 rounded-2xl bg-[#070b1f]/95 border border-white/10 px-3 py-2.5"
+                      >
+                        <div
+                          className="mt-0.5 h-8 w-1.5 rounded-full bg-gradient-to-b from-emerald-400 via-teal-300 to-cyan-300"
+                          style={{
+                            opacity: 0.9,
+                          }}
+                        />
+                        <div>
+                          <p className="text-sm font-semibold leading-tight text-slate-50">
+                            {pro}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-300">
+                    レビューから特徴的な「良い点」はまだ抽出されていません。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card className="rounded-[24px] border-rose-500/40 bg-[#190711]/95 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2 text-rose-400">
-                <ThumbsDown className="w-5 h-5" />
-                Weaknesses
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {cons.length > 0 ? (
-                <ul className="space-y-3">
-                  {cons.map((con, idx) => (
-                    <li key={idx} className="flex gap-3 text-sm">
-                      <span className="text-rose-400 mt-0.5">●</span>
-                      <span className="text-slate-200/90">{con}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-slate-300/80">
-                  目立った「弱点」についてのレビューはまだ少ないようです。
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
 
+            {/* Weaknesses Deck（ダークカード） */}
+            <Card className="rounded-[26px] bg-slate-950/95 border border-white/10 p-6 space-y-4 shadow-[0_24px_70px_rgba(0,0,0,0.9)]">
+              <CardHeader className="px-0 pt-0 pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base font-semibold text-rose-100 tracking-tight flex items-center gap-2">
+                    <ThumbsDown className="w-4 h-4 text-rose-300" />
+                    Weaknesses
+                  </CardTitle>
+                  <span className="px-2.5 py-1 rounded-full text-[11px] bg-rose-500/15 text-rose-100 font-medium">
+                    Tradeoffs
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="px-0 pb-0">
+                {cons.length > 0 ? (
+                  <div className="grid gap-3">
+                    {cons.map((con, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-3 rounded-2xl bg-slate-900/80 border border-slate-600/60 px-3 py-2.5"
+                      >
+                        <div className="mt-0.5 h-8 w-1.5 rounded-full bg-gradient-to-b from-rose-400 via-amber-300 to-yellow-200" />
+                        <div>
+                          <p className="text-sm font-semibold leading-tight">
+                            {con}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-300">
+                    目立った「弱点」についてのレビューはまだ少ないようです。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Key Insights */}
         <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
@@ -1902,6 +2213,26 @@ export default function GameDetail() {
             <CardTitle className="text-xl">Key Insights</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+
+            {/* 全タグ一覧（ここに tags を移す） */}
+            {tags.length > 0 && (
+              <div>
+                <p className="text-[11px] text-slate-400 mb-1">
+                  AI tags (Steam-like categories)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag, idx) => (
+                    <Badge
+                      key={`${tag}-${idx}`}
+                      variant="outline"
+                      className="rounded-full bg-[#13122c] border border-white/10 text-xs py-1.5 px-3"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* AIラベル（今まで通り） */}
             {labels.length > 0 ? (
               <div>
@@ -1926,25 +2257,8 @@ export default function GameDetail() {
               </p>
             )}
 
-            {/* 全タグ一覧（ここに tags を移す） */}
-            {tags.length > 0 && (
-              <div>
-                <p className="text-[11px] text-slate-400 mb-1">
-                  AI tags (Steam-like categories)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag, idx) => (
-                    <Badge
-                      key={`${tag}-${idx}`}
-                      variant="outline"
-                      className="rounded-full border-white/15 bg-[#050512] text-[11px] px-3 py-1"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+
+
           </CardContent>
         </Card>
 

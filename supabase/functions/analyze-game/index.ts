@@ -189,8 +189,8 @@ interface AudienceBadge {
 
 // Limits to keep review input safely within token constraints
 const MAX_REVIEWS = 15;
-const MAX_REVIEW_CHARS = 500;
-const MAX_TOTAL_REVIEW_CHARS = 12000;
+const MAX_REVIEW_CHARS = 450;
+const MAX_TOTAL_REVIEW_CHARS = 9000;
 
 // 早期レビュー用の設定
 const EARLY_REVIEW_WINDOW_DAYS = 30; // 発売日から何日までを「初期」とみなすか
@@ -202,10 +202,6 @@ const MIN_DAYS_SINCE_RELEASE_FOR_IMPROVEMENT = 90;
 
 // ★ 追加：安定評価バッジに必要な最低経過日数（単位: 日）
 const MIN_DAYS_SINCE_RELEASE_FOR_STABLE = 180;
-
-// 「過去」と「現在」を分けて評価するために必要な最低レビュー数
-
-// 「過去/現在」の履歴を信頼するために必要な最低経過日数（単位: 日）
 
 // Fallback object used when AI analysis fails
 function buildFallbackAnalysis(
@@ -725,7 +721,7 @@ Deno.serve(async (req) => {
 - **以下必須：**
   - レビュー内の固有の褒めポイント・欠点からプレイヤー像を構成する。
   - このゲーム独自のメカニクス・テンポ・戦闘・UI・成長曲線・緊張感・遊び方が反映される多角的な評価をする。
-  - それぞれの件数は **3～5個** に制限する。特筆すべきものがない場合は無理に捻出しないこと（ただし 0 件はできるだけ避ける）。
+  - それぞれの件数は **4～5個** に制限する。必ず4件以上出力すること。
 
 - **代表レビューのルール：**
   - hitReviewParaphrased / hitReviewOriginal / missReviewParaphrased / missReviewOriginal は、それぞれ **個別の代表レビュー要約文** を入れる。
@@ -757,7 +753,7 @@ IMPORTANT:
 `.trim();
     const controller = new AbortController();
     try {
-      const timeoutMs = 45000; // or 60000
+      const timeoutMs = 60000; // or 60000
       const timeoutId = setTimeout(() => {
         controller.abort("AI request timeout");
       }, timeoutMs);
