@@ -452,34 +452,46 @@ export const SearchResultCard = ({
 
         </div>
 
-        {/* Stats (Positive, Reviews, Price, Playtime) */}
+                {/* Stats (Positive, Reviews, Price, Playtime) */}
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <span className="text-[11px] text-muted-foreground">Positive</span>
-            <span className="mt-0.5 text-sm font-semibold text-primary">
-              {positiveDisplay}%
-            </span>
+          {/* Positive */}
+          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Positive</span>
+              <span className="text-sm font-semibold text-primary">
+                {positiveDisplay}%
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <span className="text-[11px] text-muted-foreground">Reviews</span>
-            <span className="mt-0.5 text-sm font-semibold">
-              {totalReviews?.toLocaleString?.() ?? "-"}
-            </span>
+          {/* Reviews */}
+          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Reviews</span>
+              <span className="text-sm font-semibold">
+                {totalReviews?.toLocaleString?.() ?? "-"}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <span className="text-[11px] text-muted-foreground">Price</span>
-            <span className="mt-0.5 text-sm font-semibold">
-              {priceDisplay}
-            </span>
+          {/* Price */}
+          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Price</span>
+              <span className="text-sm font-semibold">
+                {priceDisplay}
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <span className="text-[11px] text-muted-foreground">Playtime</span>
-            <span className="mt-0.5 text-sm font-semibold">
-              {playtimeDisplay}
-            </span>
+          {/* Playtime */}
+          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[11px] text-muted-foreground">Playtime</span>
+              <span className="text-sm font-semibold">
+                {playtimeDisplay}
+              </span>
+            </div>
           </div>
         </div>
       </div>

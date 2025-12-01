@@ -23,9 +23,6 @@ interface HiddenGemAnalysis {
 }
 
 
-
-
-
 interface RankingGame {
   appId: number;
   title: string;
@@ -143,55 +140,48 @@ const STORAGE_KEYS = {
 export default function SearchPage() {
   const [games, setGames] = useState<RankingGame[]>([]);
 
-  // 詳細フィルタ開閉（上部とStickyを分離）
-  const [showTopDetails, setShowTopDetails] = useState(false);
-  const [showStickyDetails, setShowStickyDetails] = useState(false);
 
-  // Stickyが有効かどうかのフラグ
-  const [isSticky, setIsSticky] = useState(false);
-  const stickyRef = useRef<HTMLDivElement | null>(null);
+  // ボトム固定フィルタバー / 詳細フィルタの表示制御
+  const [showFilterPanel, setShowFilterPanel] = useState(false); // ボトムから出る詳細フィルタ
 
-  // Sticky状態の詳細フィルタ表示時のみ背景スクロールをロック
+  // トップ側クイックフィルタの可視状態を監視するための ref & state
+  const topFilterRef = useRef<HTMLDivElement | null>(null);
+  const [isTopFilterVisible, setIsTopFilterVisible] = useState(true);
+
+
+  // ボトムの詳細フィルタパネルを開いている間だけ背景スクロールをロック
   useEffect(() => {
     if (typeof document === "undefined") return;
 
-    if (isSticky && showStickyDetails) {
-      // 固定UIの詳細フィルタを開いている間だけロック
-      document.body.style.overflow = "hidden";
-    } else {
-      // それ以外は常に元に戻す
+    document.body.style.overflow = showFilterPanel ? "hidden" : "";
+
+    return () => {
       document.body.style.overflow = "";
+    };
+  }, [showFilterPanel]);
+
+  // トップ側のクイックフィルタが画面内に見えているかどうかを監視
+  useEffect(() => {
+    if (!topFilterRef.current || typeof IntersectionObserver === "undefined") {
+      return;
     }
 
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isSticky, showStickyDetails]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        setIsTopFilterVisible(entry.isIntersecting);
+      },
+      {
+        threshold: 0.01,
+      }
+    );
 
-  // Stickyヘッダーが画面上部に張り付いているかどうかを監視
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!stickyRef.current) return;
-      const rect = stickyRef.current.getBoundingClientRect();
-      const stuck = rect.top <= 0; // top-0 のとき 0 になる
-      setIsSticky(stuck);
-    };
+    observer.observe(topFilterRef.current);
 
-    handleScroll();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
     return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
+      observer.disconnect();
     };
   }, []);
-
-  // Stickyが解除されたらSticky側の詳細フィルタは閉じておく
-  useEffect(() => {
-    if (!isSticky) {
-      setShowStickyDetails(false);
-    }
-  }, [isSticky]);
 
 
   const [loading, setLoading] = useState(true);
@@ -633,25 +623,83 @@ export default function SearchPage() {
           <Button
             onClick={() => {
               fetchRankings();
-              // Top版・Sticky版どちらから押しても閉じる
-              setShowTopDetails(false);
-              setShowStickyDetails(false);
+              setShowFilterPanel(false); // ボトムの詳細フィルタを閉じる
             }}
             disabled={loading}
             className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-6 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.75)] hover:brightness-105"
           >
             {loading ? "Searching..." : "Apply filters"}
           </Button>
+
         </div>
 
       </div>
     </div>
   );
 
+  // トップ / ボトム共通のクイックフィルタバー
+  const QuickFilterBar = () => (
+    <div className="max-w-7xl mx-auto rounded-2xl border border-white/15 bg-black/80 backdrop-blur-md px-4 py-3 flex items-center justify-between gap-3">
+      {/* 左側：Quick filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-slate-300/90">Quick filters:</span>
+
+        <button
+          onClick={() => setSelectedSort("recommended")}
+          className="px-3 py-1 rounded-full text-[11px] bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
+        >
+          人気の隠れた名作
+        </button>
+
+        <button
+          onClick={() => setSelectedGenre("Relaxing")}
+          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+        >
+          まったり
+        </button>
+
+        <button
+          onClick={() => setSelectedGenre("Horror")}
+          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+        >
+          緊張感
+        </button>
+
+        <button
+          onClick={() => setSelectedGenre("RPG")}
+          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
+        >
+          ストーリー
+        </button>
+      </div>
+
+      {/* 右側：詳細フィルタ / リセット */}
+      <div className="flex items-center gap-2">
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            className="text-[11px] text-slate-200/90 underline underline-offset-2 hover:opacity-80"
+          >
+            条件リセット
+          </button>
+        )}
+
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => setShowFilterPanel(true)}
+          className="h-8 rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-3 text-[11px] font-semibold text-slate-950 shadow-[0_14px_40px_rgba(0,0,0,0.75)]"
+        >
+          詳細フィルタ
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_50%,_#020008_100%)] text-slate-50">
-      <div className="max-w-7xl mx-auto px-4 py-6 md:px-8 md:py-10 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-32 space-y-8">
         {/* === Page Header ======================================= */}
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-2">
@@ -692,100 +740,6 @@ export default function SearchPage() {
             </Button> */}
           </div>
         </div>
-        {/* === Sticky Filter Header (Quick filters + 詳細フィルタ導線) === */}
-        <div
-          ref={stickyRef}
-          className="sticky top-0 z-20 rounded-2xl border border-white/10 bg-black/60 px-4 py-3 backdrop-blur-md flex flex-col gap-2"
-        >
-
-          {/* 上段：クイックフィルタ */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-slate-300/90">Quick filters:</span>
-
-            <button
-              onClick={() => setSelectedSort("recommended")}
-              className="px-3 py-1 rounded-full text-xs bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
-            >
-              人気の隠れた名作
-            </button>
-
-            <button
-              onClick={() => setSelectedGenre("Relaxing")}
-              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-            >
-              まったり
-            </button>
-
-            <button
-              onClick={() => setSelectedGenre("Horror")}
-              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-            >
-              緊張感
-            </button>
-
-            <button
-              onClick={() => setSelectedGenre("RPG")}
-              className="px-3 py-1 rounded-full text-xs bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-            >
-              ストーリー
-            </button>
-          </div>
-
-          {/* 下段：説明＋詳細フィルタ / リセット */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] text-slate-400">
-              絞り込み条件を変えると、すぐに結果が更新されます。
-            </p>
-            <div className="flex gap-2">
-              {isSticky && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowStickyDetails((prev) => !prev)}
-                  className="h-7 rounded-full border-white/30 bg-black/40 px-3 text-[11px] text-slate-100 hover:bg-black/70"
-                >
-                  {showStickyDetails ? "詳細フィルタを隠す" : "詳細フィルタを表示"}
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={clearAllFilters}
-                className="h-7 rounded-full border-white/20 bg-black/30 px-3 text-[11px] text-slate-100 hover:bg-black/70"
-              >
-                条件リセット
-              </Button>
-            </div>
-          </div>
-          {/* Sticky中だけ開く詳細フィルタ（Sticky専用） */}
-          {isSticky && showStickyDetails && (
-            <div className="mt-3 max-h-[80vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/20 shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
-              <DetailedFilterContent />
-            </div>
-          )}
-        </div>
-
-        {/* === Detailed Filters (折りたたみ) ===================== */}
-        <div className="rounded-2xl border border-white/10 bg-black/20 shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
-
-          {/* トグルボタン */}
-          <button
-            onClick={() => setShowTopDetails((prev) => !prev)}
-            className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-slate-200 hover:bg白/10"
-          >
-            <span>詳細フィルタを{showTopDetails ? "閉じる" : "開く"}</span>
-            <span>{showTopDetails ? "▲" : "▼"}</span>
-          </button>
-
-          {/* 折りたたみ内容（Top版はフル表示） */}
-          {showTopDetails && <DetailedFilterContent />}
-
-        </div>
-
-
 
         {/* === Active Filter Chips ================================ */}
         {hasActiveFilters && !loading && (
@@ -884,6 +838,10 @@ export default function SearchPage() {
             </Button>
           </div>
         )}
+        {/* === Top Quick Filter Bar =============================== */}
+        <div ref={topFilterRef} className="mt-4">
+          <QuickFilterBar />
+        </div>
 
         {/* === Results ============================================ */}
         {loading ? (
@@ -930,6 +888,39 @@ export default function SearchPage() {
             )}
           </div>
         )}
+                {/* === Bottom Fixed Filter Bar ================================== */}
+        {!isTopFilterVisible && (
+          <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-2 md:px-8">
+            <QuickFilterBar />
+          </div>
+        )}
+
+        {/* === Bottom Sheet: Detailed Filters ============================ */}
+        {showFilterPanel && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-5xl rounded-t-3xl bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_55%,_#020008_100%)] shadow-[0_-24px_70px_rgba(0,0,0,0.9)] max-h-[95vh] overflow-y-auto">
+              {/* ヘッダー行 */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-2 md:px-6">
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
+                  Search Filters
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowFilterPanel(false)}
+                  className="h-8 w-8 rounded-full text-slate-200 hover:bg-white/10"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* 中身は既存の DetailedFilterContent をそのまま再利用 */}
+              <DetailedFilterContent />
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

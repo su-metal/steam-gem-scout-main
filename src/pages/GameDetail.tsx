@@ -969,16 +969,33 @@ export default function GameDetail() {
     baseGame.releaseDate ?? game.releaseDate ?? null;
   const releaseYearValue =
     baseGame.releaseYear ?? game.releaseYear ?? null;
+  // 英語表記 + 年 / 月日を分けて扱う
+  let releaseYearString: string | null = null;
+  let releaseMonthDayString: string | null = null;
+
+  if (releaseDateValue) {
+    const d = new Date(releaseDateValue);
+    releaseYearString = String(d.getFullYear());
+    releaseMonthDayString = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    }); // 例: Feb 26
+  } else if (releaseYearValue) {
+    releaseYearString = String(releaseYearValue);
+  }
+
+  // 旧フォーマットが必要な箇所のために一応残しておく
   const formattedReleaseDate =
     releaseDateValue
-      ? new Date(releaseDateValue).toLocaleDateString(undefined, {
+      ? new Date(releaseDateValue).toLocaleDateString("en-US", {
         year: "numeric",
         month: "short",
-        day: "2-digit",
+        day: "numeric",
       })
       : releaseYearValue
         ? String(releaseYearValue)
         : null;
+
 
   const isFree = price === 0;
   const normalizedPrice =
@@ -1041,6 +1058,7 @@ export default function GameDetail() {
     (hiddenGemVerdict === "Yes" ? "Hidden Gem" : undefined);
 
   // Tags to display under the title（game_rankings_cache.tags をそのまま使う）
+  // サマリーには最大3件だけ出す
   const displayTags = getDisplayTags({ tags });
 
   const getScoreColor = (score: number | null) => {
@@ -1129,23 +1147,6 @@ export default function GameDetail() {
 
               {/* グラデオーバーレイ */}
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-              {/* Match Score 丸バッジ */}
-              {matchScorePercent !== null && (
-                <div className="absolute bottom-4 right-4 z-10 flex items-center justify-center">
-                  <div className="flex flex-col items-center justify-center rounded-full border-2 border-fuchsia-300/80 bg-black/80 backdrop-blur-sm shadow-[0_0_30px_rgba(236,72,153,0.7)] w-20 h-20 md:w-24 md:h-24">
-                    <span className="text-[10px] md:text-[11px] uppercase tracking-[0.18em] text-slate-200/90 mb-1">
-                      Match
-                    </span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xl md:text-2xl font-extrabold bg-gradient-to-r from-fuchsia-400 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
-                        {matchScorePercent}
-                      </span>
-                      <span className="text-xs text-slate-200">%</span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* 2枚目のグラデ（今のコードどおりでOK） */}
@@ -1193,13 +1194,28 @@ export default function GameDetail() {
               <div className="space-y-6 min-w-0">
                 {/* タイトル */}
                 <div className="space-y-3">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                    Hidden Gem Analyzer
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                      Hidden Gem Analyzer
+                    </p>
+
+                    {/* ★ Metacritic バッジをここに移動 */}
+                    {reviewScoreDesc && (
+                      <Badge
+                        variant="outline"
+                        className="inline-flex items-center gap-1 rounded-full border-amber-400/80 bg-amber-500/15 text-[11px] md:text-xs text-amber-50 px-3 py-1"
+                      >
+                        <ThumbsUp className="w-3.5 h-3.5" />
+                        <span>{reviewScoreDesc}</span>
+                      </Badge>
+                    )}
+                  </div>
+
                   <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
                     {title}
                   </CardTitle>
                 </div>
+
 
                 {/* ギャラリー：メインメディア（画像 or 動画）＋下にミニサムネ */}
                 {hasMedia && activeMediaSrc && (
@@ -1315,6 +1331,8 @@ export default function GameDetail() {
                   </div>
                 )}
 
+
+
                 {/* Summary */}
                 <Card
                   className="
@@ -1329,249 +1347,151 @@ export default function GameDetail() {
                   </CardContent>
                 </Card>
 
-
-                {/* 左：統合サマリー（Stats + Tags + 評価バッジ） */}
-                <div className="flex-1 space-y-4 min-w-0">
-                  {/* 統合サマリーカード：Stats + Tags */}
-                  <div className="rounded-[24px] bg-gradient-to-br from-[#07031f] via-[#050313] to-[#050510] border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.85)] px-4 py-4 md:px-5 md:py-5 space-y-4">
-                    {/* 上段：Game Statistics（6項目グリッド） */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">
-                          Positive Reviews
-                        </div>
-                        <div className="text-lg md:text-xl font-bold text-cyan-300">
-                          {positiveRatioDisplay}%
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">
-                          Total Reviews
-                        </div>
-                        <div className="text-lg md:text-xl font-semibold">
-                          {totalReviews?.toLocaleString() ?? "-"}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">Price</div>
-                        <div className="text-lg md:text-xl font-bold text-emerald-300">
-                          {priceDisplay}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">
-                          Avg Playtime
-                        </div>
-                        <div className="text-lg md:text-xl font-semibold">
-                          {averagePlaytimeHours !== "N/A"
-                            ? `${averagePlaytimeHours}h`
-                            : "N/A"}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">
-                          Estimated Owners
-                        </div>
-                        <div className="text-base md:text-lg font-semibold">
-                          {estimatedOwners?.toLocaleString() ?? "-"}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] text-slate-400 mb-0.5">Release</div>
-                        <div className="text-base md:text-lg">
-                          {formattedReleaseDate ?? "-"}
-                        </div>
+                {/* Match Score（Overview の上に表示） */}
+                {matchScorePercent !== null && (
+                  <div className="flex justify-center mt-3 mb-1">
+                    <div className="flex flex-col items-center justify-center rounded-full border-2 border-fuchsia-300/80 bg-black/80  w-20 h-20 md:w-24 md:h-24">
+                      <span className="text-[10px] md:text-[11px] uppercase tracking-[0.18em] text-slate-200/90 mb-1">
+                        Match
+                      </span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl md:text-2xl font-extrabold bg-gradient-to-r from-fuchsia-400 via-fuchsia-200 to-cyan-300 bg-clip-text text-transparent">
+                          {matchScorePercent}
+                        </span>
+                        <span className="text-xs text-slate-200">%</span>
                       </div>
                     </div>
-
-                    {/* 中段：Tags（大きめ・目立つバッジ） */}
-                    {displayTags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {displayTags.map((tag, idx) => (
-                          <Badge
-                            key={`${tag}-${idx}`}
-                            variant="secondary"
-                            className="rounded-full bg-[#1b1438] border border-white/20 text-[12px] md:text-sm font-medium px-3.5 py-1.5"
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                       {/* レビュー評価バッジ（Very Positive など） */}
-                  {reviewScoreDesc && (
-                    <Badge
-                      variant="outline"
-                      className="inline-flex items-center gap-1 rounded-full border-amber-400/80 bg-amber-500/15 text-[11px] md:text-xs text-amber-50 px-3 py-1"
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                      <span>{reviewScoreDesc}</span>
-                    </Badge>
-                  )}
-
-                  {/* 復活したタイトルなどの安定度ステータス */}
-                  {stabilityBadge && (
-                    <div className="space-y-1">
-                      {/* ★ バッジと説明文を“縦にセット”で表示する */}
-                      <Badge
-                        variant="outline"
-                        className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] md:text-xs font-semibold ${stabilityBadge.className}`}
-                      >
-                        <span>{stabilityBadge.label}</span>
-                      </Badge>
-
-                      {stabilityBadge.description && (
-                        <p className="text-xs md:text-[13px] text-slate-300/80 leading-relaxed">
-                          {stabilityBadge.description}
-                        </p>
-                      )}
-                    </div>
-                  )}
                   </div>
+                )}
 
-               
-                </div>
+                {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
+                {(playerFitPositiveTags.length > 0 ||
+                  playerFitNegativeTags.length > 0) && (
+                    <Card
+                      ref={playerMatchSectionRef}
+                      className="rounded-[24px] border-none bg-transparent">
+                      <CardHeader className="px-0 py-5 sm:px-6 sm:py-6">
+                        <CardTitle className="text-xl">
+                          Player Match
+                        </CardTitle>
+                        <p className="text-xs text-slate-400 mt-1">
+                          プレイヤータイプごとの「このゲームとの相性」を色の濃淡とポップアップで可視化します。
+                        </p>
+                      </CardHeader>
+                      <CardContent className="px-0">
+                        {allPlayerFitTags.length === 0 ? (
+                          <p className="text-[11px] text-slate-400">
+                            まだ「どんなプレイヤーに刺さるか／刺さらないか」の傾向は十分に抽出されていません。
+                          </p>
+                        ) : (
+                          <motion.div
+                            initial={{ opacity: 0, y: 18 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            transition={{ type: "spring", stiffness: 140, damping: 16 }}
+                            viewport={{ once: true, amount: 0.2 }}
+                            className="relative max-w-5xl mx-auto flex gap-4 md:gap-6 overflow-hidden"
+                          >
+                            {/* 左：プレイヤータイプカード一覧 */}
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
+                              {allPlayerFitTags.map((tag, index) => {
+                                const isActive = activePlayerFitId === tag.id;
 
+                                // モバイルは 2 カラムで最後の 2 枚を最終行とみなす
+                                const isLastRow = index >= allPlayerFitTags.length - 2;
+                                const bubblePositionClass = isLastRow
+                                  ? "bottom-full mb-2"
+                                  : "top-full mt-2";
 
-              </div>
+                                return (
+                                  <div key={tag.id} className="relative">
+                                    <motion.button
+                                      type="button"
+                                      onClick={() => {
+                                        setActivePlayerFitId(tag.id);
+                                        if (isMobile) {
+                                          setShowMobilePlayerDetail(true);
+                                        }
+                                      }}
+                                      initial={{ opacity: 0, scale: 0.85, y: 14 }}
+                                      whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                                      whileHover={{ scale: 1.05 }}
+                                      animate={
+                                        isActive
+                                          ? {
+                                            scale: [1, 1.03, 1],
+                                            transition: { duration: 0.6, repeat: Infinity },
+                                          }
+                                          : {}
+                                      }
+                                      transition={{
+                                        type: "spring",
+                                        stiffness: 140,
+                                        damping: 12,
+                                        delay: index * 0.06,
+                                      }}
+                                      viewport={{ once: true, amount: 0.25 }}
+                                      className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
+                                          ? "border-2 border-fuchsia-300/80 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.45)]"
+                                          : "border border-white/5 bg-slate-900/70"
+                                        }`}
 
-            </CardHeader>
-          </Card>
-        </div>
+                                    >
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-lg">{tag.icon}</span>
+                                        <span className="text-[13px] font-semibold leading-snug">
+                                          {tag.label}
+                                        </span>
+                                      </div>
 
+                                      <div className="flex gap-1 mb-1">
+                                        {SCORE_STEPS.map((step) => (
+                                          <div
+                                            key={step}
+                                            className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
+                                              tag,
+                                              step
+                                            )}`}
+                                          />
+                                        ))}
+                                      </div>
 
-        {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
-        {(playerFitPositiveTags.length > 0 ||
-          playerFitNegativeTags.length > 0) && (
-            <Card
-              ref={playerMatchSectionRef}
-              className="rounded-[24px] border-none bg-[#070716]">
-              <CardHeader className="px-0 py-5 sm:px-6 sm:py-6">
-                <CardTitle className="text-xl">
-                  Player Match
-                </CardTitle>
-                <p className="text-xs text-slate-400 mt-1">
-                  プレイヤータイプごとの「このゲームとの相性」を色の濃淡とポップアップで可視化します。
-                </p>
-              </CardHeader>
-              <CardContent className="px-0">
-                {allPlayerFitTags.length === 0 ? (
-                  <p className="text-[11px] text-slate-400">
-                    まだ「どんなプレイヤーに刺さるか／刺さらないか」の傾向は十分に抽出されていません。
-                  </p>
-                ) : (
-                  <motion.div
-                    initial={{ opacity: 0, y: 18 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 140, damping: 16 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    className="relative max-w-5xl mx-auto flex gap-4 md:gap-6 overflow-hidden"
-                  >
-                    {/* 左：プレイヤータイプカード一覧 */}
-                    <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
-                      {allPlayerFitTags.map((tag, index) => {
-                        const isActive = activePlayerFitId === tag.id;
-
-                        // モバイルは 2 カラムで最後の 2 枚を最終行とみなす
-                        const isLastRow = index >= allPlayerFitTags.length - 2;
-                        const bubblePositionClass = isLastRow
-                          ? "bottom-full mb-2"
-                          : "top-full mt-2";
-
-                        return (
-                          <div key={tag.id} className="relative">
-                            <motion.button
-                              type="button"
-                              onClick={() => {
-                                setActivePlayerFitId(tag.id);
-                                if (isMobile) {
-                                  setShowMobilePlayerDetail(true);
-                                }
-                              }}
-                              initial={{ opacity: 0, scale: 0.85, y: 14 }}
-                              whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                              whileHover={{ scale: 1.05 }}
-                              animate={
-                                isActive
-                                  ? {
-                                    scale: [1, 1.03, 1],
-                                    transition: { duration: 0.6, repeat: Infinity },
-                                  }
-                                  : {}
-                              }
-                              transition={{
-                                type: "spring",
-                                stiffness: 140,
-                                damping: 12,
-                                delay: index * 0.06,
-                              }}
-                              viewport={{ once: true, amount: 0.25 }}
-                              className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
-                                ? "border-2 border-emerald-400/80 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
-                                : "border border-white/5 bg-slate-900/70"
-                                }`}
-                            >
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">{tag.icon}</span>
-                                <span className="text-[13px] font-semibold leading-snug">
-                                  {tag.label}
-                                </span>
-                              </div>
-
-                              <div className="flex gap-1 mb-1">
-                                {SCORE_STEPS.map((step) => (
-                                  <div
-                                    key={step}
-                                    className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
-                                      tag,
-                                      step
-                                    )}`}
-                                  />
-                                ))}
-                              </div>
-
-                              {tag.sub && (
-                                <p className="mt-1 text-[11px] text-slate-200 mb-1 line-clamp-2">
-                                  {tag.sub}
-                                </p>
-                              )}
+                                      {tag.sub && (
+                                        <p className="mt-1 text-[11px] text-slate-200 mb-1 line-clamp-2">
+                                          {tag.sub}
+                                        </p>
+                                      )}
 
 
-                              {/* うっすら光のグラデーション */}
-                              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
-                            </motion.button>
+                                      {/* うっすら光のグラデーション */}
+                                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
+                                    </motion.button>
 
-                            {/* ★ モバイル用：カードの近くにふきだし表示（既存挙動を維持） */}
-                            {isMobile && showMobilePlayerDetail && isActive && (
-                              <motion.div
-                                initial={{ x: "100%", opacity: 0 }}
-                                animate={{ x: 0, opacity: 1 }}
-                                exit={{ x: "100%", opacity: 0 }}
-                                transition={{ type: "spring", stiffness: 240, damping: 24 }}
-                                className="fixed inset-0 z-40 flex items-center justify-center px-4"
-                                onTouchStart={handlePopupTouchStart}
-                                onTouchMove={handlePopupTouchMove}
-                                onTouchEnd={handlePopupTouchEnd}
-                              >
-                                {/* 背景の暗幕（タップ or スワイプで閉じる） */}
-                                <div
-                                  className="absolute inset-0"
-                                  onClick={() => setShowMobilePlayerDetail(false)}
-                                  onTouchStart={handleRightSlideOverlayTouchStart}
-                                  onTouchMove={handleRightSlideOverlayTouchMove}
-                                  onTouchEnd={handleRightSlideOverlayTouchEnd}
-                                />
+                                    {/* ★ モバイル用：カードの近くにふきだし表示（既存挙動を維持） */}
+                                    {isMobile && showMobilePlayerDetail && isActive && (
+                                      <motion.div
+                                        initial={{ x: "100%", opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: "100%", opacity: 0 }}
+                                        transition={{ type: "spring", stiffness: 240, damping: 24 }}
+                                        className="fixed inset-0 z-40 flex items-center justify-center px-4"
+                                        onTouchStart={handlePopupTouchStart}
+                                        onTouchMove={handlePopupTouchMove}
+                                        onTouchEnd={handlePopupTouchEnd}
+                                      >
+                                        {/* 背景の暗幕（タップ or スワイプで閉じる） */}
+                                        <div
+                                          className="absolute inset-0"
+                                          onClick={() => setShowMobilePlayerDetail(false)}
+                                          onTouchStart={handleRightSlideOverlayTouchStart}
+                                          onTouchMove={handleRightSlideOverlayTouchMove}
+                                          onTouchEnd={handleRightSlideOverlayTouchEnd}
+                                        />
 
-                                {/* 右からスライドインするパネル本体 */}
-                                {/* 右スライド詳細パネル（Pattern A ミニマル） */}
-                                <div className="relative z-10 w-full flex justify-center">
-                                  <div
-                                    className="
+                                        {/* 右からスライドインするパネル本体 */}
+                                        {/* 右スライド詳細パネル（Pattern A ミニマル） */}
+                                        <div className="relative z-10 w-full flex justify-center">
+                                          <div
+                                            className="
         w-[min(100vw-40px,380px)]
         max-h-[70vh]
         rounded-2xl
@@ -1583,281 +1503,344 @@ export default function GameDetail() {
         text-slate-50
         overflow-y-auto
       "
-                                  >
+                                          >
 
-                                    {/* ヘッダー（タイトルのみ） */}
-                                    <div className="flex items-center gap-3 mb-4">
-                                      <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
-                                        <span>{tag.icon}</span>
+                                            {/* ヘッダー（タイトルのみ） */}
+                                            <div className="flex items-center gap-3 mb-4">
+                                              <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
+                                                <span>{tag.icon}</span>
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="text-[11px] uppercase tracking-widest text-slate-400">
+                                                  DETAIL
+                                                </div>
+                                                <div className="font-semibold text-[15px] leading-snug line-clamp-2">
+                                                  {tag.label}
+                                                </div>
+
+                                                {/* Match スコア（控えめ） */}
+                                                <div className="mt-1 text-[11px] text-slate-400 flex items-center gap-2">
+                                                  <span className="font-semibold text-slate-200">
+                                                    Match {tag.score} / 5
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+
+                                            {/* 仕切り線：サイトメイングラデと揃えた細いライン */}
+                                            <div className="h-[1px] bg-gradient-to-r from-fuchsia-400/40 to-violet-300/40 mb-3" />
+
+
+                                            {/* 本文：サマリ + 理由 */}
+                                            {tag.sub && (
+                                              <p className="text-[15px] text-slate-300 leading-relaxed mb-2">
+                                                {tag.sub}
+                                              </p>
+                                            )}
+
+                                            {tag.reason && (
+                                              <p className="text-[14px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
+                                                {tag.reason}
+                                              </p>
+                                            )}
+
+
+                                            {/* 代表レビュー（モバイル） */}
+                                            {(() => {
+                                              const positiveReviews =
+                                                tag.polarity === "positive"
+                                                  ? [
+                                                    ...(tag.hitReviewParaphrased
+                                                      ? [tag.hitReviewParaphrased]
+                                                      : []),
+                                                    ...(tag.hitReviewOriginal &&
+                                                      tag.hitReviewOriginal !==
+                                                      tag.hitReviewParaphrased
+                                                      ? [tag.hitReviewOriginal]
+                                                      : []),
+                                                  ]
+                                                  : [];
+                                              const negativeReviews =
+                                                tag.polarity === "negative"
+                                                  ? [
+                                                    ...(tag.missReviewParaphrased
+                                                      ? [tag.missReviewParaphrased]
+                                                      : []),
+                                                    ...(tag.missReviewOriginal &&
+                                                      tag.missReviewOriginal !==
+                                                      tag.missReviewParaphrased
+                                                      ? [tag.missReviewOriginal]
+                                                      : []),
+                                                  ]
+                                                  : [];
+
+                                              if (
+                                                positiveReviews.length === 0 &&
+                                                negativeReviews.length === 0
+                                              ) {
+                                                return null;
+                                              }
+
+                                              return (
+                                                <div className="mt-1 space-y-2 border-t border-slate-700/80 pt-2">
+                                                  {/* ポジティブタイプ → 刺さった理由だけ */}
+                                                  {tag.polarity === "positive" &&
+                                                    positiveReviews.length > 0 && (
+                                                      <div>
+                                                        <div className="text-[16px] font-semibold text-emerald-300/90 mb-3">
+                                                          刺さった理由（代表的なレビュー）
+                                                        </div>
+                                                        {positiveReviews.map(
+                                                          (text, idx) => (
+                                                            <p
+                                                              key={idx}
+                                                              className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                            >
+                                                              {text}
+                                                            </p>
+                                                          )
+                                                        )}
+                                                      </div>
+                                                    )}
+
+                                                  {/* ネガティブタイプ → 刺さらなかった理由だけ */}
+                                                  {tag.polarity === "negative" &&
+                                                    negativeReviews.length > 0 && (
+                                                      <div>
+                                                        <div className="text-[16px] font-semibold text-rose-300/90 mt-1 mb-3">
+                                                          刺さらなかった理由（代表的なレビュー）
+                                                        </div>
+                                                        {negativeReviews.map(
+                                                          (text, idx) => (
+                                                            <p
+                                                              key={idx}
+                                                              className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                            >
+                                                              {text}
+                                                            </p>
+                                                          )
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                </div>
+                                              );
+                                            })()}
+
+                                            {/* 下部ナビゲーション：← 閉じる → */}
+                                            <div className="mt-4 flex items-center justify-center gap-4">
+                                              {/* ← 前へ */}
+                                              <button
+                                                type="button"
+                                                disabled={index === 0}
+                                                onClick={() => {
+                                                  const prev = allPlayerFitTags[index - 1];
+                                                  if (prev) {
+                                                    setActivePlayerFitId(prev.id);
+                                                  }
+                                                }}
+                                                className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
+                                              >
+                                                <ArrowLeft className="w-5 h-5" />
+                                              </button>
+
+                                              {/* 閉じる */}
+                                              <button
+                                                type="button"
+                                                onClick={() => setShowMobilePlayerDetail(false)}
+                                                className="px-4 py-1.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-800/60 transition"
+                                              >
+                                                閉じる
+                                              </button>
+
+                                              {/* → 次へ */}
+                                              <button
+                                                type="button"
+                                                disabled={index === allPlayerFitTags.length - 1}
+                                                onClick={() => {
+                                                  const next = allPlayerFitTags[index + 1];
+                                                  if (next) {
+                                                    setActivePlayerFitId(next.id);
+                                                  }
+                                                }}
+                                                className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
+                                              >
+                                                <ArrowRight className="w-5 h-5" />
+                                              </button>
+                                            </div>
+
+                                          </div>
+                                        </div>
+
+                                      </motion.div>
+                                    )}
+
+
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
+                            {!isMobile && activePlayerFitTag && (
+                              <>
+                                {/* 右側のグラデーションオーバーレイ */}
+                                <div className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[44%] bg-gradient-to-l from-slate-950 via-slate-900/95 to-transparent" />
+
+                                {/* 右からスッと出てくる詳細パネル */}
+                                <div className="pointer-events-none absolute top-0 right-0 h-full w-full md:w-[42%] flex items-center justify-end pr-2 md:pr-4">
+                                  <motion.div
+                                    key={activePlayerFitTag.id}
+                                    initial={{ x: 40, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    transition={{ type: "spring", stiffness: 180, damping: 20 }}
+                                    className="pointer-events-auto w-full md:w-[320px] rounded-2xl bg-slate-950/95 border border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.5)] px-4 py-4 text-xs space-y-2"
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <div className="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-300/70 flex items-center justify-center text-lg">
+                                        {activePlayerFitTag.icon}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-[11px] uppercase tracking-widest text-slate-400">
+                                        <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/90 mb-1">
                                           DETAIL
                                         </div>
-                                        <div className="font-semibold text-[15px] leading-snug line-clamp-2">
-                                          {tag.label}
+                                        <div className="font-semibold text-sm text-emerald-100 mb-0.5 truncate">
+                                          {activePlayerFitTag.label}
                                         </div>
-
-                                        {/* Match スコア（控えめ） */}
-                                        <div className="mt-1 text-[11px] text-slate-400 flex items-center gap-2">
-                                          <span className="font-semibold text-slate-200">
-                                            Match {tag.score} / 5
+                                        <div className="flex items-center gap-1 text-[11px] text-emerald-200">
+                                          <span>Match {activePlayerFitTag.score} / 5</span>
+                                          <span className="text-emerald-300/70">
+                                            {"● ".repeat(Math.max(0, activePlayerFitTag.score - 1))}
+                                            {activePlayerFitTag.score > 0 ? "◐" : ""}
                                           </span>
                                         </div>
                                       </div>
                                     </div>
 
-
-                                    {/* 仕切り線：サイトメイングラデと揃えた細いライン */}
-                                    <div className="h-[1px] bg-gradient-to-r from-fuchsia-400/40 to-violet-300/40 mb-3" />
-
-
-                                    {/* 本文：サマリ + 理由 */}
-                                    {tag.sub && (
-                                      <p className="text-[15px] text-slate-300 leading-relaxed mb-2">
-                                        {tag.sub}
+                                    {activePlayerFitTag.sub && (
+                                      <p className="text-[11px] text-slate-200 leading-relaxed">
+                                        {activePlayerFitTag.sub}
                                       </p>
                                     )}
 
-                                    {tag.reason && (
-                                      <p className="text-[14px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
-                                        {tag.reason}
-                                      </p>
-                                    )}
+                                    <p className="text-[11px] text-slate-100 leading-relaxed">
+                                      {activePlayerFitTag.reason}
+                                    </p>
 
-
-                                    {/* 代表レビュー（モバイル） */}
-                                    {(() => {
-                                      const positiveReviews =
-                                        tag.polarity === "positive"
-                                          ? [
-                                            ...(tag.hitReviewParaphrased
-                                              ? [tag.hitReviewParaphrased]
-                                              : []),
-                                            ...(tag.hitReviewOriginal &&
-                                              tag.hitReviewOriginal !==
-                                              tag.hitReviewParaphrased
-                                              ? [tag.hitReviewOriginal]
-                                              : []),
-                                          ]
-                                          : [];
-                                      const negativeReviews =
-                                        tag.polarity === "negative"
-                                          ? [
-                                            ...(tag.missReviewParaphrased
-                                              ? [tag.missReviewParaphrased]
-                                              : []),
-                                            ...(tag.missReviewOriginal &&
-                                              tag.missReviewOriginal !==
-                                              tag.missReviewParaphrased
-                                              ? [tag.missReviewOriginal]
-                                              : []),
-                                          ]
-                                          : [];
-
-                                      if (
-                                        positiveReviews.length === 0 &&
-                                        negativeReviews.length === 0
-                                      ) {
-                                        return null;
-                                      }
-
-                                      return (
-                                        <div className="mt-1 space-y-2 border-t border-slate-700/80 pt-2">
+                                    {(activePositiveReviews.length > 0 ||
+                                      activeNegativeReviews.length > 0) && (
+                                        <div className="mt-3 space-y-2 border-t border-emerald-500/20 pt-2">
                                           {/* ポジティブタイプ → 刺さった理由だけ */}
-                                          {tag.polarity === "positive" &&
-                                            positiveReviews.length > 0 && (
+                                          {activePlayerFitTag?.polarity === "positive" &&
+                                            activePositiveReviews.length > 0 && (
                                               <div>
-                                                <div className="text-[16px] font-semibold text-emerald-300/90 mb-3">
+                                                <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
                                                   刺さった理由（代表的なレビュー）
                                                 </div>
-                                                {positiveReviews.map(
-                                                  (text, idx) => (
-                                                    <p
-                                                      key={idx}
-                                                      className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
-                                                    >
-                                                      {text}
-                                                    </p>
-                                                  )
-                                                )}
+                                                {activePositiveReviews.map((text, idx) => (
+                                                  <p
+                                                    key={idx}
+                                                    className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                                  >
+                                                    {text}
+                                                  </p>
+                                                ))}
                                               </div>
                                             )}
 
                                           {/* ネガティブタイプ → 刺さらなかった理由だけ */}
-                                          {tag.polarity === "negative" &&
-                                            negativeReviews.length > 0 && (
+                                          {activePlayerFitTag?.polarity === "negative" &&
+                                            activeNegativeReviews.length > 0 && (
                                               <div>
-                                                <div className="text-[16px] font-semibold text-rose-300/90 mt-1 mb-3">
+                                                <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
                                                   刺さらなかった理由（代表的なレビュー）
                                                 </div>
-                                                {negativeReviews.map(
-                                                  (text, idx) => (
-                                                    <p
-                                                      key={idx}
-                                                      className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
-                                                    >
-                                                      {text}
-                                                    </p>
-                                                  )
-                                                )}
+                                                {activeNegativeReviews.map((text, idx) => (
+                                                  <p
+                                                    key={idx}
+                                                    className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                                  >
+                                                    {text}
+                                                  </p>
+                                                ))}
                                               </div>
                                             )}
                                         </div>
-                                      );
-                                    })()}
+                                      )}
 
-                                    {/* 下部ナビゲーション：← 閉じる → */}
-                                    <div className="mt-4 flex items-center justify-center gap-4">
-                                      {/* ← 前へ */}
-                                      <button
-                                        type="button"
-                                        disabled={index === 0}
-                                        onClick={() => {
-                                          const prev = allPlayerFitTags[index - 1];
-                                          if (prev) {
-                                            setActivePlayerFitId(prev.id);
-                                          }
-                                        }}
-                                        className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
-                                      >
-                                        <ArrowLeft className="w-5 h-5" />
-                                      </button>
-
-                                      {/* 閉じる */}
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowMobilePlayerDetail(false)}
-                                        className="px-4 py-1.5 rounded-full border border-slate-600 text-[11px] text-slate-200 hover:bg-slate-800/60 transition"
-                                      >
-                                        閉じる
-                                      </button>
-
-                                      {/* → 次へ */}
-                                      <button
-                                        type="button"
-                                        disabled={index === allPlayerFitTags.length - 1}
-                                        onClick={() => {
-                                          const next = allPlayerFitTags[index + 1];
-                                          if (next) {
-                                            setActivePlayerFitId(next.id);
-                                          }
-                                        }}
-                                        className="p-2 rounded-full border border-slate-600 text-slate-200 disabled:opacity-30 disabled:pointer-events-none hover:bg-slate-800/60 transition"
-                                      >
-                                        <ArrowRight className="w-5 h-5" />
-                                      </button>
-                                    </div>
-
-                                  </div>
+                                  </motion.div>
                                 </div>
-
-                              </motion.div>
+                              </>
                             )}
-
-
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
-                    {!isMobile && activePlayerFitTag && (
-                      <>
-                        {/* 右側のグラデーションオーバーレイ */}
-                        <div className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[44%] bg-gradient-to-l from-slate-950 via-slate-900/95 to-transparent" />
-
-                        {/* 右からスッと出てくる詳細パネル */}
-                        <div className="pointer-events-none absolute top-0 right-0 h-full w-full md:w-[42%] flex items-center justify-end pr-2 md:pr-4">
-                          <motion.div
-                            key={activePlayerFitTag.id}
-                            initial={{ x: 40, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            transition={{ type: "spring", stiffness: 180, damping: 20 }}
-                            className="pointer-events-auto w-full md:w-[320px] rounded-2xl bg-slate-950/95 border border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.5)] px-4 py-4 text-xs space-y-2"
-                          >
-                            <div className="flex items-start gap-2">
-                              <div className="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-300/70 flex items-center justify-center text-lg">
-                                {activePlayerFitTag.icon}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/90 mb-1">
-                                  DETAIL
-                                </div>
-                                <div className="font-semibold text-sm text-emerald-100 mb-0.5 truncate">
-                                  {activePlayerFitTag.label}
-                                </div>
-                                <div className="flex items-center gap-1 text-[11px] text-emerald-200">
-                                  <span>Match {activePlayerFitTag.score} / 5</span>
-                                  <span className="text-emerald-300/70">
-                                    {"● ".repeat(Math.max(0, activePlayerFitTag.score - 1))}
-                                    {activePlayerFitTag.score > 0 ? "◐" : ""}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {activePlayerFitTag.sub && (
-                              <p className="text-[11px] text-slate-200 leading-relaxed">
-                                {activePlayerFitTag.sub}
-                              </p>
-                            )}
-
-                            <p className="text-[11px] text-slate-100 leading-relaxed">
-                              {activePlayerFitTag.reason}
-                            </p>
-
-                            {(activePositiveReviews.length > 0 ||
-                              activeNegativeReviews.length > 0) && (
-                                <div className="mt-3 space-y-2 border-t border-emerald-500/20 pt-2">
-                                  {/* ポジティブタイプ → 刺さった理由だけ */}
-                                  {activePlayerFitTag?.polarity === "positive" &&
-                                    activePositiveReviews.length > 0 && (
-                                      <div>
-                                        <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
-                                          刺さった理由（代表的なレビュー）
-                                        </div>
-                                        {activePositiveReviews.map((text, idx) => (
-                                          <p
-                                            key={idx}
-                                            className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
-                                          >
-                                            {text}
-                                          </p>
-                                        ))}
-                                      </div>
-                                    )}
-
-                                  {/* ネガティブタイプ → 刺さらなかった理由だけ */}
-                                  {activePlayerFitTag?.polarity === "negative" &&
-                                    activeNegativeReviews.length > 0 && (
-                                      <div>
-                                        <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
-                                          刺さらなかった理由（代表的なレビュー）
-                                        </div>
-                                        {activeNegativeReviews.map((text, idx) => (
-                                          <p
-                                            key={idx}
-                                            className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
-                                          >
-                                            {text}
-                                          </p>
-                                        ))}
-                                      </div>
-                                    )}
-                                </div>
-                              )}
-
                           </motion.div>
-                        </div>
-                      </>
-                    )}
-                  </motion.div>
-                )}
-              </CardContent>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-            </Card>
-          )}
+                {/* 「今」と「昔」を分けて表示 */}
+                {(shouldShowCurrentState || shouldShowHistoricalIssues) && (
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* 現在の状態 */}
+                    {shouldShowCurrentState && (
+                      <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
+                        <CardHeader>
+                          <CardTitle className="text-lg">
+                            現在の状態（Current state）
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-slate-200/90 whitespace-pre-line">
+                            {currentStateText}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* 過去の問題・初期評価 */}
+                    {shouldShowHistoricalIssues && (
+                      <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
+                        <CardHeader>
+                          <CardTitle className="text-lg">
+                            過去の問題・初期評価（Historical issues）
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-slate-200/90 whitespace-pre-line">
+                            {historicalIssuesText}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+              </div>
+
+            </CardHeader>
+          </Card>
+        </div>
+
+        {/* 中段：Tags セクション（Overview 内で独立カード風） */}
+        {displayTags.length > 0 && (
+          <div className="mt-2 px-3 py-3">
+            <div className="text-[11px] font-semibold text-slate-100 mb-2">
+              Tags
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {displayTags.map((tag, idx) => (
+                <Badge
+                  key={`${tag}-${idx}`}
+                  variant="secondary"
+                  className="rounded-full bg-[#121225] border border-white/15 text-[12px] md:text-sm font-medium px-3.5 py-1.5"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
 
         {/* Pros & Cons */}
         <div className="grid md:grid-cols-2 gap-6">
@@ -1912,66 +1895,55 @@ export default function GameDetail() {
           </Card>
         </div>
 
-        {/* 「今」と「昔」を分けて表示 */}
-        {(shouldShowCurrentState || shouldShowHistoricalIssues) && (
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* 現在の状態 */}
-            {shouldShowCurrentState && (
-              <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    現在の状態（Current state）
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                    {currentStateText}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* 過去の問題・初期評価 */}
-            {shouldShowHistoricalIssues && (
-              <Card className="rounded-[24px] border border-white/10 bg-[#080716]/95 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-lg">
-                    過去の問題・初期評価（Historical issues）
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-slate-200/90 whitespace-pre-line">
-                    {historicalIssuesText}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
-
 
         {/* Key Insights */}
         <Card className="rounded-[24px] border border-white/10 bg-[#070716]/95 shadow-lg">
           <CardHeader>
             <CardTitle className="text-xl">Key Insights</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* AIラベル（今まで通り） */}
             {labels.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {labels.map((label, idx) => (
-                  <Badge
-                    key={`${label}-${idx}`}
-                    variant="secondary"
-                    className="rounded-full bg-[#13122c] border border-white/10 text-xs py-1.5 px-3"
-                  >
-                    {label}
-                  </Badge>
-                ))}
+              <div>
+                <p className="text-[11px] text-slate-400 mb-1">
+                  Review-based key phrases
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {labels.map((label, idx) => (
+                    <Badge
+                      key={`${label}-${idx}`}
+                      variant="secondary"
+                      className="rounded-full bg-[#13122c] border border-white/10 text-xs py-1.5 px-3"
+                    >
+                      {label}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-slate-300/80">
                 まだ特徴的なキーワードは抽出されていません。
               </p>
+            )}
+
+            {/* 全タグ一覧（ここに tags を移す） */}
+            {tags.length > 0 && (
+              <div>
+                <p className="text-[11px] text-slate-400 mb-1">
+                  AI tags (Steam-like categories)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag, idx) => (
+                    <Badge
+                      key={`${tag}-${idx}`}
+                      variant="outline"
+                      className="rounded-full border-white/15 bg-[#050512] text-[11px] px-3 py-1"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
