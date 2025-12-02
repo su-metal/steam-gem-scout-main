@@ -122,6 +122,22 @@ interface AnalysisData {
     missReviewParaphrased?: string;
   }[];
 
+  audienceNeutral?: {
+    id: string;
+    label: string;
+    description?: string;
+
+    icon?: string;
+    sub?: string;
+    fitScore?: number;
+    reason?: string;
+
+    hitReviewOriginal?: string;
+    hitReviewParaphrased?: string;
+    missReviewOriginal?: string;
+    missReviewParaphrased?: string;
+  }[];
+
 }
 
 interface SteamScreenshot {
@@ -418,7 +434,10 @@ export default function GameDetail() {
 
   // プレイヤータイプ配列を安全に整形するヘルパー
   const normalizeAudienceSegmentList = (
-    value: AnalysisData["audiencePositive"]
+    value:
+      | AnalysisData["audiencePositive"]
+      | AnalysisData["audienceNegative"]
+      | AnalysisData["audienceNeutral"]
   ): NormalizedAudience[] => {
     if (!Array.isArray(value)) return [];
     const result: NormalizedAudience[] = [];
@@ -527,6 +546,10 @@ export default function GameDetail() {
   const audienceNegative = normalizeAudienceSegmentList(
     analysisData.audienceNegative
   );
+  const audienceNeutral = normalizeAudienceSegmentList(
+    (analysisData as any).audienceNeutral
+  );
+
 
   // Deep Emoji Tags 用タグ型
   type PlayerFitTag = {
@@ -536,7 +559,7 @@ export default function GameDetail() {
     sub: string;
     score: number; // 1〜5
     reason: string;
-    polarity: "positive" | "negative";
+    polarity: "positive" | "neutral" | "negative";
 
     hitReviewOriginal?: string;
     hitReviewParaphrased?: string;
@@ -570,16 +593,19 @@ export default function GameDetail() {
 
   const DEFAULT_POSITIVE_ICONS = ["🧠", "🧭", "🎯", "🐢", "🎮"];
   const DEFAULT_NEGATIVE_ICONS = ["⚡", "⏩", "📦", "🤹‍♂️", "💤"];
+  const DEFAULT_NEUTRAL_ICONS = ["⚖️", "🎭", "🌓", "🔁", "📊"];
 
   const buildPlayerFitTags = (
     list: NormalizedAudience[],
-    polarity: "positive" | "negative"
+    polarity: "positive" | "neutral" | "negative"
   ): PlayerFitTag[] => {
     return list.map((item, index) => {
       const fallbackIcon =
         polarity === "positive"
           ? DEFAULT_POSITIVE_ICONS[index % DEFAULT_POSITIVE_ICONS.length]
-          : DEFAULT_NEGATIVE_ICONS[index % DEFAULT_NEGATIVE_ICONS.length];
+          : polarity === "negative"
+            ? DEFAULT_NEGATIVE_ICONS[index % DEFAULT_NEGATIVE_ICONS.length]
+            : DEFAULT_NEUTRAL_ICONS[index % DEFAULT_NEUTRAL_ICONS.length];
 
       const icon = item.icon || fallbackIcon;
       const label = item.label;
@@ -588,7 +614,9 @@ export default function GameDetail() {
         item.description ||
         (polarity === "positive"
           ? "このタイプとは特に相性が良い傾向です。"
-          : "このタイプとはややミスマッチになりやすい傾向です。");
+          : polarity === "negative"
+            ? "このタイプとはややミスマッチになりやすい傾向です。"
+            : "好みで評価が分かれやすいポイントです。");
 
       const score = clampScore(
         item.fitScore,
@@ -600,7 +628,9 @@ export default function GameDetail() {
         item.description ||
         (polarity === "positive"
           ? "レビューから、このプレイスタイルと特に噛み合っていると判断されています。"
-          : "レビューから、このプレイスタイルだとストレスを感じやすい可能性があると判断されています。");
+          : polarity === "negative"
+            ? "レビューから、このプレイスタイルだとストレスを感じやすい可能性があると判断されています。"
+            : "レビューでは好みが分かれる要素として語られており、合う人には強く刺さる一方で気になる人もいる特徴です。");
 
       return {
         id: item.id,
@@ -628,11 +658,13 @@ export default function GameDetail() {
   };
 
   const playerFitPositiveTags = buildPlayerFitTags(audiencePositive, "positive");
+  const playerFitNeutralTags = buildPlayerFitTags(audienceNeutral, "neutral");
   const playerFitNegativeTags = buildPlayerFitTags(audienceNegative, "negative");
 
-  // ★ Player Fit 全体を 1 本のリストとして扱う
+  //  ★ Player Fit 全体を 1 本のリストとして扱う（Positive → Neutral → Negative の順）
   const allPlayerFitTags: PlayerFitTag[] = [
     ...playerFitPositiveTags,
+    ...playerFitNeutralTags,
     ...playerFitNegativeTags,
   ];
 
@@ -757,9 +789,31 @@ export default function GameDetail() {
     allPlayerFitTags[0] ??
     null;
 
+  const detailBorderClass =
+    activePlayerFitTag?.polarity === "negative"
+      ? "border-rose-400/60 shadow-[0_0_40px_rgba(244,63,94,0.55)]"
+      : activePlayerFitTag?.polarity === "neutral"
+        ? "border-amber-400/60 shadow-[0_0_40px_rgba(251,191,36,0.5)]"
+        : "border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.5)]";
+
+  const detailIconClass =
+    activePlayerFitTag?.polarity === "negative"
+      ? "bg-rose-500/20 border-rose-300/70"
+      : activePlayerFitTag?.polarity === "neutral"
+        ? "bg-amber-500/18 border-amber-300/70"
+        : "bg-emerald-500/20 border-emerald-300/70";
+
+  const detailLabelColorClass =
+    activePlayerFitTag?.polarity === "negative"
+      ? "text-rose-300/90"
+      : activePlayerFitTag?.polarity === "neutral"
+        ? "text-amber-200/90"
+        : "text-emerald-300/90";
+
+
   // ★ 詳細カード用の代表レビュー（最大2件／極性ごと）
   const activePositiveReviews =
-    activePlayerFitTag && activePlayerFitTag.polarity === "positive"
+    activePlayerFitTag
       ? [
         ...(activePlayerFitTag.hitReviewParaphrased
           ? [activePlayerFitTag.hitReviewParaphrased]
@@ -773,7 +827,7 @@ export default function GameDetail() {
       : [];
 
   const activeNegativeReviews =
-    activePlayerFitTag && activePlayerFitTag.polarity === "negative"
+    activePlayerFitTag
       ? [
         ...(activePlayerFitTag.missReviewParaphrased
           ? [activePlayerFitTag.missReviewParaphrased]
@@ -788,7 +842,7 @@ export default function GameDetail() {
 
 
 
-  // ★ ヒートマップの色（FOR / NOT FOR とスコアで塗り分け）
+
   const getPlayerFitHeatColor = (tag: PlayerFitTag, step: number) => {
     const isFilled = step <= tag.score;
     if (!isFilled) return "bg-slate-800";
@@ -799,11 +853,18 @@ export default function GameDetail() {
       return "bg-emerald-300";
     }
 
-    // negative
-    if (tag.score >= 4) return "bg-rose-500";
-    if (tag.score === 3) return "bg-amber-400";
-    return "bg-rose-400";
+    if (tag.polarity === "negative") {
+      if (tag.score >= 4) return "bg-rose-500";
+      if (tag.score === 3) return "bg-amber-400";
+      return "bg-rose-400";
+    }
+
+    // neutral
+    if (tag.score >= 4) return "bg-amber-300";
+    if (tag.score === 3) return "bg-sky-300";
+    return "bg-amber-200";
   };
+
 
 
   // ★ モバイルポップアップ内スワイプ検出用
@@ -1859,31 +1920,27 @@ export default function GameDetail() {
                                             {/* 代表レビュー（モバイル） */}
                                             {(() => {
                                               const positiveReviews =
-                                                tag.polarity === "positive"
-                                                  ? [
-                                                    ...(tag.hitReviewParaphrased
-                                                      ? [tag.hitReviewParaphrased]
-                                                      : []),
+                                                tag.polarity === "negative"
+                                                  ? []
+                                                  : [
+                                                    ...(tag.hitReviewParaphrased ? [tag.hitReviewParaphrased] : []),
                                                     ...(tag.hitReviewOriginal &&
-                                                      tag.hitReviewOriginal !==
-                                                      tag.hitReviewParaphrased
+                                                      tag.hitReviewOriginal !== tag.hitReviewParaphrased
                                                       ? [tag.hitReviewOriginal]
                                                       : []),
-                                                  ]
-                                                  : [];
+                                                  ];
+
                                               const negativeReviews =
-                                                tag.polarity === "negative"
-                                                  ? [
-                                                    ...(tag.missReviewParaphrased
-                                                      ? [tag.missReviewParaphrased]
-                                                      : []),
+                                                tag.polarity === "positive"
+                                                  ? []
+                                                  : [
+                                                    ...(tag.missReviewParaphrased ? [tag.missReviewParaphrased] : []),
                                                     ...(tag.missReviewOriginal &&
-                                                      tag.missReviewOriginal !==
-                                                      tag.missReviewParaphrased
+                                                      tag.missReviewOriginal !== tag.missReviewParaphrased
                                                       ? [tag.missReviewOriginal]
                                                       : []),
-                                                  ]
-                                                  : [];
+                                                  ];
+
 
                                               if (
                                                 positiveReviews.length === 0 &&
@@ -2012,6 +2069,7 @@ export default function GameDetail() {
                             </div>
 
                             {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
+                            {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
                             {!isMobile && activePlayerFitTag && (
                               <>
                                 {/* 右側のグラデーションオーバーレイ */}
@@ -2024,14 +2082,28 @@ export default function GameDetail() {
                                     initial={{ x: 40, opacity: 0 }}
                                     animate={{ x: 0, opacity: 1 }}
                                     transition={{ type: "spring", stiffness: 180, damping: 20 }}
-                                    className="pointer-events-auto w-full md:w-[320px] rounded-2xl bg-slate-950/95 border border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.5)] px-4 py-4 text-xs space-y-2"
+                                    className={
+                                      "pointer-events-auto w-full md:w-[320px] rounded-2xl bg-slate-950/95 px-4 py-4 text-xs space-y-2 " +
+                                      detailBorderClass
+                                    }
                                   >
+                                    {/* ヘッダー */}
                                     <div className="flex items-start gap-2">
-                                      <div className="h-9 w-9 rounded-xl bg-emerald-500/20 border border-emerald-300/70 flex items-center justify-center text-lg">
+                                      <div
+                                        className={
+                                          "h-9 w-9 rounded-xl flex items-center justify-center text-lg " +
+                                          detailIconClass
+                                        }
+                                      >
                                         {activePlayerFitTag.icon}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/90 mb-1">
+                                        <div
+                                          className={
+                                            "text-[11px] uppercase tracking-[0.18em] mb-1 " +
+                                            detailLabelColorClass
+                                          }
+                                        >
                                           DETAIL
                                         </div>
                                         <div className="font-semibold text-sm text-emerald-100 mb-0.5 truncate">
@@ -2047,39 +2119,37 @@ export default function GameDetail() {
                                       </div>
                                     </div>
 
+                                    {/* サブテキスト */}
                                     {activePlayerFitTag.sub && (
                                       <p className="text-[11px] text-slate-200 leading-relaxed">
                                         {activePlayerFitTag.sub}
                                       </p>
                                     )}
 
-                                    <p className="text-[11px] text-slate-100 leading-relaxed">
-                                      {activePlayerFitTag.reason}
-                                    </p>
+                                    {/* 理由本文 */}
+                                    {activePlayerFitTag.reason && (
+                                      <p className="text-[11px] text-slate-100 leading-relaxed whitespace-pre-line">
+                                        {activePlayerFitTag.reason}
+                                      </p>
+                                    )}
 
+                                    {/* 代表レビュー領域 */}
                                     {(activePositiveReviews.length > 0 ||
                                       activeNegativeReviews.length > 0) && (
-                                        <div className="mt-3 space-y-2 border-t border-emerald-500/20 pt-2">
+                                        <div className="mt-3 space-y-3 border-t border-emerald-500/20 pt-2">
                                           {/* ポジティブタイプ → 刺さった理由だけ */}
-                                          {activePlayerFitTag?.polarity === "positive" &&
+                                          {activePlayerFitTag.polarity === "positive" &&
                                             activePositiveReviews.length > 0 && (
                                               <div>
                                                 <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
-                                                  USER'S VOICE
+                                                  USER&apos;S VOICE
                                                 </div>
                                                 {activePositiveReviews.map((text, idx) => (
                                                   <div
-                                                    key={idx}
+                                                    key={`pos-${idx}`}
                                                     className="flex items-start gap-2 mb-1.5"
                                                   >
-                                                    <span
-                                                      className="
-          mt-0.5 inline-flex h-5 w-5 items-center justify-center
-    flex-none shrink-0 aspect-square
-    rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950
-    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
-      "
-                                                    >
+                                                    <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
                                                       {idx + 1}
                                                     </span>
                                                     <p className="text-[11px] text-slate-100/90 leading-relaxed">
@@ -2091,25 +2161,18 @@ export default function GameDetail() {
                                             )}
 
                                           {/* ネガティブタイプ → 刺さらなかった理由だけ */}
-                                          {activePlayerFitTag?.polarity === "negative" &&
+                                          {activePlayerFitTag.polarity === "negative" &&
                                             activeNegativeReviews.length > 0 && (
                                               <div>
                                                 <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
-                                                  USER'S VOICE
+                                                  USER&apos;S VOICE
                                                 </div>
                                                 {activeNegativeReviews.map((text, idx) => (
                                                   <div
-                                                    key={idx}
+                                                    key={`neg-${idx}`}
                                                     className="flex items-start gap-2 mb-1.5"
                                                   >
-                                                    <span
-                                                      className="
-        mt-0.5 inline-flex h-5 w-5 items-center justify-center
-    flex-none shrink-0 aspect-square
-    rounded-full bg-rose-400 text-[10px] font-bold text-slate-950
-    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
-      "
-                                                    >
+                                                    <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-rose-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
                                                       {idx + 1}
                                                     </span>
                                                     <p className="text-[11px] text-slate-100/90 leading-relaxed">
@@ -2119,13 +2182,60 @@ export default function GameDetail() {
                                                 ))}
                                               </div>
                                             )}
+
+                                          {/* ニュートラルタイプ → 賛成/反対 両方を表示 */}
+                                          {activePlayerFitTag.polarity === "neutral" && (
+                                            <>
+                                              {activePositiveReviews.length > 0 && (
+                                                <div>
+                                                  <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
+                                                    LIKED BY SOME
+                                                  </div>
+                                                  {activePositiveReviews.map((text, idx) => (
+                                                    <div
+                                                      key={`pos-${idx}`}
+                                                      className="flex items-start gap-2 mb-1.5"
+                                                    >
+                                                      <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
+                                                        {idx + 1}
+                                                      </span>
+                                                      <p className="text-[11px] text-slate-100/90 leading-relaxed">
+                                                        {text}
+                                                      </p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+
+                                              {activeNegativeReviews.length > 0 && (
+                                                <div>
+                                                  <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
+                                                    NOT FOR OTHERS
+                                                  </div>
+                                                  {activeNegativeReviews.map((text, idx) => (
+                                                    <div
+                                                      key={`neg-${idx}`}
+                                                      className="flex items-start gap-2 mb-1.5"
+                                                    >
+                                                      <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-rose-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
+                                                        {idx + 1}
+                                                      </span>
+                                                      <p className="text-[11px] text-slate-100/90 leading-relaxed">
+                                                        {text}
+                                                      </p>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
                                         </div>
                                       )}
-
                                   </motion.div>
                                 </div>
                               </>
                             )}
+
                           </motion.div>
                         )}
                       </CardContent>

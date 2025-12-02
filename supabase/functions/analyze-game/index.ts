@@ -170,6 +170,7 @@ interface HiddenGemAnalysis {
    * 低評価レビューから抽出した「合わなかった人」のタイプ。
    */
   audienceNegative?: AudienceSegment[];
+  audienceNeutral?: AudienceSegment[];
   aiError?: boolean;
 }
 
@@ -188,9 +189,9 @@ interface AudienceBadge {
 }
 
 // Limits to keep review input safely within token constraints
-const MAX_REVIEWS = 15;
+const MAX_REVIEWS = 35;
 const MAX_REVIEW_CHARS = 450;
-const MAX_TOTAL_REVIEW_CHARS = 9000;
+const MAX_TOTAL_REVIEW_CHARS = 15000;
 
 // 早期レビュー用の設定
 const EARLY_REVIEW_WINDOW_DAYS = 30; // 発売日から何日までを「初期」とみなすか
@@ -557,276 +558,217 @@ Deno.serve(async (req) => {
 
 ### CRITICAL GUIDELINES
 
-1. **まず、このゲーム“固有の特徴”のうち、多くのプレイヤーから繰り返し高く評価されているポイント／不満が集中しているポイントを抽出すること。**
-   - 「このゲームならではの体験」がどこで強く支持されているかを最優先で拾う。
-   - 抽出した特徴（features）は summary / pros / cons / reason / 代表レビューの土台とする。
-   - audiencePositive / audienceNegative は、その特徴を補足する形で必要に応じてプレイヤー像を簡潔に示す。
+1. **このゲーム「固有の特徴」を抽出すること。**
+   - 多くのプレイヤーが繰り返し褒めている点／不満を集中している点を最優先で拾う。
+   - 抽出した features を summary / pros / cons / reason / 代表レビュー / audiencePositive / audienceNeutral / audienceNegative の土台にする。
 
-2. **レビュー本文から繰り返し語られる“具体的キーワード”を必ず利用する。**
+2. **レビュー内の具体的キーワードを必ず利用する。**
    - 例：テンポ、配置読み、攻撃パターン、爆発力、視界管理、学習曲線、リソース負荷、UI構造、安定性、更新パッチなど。
 
-3. **プレイヤー像（audiencePositive / audienceNegative）は“体験の好み”を示す補足情報として記述する。**
-   - 主役は「どのような体験が多くのユーザーに評価されているか」という特徴そのもの。
-   - そのうえで、「特にどんな楽しみ方をする人がハマりやすいか／つまずきやすいか」を短く添えるイメージにする。
-   - 例：ピーク瞬間の爆発感を求める人、リスク管理の緊張感を好む人、探索テンポの緩急を楽しむ人など。
+3. **プレイヤー像は reason 内だけ。**
+   - 主役は「どのような体験が評価／問題視されているか」という特徴そのもの。
+   - audiencePositive / audienceNeutral / audienceNegative の label はプレイヤー像ではなくゲーム固有の特徴名とする。
 
-4. **同ジャンルの代表作との差分を反映する。**
-   - Slay the Spire、Monster Train 等と比較し、どこが特に評価／批判されているかを反映する。
+4. **ジャンル内での立ち位置を意識する。**
+   - Slay the Spire、Monster Train 等の代表作と比較し、「どこが似ていてどこが違うか」を必要に応じて reason 等に反映する。
 
-5. **抽象表現・一般論を禁止する。**
-   - NG例：コアゲーマー向け、人を選ぶ、戦略好き。
-   - 必ず「このゲームならではの挙動・感情・負荷」に言及する。
+5. **抽象表現・一般論は禁止。**
+   - NG：コアゲーマー向け、人を選ぶ、戦略好き。
+   - 必ず「このゲームならではの挙動・感情・負荷」に結び付けて書く。
 
 6. **pros / cons はゲームが主語。**
-   - ゲームシステム、テンポ、UI、安定性、難易度、更新状況など客観的要素のみを書く。
-   - プレイヤー像は pros/cons に書かない。
+   - システム、テンポ、UI、安定性、難易度、更新状況など客観的な要素のみを書く。
+   - プレイヤー像は pros / cons に書かない。
 
-7. **audiencePositive / audienceNegative の reason は、まず「何がどのように評価されている／問題視されているか」を具体的に述べ、そのうえで必要ならプレイヤー像に接続する。**
-   - 第1優先：pros / cons + features を受けて、「どの部分がどう良い／つらいのか」を具体的に書く。
-   - その後で「特に〜な遊び方をする人はハマりやすい／合わない」といった一言を添える程度に留める。
-   - 主語はプレイヤー（〜な人）にするが、特徴説明より前に出さない。
+7. **audiencePositive / audienceNeutral / audienceNegative の reason は、まず特徴→体験→必要ならプレイヤー像の順で書く。**
+   - 第1優先：pros / cons + features を受けて、「どの部分がどう良い／つらいのか」を具体的に説明する。
+   - プレイヤー像は reason 内のみ。label には絶対に含めない。
 
 ───────────────────────────────
 【FEATURE EXTRACTION（STRICT）】
 ───────────────────────────────
 
-レビュー本文から “ゲーム固有の特徴（features）” を内部的に抽出し、  
-audience と representative reviews の根拠として必ず利用する。
+レビューから内部的に “ゲーム固有の特徴（features）” を抽出し、  
+audience と代表レビューの根拠として利用する（※この内部構造は出力しない）。
 
-抽出する内部構造（JSONとして出力しない）：
+各 feature には次を持たせる前提で考える：
 
-- feature_label: 多くのプレイヤーがその要素をどう評価しているのかが一読で分かる、自然な口語調の1文
-  - 例：  
-    - 「キャンペーンが想像以上にボリュームたっぷりで、ストーリーを追うだけでもかなり遊べる」  
-    - 「仲間との掛け合いや演出が濃くて、ミッションごとに感情が揺さぶられる」  
-    - 「終盤の難易度スパイクが急で、カジュアルに遊びたい人にはしんどく感じる」
-- description: その特徴の内容を、より客観的・中立な説明として整理した1文
+- feature_label: 多くのプレイヤーがその要素をどう評価しているかが一読で分かる自然な日本語1文
+- description: その特徴をより中立的に説明した1文
 - sentiment: "positive" | "mixed" | "negative"
 - support_count: その特徴に触れているレビューの概算件数
-- is_generic: true（他ゲームでもあり得る一般的特徴） / false（固有特徴）
+- is_generic: true（一般的な褒め／不満） / false（本作ならではの特徴）
 
-● 以下は is_generic = true として扱う（優先度低）：
-  - BGMが良い、グラフィックがきれい、操作性が良い等の一般的褒め言葉  
-  → audience・代表レビュー・summary の主軸としては使わない。
+● is_generic = true の例：BGMが良い、グラフィックがきれい、操作性が良い等。  
+  → audience・代表レビュー・summary の主軸にはしない。
 
 ● summary / pros / cons / audience / 代表レビューでは、  
-  **support_count が多く、かつ is_generic = false の特徴** を最優先で取り上げる。
+  **support_count が多く、かつ is_generic = false の特徴** を優先する。
 
-● 特に sentiment が "positive" で support_count が多い特徴は、  
-  「多くのユーザーに評価されている本作ならではの強み」として積極的に反映する。  
-  sentiment が "negative" で support_count が多いものは、  
-  「注意すべき欠点」として cons / audienceNegative に反映する。
+● sentiment が "positive" で support_count が多い特徴は「強み」、  
+  "negative" で support_count が多い特徴は「注意すべき欠点」として cons / audienceNegative に反映する。
+
+───────────────────────────────
+【GENRE-SPECIFIC DEEP ANALYSIS RULE】
+───────────────────────────────
+
+ジャンルごとの「設計思想・構造的な深み」を必ず評価に含める。
+
+● デッキ構築ローグライクの例：
+- デッキ圧縮と初期デッキ設計
+- クラス差・ビルド幅・個性
+- 永続強化アンロックの有無
+- ルート選択の自由度と駆け引き
+- イベントや敵バリエーションの多様性
+- 難易度曲線（特に終盤）
+- リプレイ性の源泉（カードプールやシナジー）
+
+● “ジャンルの定番構造” と “本作ならではの相違点” を比較し、  
+  「どこが特徴的か／物足りないか」を feature_label や reason で説明する。  
+  「自由度が高い」「単調」などの抽象語だけで終わらせない。
 
 ───────────────────────────────
 【FEATURE LABEL LANGUAGE POLICY】
 ───────────────────────────────
 
-feature_label および feature の説明文・reason 内で登場する名称は、  
-**必ず自然な日本語に翻訳した形で表現すること。**
+feature_label・説明文・reason に出てくる名称は、  
+**必ず自然な日本語に翻訳した形で書く。**
 
-- 元レビューやゲーム内で英語の語が使われていても、そのまま使用してはならない。
-- CamelCase 名・内部コード名・開発側のテクニカル名称をそのまま使うことは禁止。
-- 例：uniquePuzzleMechanics → 「独特な投擲ギミック」  
-       deepExploration → 「奥深い探索要素」  
-       unclearLevelSystem → 「分かりづらい成長システム」
+- 英語／CamelCase／内部コード名のまま使ってはならない。
+- 日本人プレイヤーが直感的に理解できる口語的な日本語に言い換える。
+- 元レビューの語順や綴りに縛られず、日本語として自然な文を新しく書く。
+- 英語で始まる feature_label や技術名らしき名称が残るのは禁止。
 
-- feature_label は **日本語話者が直感的に理解できる自然な口語文** に必ず置き換える。
-- 文中の主語・用語・ラベルはすべて “一般の日本人プレイヤーが理解できる自然な日本語” として再構成する。
-- 元レビューの言語構造・語順・綴りを参照しない。  
-  完全に日本語として自然な説明文を新しく書き起こすこと。
+───────────────────────────────
+【PROPER NOUN POLICY（固有名詞の翻訳禁止）】
+───────────────────────────────
 
-※ 英語で始まる feature_label や技術名らしき名称が理由文に残ることは絶対に許可しない。
+● 固有名詞（ゲームタイトル・シリーズ名・スタジオ名・キャラクター名・モード名など）は
+  翻訳・意訳してはならない。
+
+● 次のような不自然な日本語訳は禁止：
+  - "Slay the Spire" → 「殺戮の尖塔」
+  - "Monster Train" → 「モンスター列車」
+  - "Into the Breach" → 「突破口へ」
+
+● 固有名詞は下記いずれかの形で必ずそのまま書く：
+  - 英語名そのまま（Slay the Spire）
+  - 一般に定着しているカタカナ表記（スレイ・ザ・スパイア）
+
+● feature_label・reason・代表レビュー内でも、
+  固有名詞は絶対に翻訳・意訳しない。
+
 
 ───────────────────────────────
 【REASON STRUCTURE（STRICT）】
 ───────────────────────────────
 
-audiencePositive / audienceNegative の reason は必ず **3文構成** にする：
+audiencePositive / audienceNeutral / audienceNegative の reason は原則 **3文構成**：
 
-1. feature_label を明示し、その特徴がどのように現れるかを説明する  
-2. その特徴によって生じるプレイ体験・挙動・感覚を述べる  
-3. （必要な場合）その体験を好む／つらく感じるプレイヤー像を、簡潔に記述する
+1. feature_label を明示し、その特徴がどのように現れるかを説明する。  
+2. その特徴によって生じるプレイ体験・挙動・感覚を書く。  
+3. 必要な場合のみ、その体験を好む／つらく感じるプレイヤー像を簡潔に補足する。
 
-例（Positive）：
-- 「序盤の読み合いが強いテンポ設計が特徴で、行動を先読みする面白さがある。  
-　この駆け引きが常に続くため、考えて動くタイプのプレイヤーには特に合う。」
-
-例（Negative）：
-- 「UI階層が深く目的の項目に辿り着くのに時間がかかる構造になっている。  
-　テンポよく遊びたいプレイヤーには負荷が大きく、ストレスになりやすい。」
-
-● 説明文（description / reason）は、専門的すぎず、硬くなりすぎない自然な日本語で記述すること。
-   - 情報の精度は保ちつつ、読み手が負担を感じない柔らかい語感を使う。
-   - 「自然と〜が進む」「少しずつ整っていく」「〜しやすい」など穏やかな表現を積極的に使う。
-   - 説明が事務的・機械的にならないようにする。
-
-● reason（刺さった理由 / 刺さらなかった理由）は、柔らかい文体で以下の3文構成を維持する：
-   1. 特徴（feature）がどう現れるかを自然な文で説明する  
-   2. その特徴が生む体験・感覚を柔らかい語調で描写する  
-   3. その体験がどんなプレイヤーに合うかを必要に応じて自然に言い切る
-
-● 文体の方向性：
-   - 「〜である。」は禁止  
-   - 「〜できる。」「〜しやすい」「〜が心地よい」など自然な語感を優先  
-   - 過度にカジュアルにしない（常体で統一）  
-   - 硬い技術書のような文章は避ける
+● 文体：
+   - 「〜である。」は禁止。  
+   - 「〜できる」「〜しやすい」「〜が心地よい」など自然な常体で統一する。
 
 ───────────────────────────────
-【PREFERENCE ABSTRACTION RULE（STRICT）】
+【PREFERENCE / FEATURE 分離ルール】
 ───────────────────────────────
 
-レビューに登場する具体的なギミック・行動・操作を  
-そのまま「プレイヤーの嗜好」として書いてはならない。
+レビューの具体的な行動・操作を、そのままプレイヤー嗜好として書かない。
 
-● 禁止例  
-- 光の当て方を考えるのが好きな人  
-- 投擲ギミックを使うのが好きな人  
-- この魔法の仕組みが好きな人  
-（※これらは実在しない嗜好のため禁止）
-
-● 必須ルール  
-具体的メカニクスは、必ず **より上位の抽象的な嗜好カテゴリ** に変換する。
-
-例：  
-- 「光を当てて仕掛けを動かすギミック」  
-　→ 抽象化：「環境を利用して解くタイプのパズルが好きな人」  
-- 「投擲で仕掛けが連動する構造」  
-　→ 抽象化：「発想の転換で道を切り開く謎解きが好きな人」  
-- 「魔法の組み合わせで解く仕掛け」  
-　→ 抽象化：「複数要素を組み合わせて解法を探すのが楽しい人」
-
-● プレイヤー像（audiencePositive / audienceNegative）は  
-“システムそのもの” ではなく **体験の本質（嗜好カテゴリ）** に基づいて記述すること。
+- 「〜な人」「〜プレイヤー向け」などの嗜好表現は reason 内のみ使用可。label では禁止。
+- 具体的メカニクスは、より上位の嗜好カテゴリに抽象化したうえで reason 内に書く。
+- feature（ゲーム側の特徴）と audience（それをどう感じるか）は必ず分ける。
+- audience の label はプレイヤー像ではなく、ゲーム側の特徴を表す体言止めフレーズにする。
 
 ───────────────────────────────
-【FEATURE–AUDIENCE LAYER SEPARATION RULE（STRICT）】
+【PLAYER FEATURE CARDS（audiencePositive / audienceNeutral / audienceNegative）】
 ───────────────────────────────
 
-“feature（ゲーム側の特徴）” と  
-“audience（プレイヤー側の嗜好）” を混同してはならない。
+audiencePositive / audienceNeutral / audienceNegative は  
+「どんな人に刺さるか」ではなく、  
 
-● feature はゲーム内の具体的ギミック・挙動・メカニクスをそのまま描写してよい。
-  例：光源を投げて仕掛けを起動するギミックがある、環境と連動する装置が多い。
+**レビューで特に支持／不満が集中しているゲーム固有の特徴カード** として扱う。
 
-● audience（label / description / reason）は、feature をそのまま用いてはならず、
-  必ず **プレイヤーの本質的嗜好カテゴリに抽象化した表現** に変換する。
+● label のルール
+- 名詞句・体言止め。
+- 「人」「プレイヤー」「ユーザー」「向け」「好き」「苦手」などを含めない。
+- 日本語10〜18文字程度。
+- 「自由度が高い」などの抽象語は禁止。「何の自由度か」まで具体化する。
 
-  - feature（具体）  
-      光源を使って装置を起動する仕組みがある  
-      投擲でトリガーを作動させる
-
-  - audience（抽象）  
-      発想の転換で解くタイプの謎解きが好きな人  
-      環境を読み解くパズルが好きな人  
-      手順を組み立てる思考型の進行が好きな人
-
-● audience に具体的メカニクス（光の当て方、投擲ギミック等）を直接書くことは禁止。
-● audience は “そのギミックによって生まれる体験の型” のみを書く。
-
-これにより：
-
-- feature → 具体的ゲーム説明  
-- audience → 嗜好の抽象カテゴリ
-
-が明確に分離される。
-
+● description / sub / reason
+- label：特徴名  
+- description：特徴の中身  
+- reason：レビューがどう評価／不満を述べているか＋必要ならプレイヤー像補足（reason 内のみ）
 
 ───────────────────────────────
-【LABEL ABSTRACTION RULE（STRICT）】
+【FEATURE PRIORITY POLICY】
 ───────────────────────────────
 
-audiencePositive / audienceNegative の "label"（タイトル）は、  
-レビューに登場する具体的なギミック名・操作名・行動名を  
-そのまま書くことを禁止する。
+目的：  
+「そのゲームならではの魅力やつまずきポイントを、多数のレビューから分かりやすく抽出する」こと。
 
-● 禁止例  
-- 光源を駆使した謎解きを楽しむ人  
-- 投擲ギミックを楽しむ人  
-- 〇〇ギミックを活用するのが好きな人  
-（※これらはプレイヤーの実在する嗜好ではないため禁止）
+audiencePositive / audienceNeutral / audienceNegative では、  
+**レビューで特に支持／不満／賛否が集中している特徴** を優先してカード化する。
 
-● 必須ルール  
-label は、本文（description / reason）で扱われた特徴を  
-**プレイヤーの本質的嗜好に抽象化した短い日本語** にすること。
-
-例：  
-- 「光を当てて仕掛けを動かすギミック」  
-　→ label：「環境を使って解くパズルが好きな人」  
-- 「投げた光で装置を作動させる仕組み」  
-　→ label：「発想の転換で進む謎解きが好きな人」  
-- 「魔法を組み合わせて道を作るギミック」  
-　→ label：「仕組みを理解して攻略するタイプの人」
-
-● label では、ギミック名称・内部コード・具体操作は  
-一切使ってはならず、必ず抽象嗜好カテゴリで表現する。
-
-
-───────────────────────────────
-【FEATURE PRIORITY POLICY（更新版）】
-───────────────────────────────
-
-本アプリは「そのゲームならではの魅力やつまずきポイントを、  
-多くのユーザーの声から分かりやすく抽出する」ことを主目的とする。
-
-- audiencePositive / audienceNegative は、  
-  抽出された特徴が「どんな楽しみ方をする人に特にハマりやすい／合わないか」を  
-  補足するための情報として扱う。
-- 評価の主軸はあくまで、  
-  「多くのユーザーに評価されている固有の強み」と  
-  「レビューで繰り返し指摘される注意点」である。
-- プレイヤー像のために特徴を捻じ曲げたり、  
-  無理に“刺さる／刺さらない”構図に押し込まないこと。
-
-───────────────────────────────
 【A. 出力件数】
 ───────────────────────────────
 
-- audiencePositive：**4〜5件**
-  - 質が担保できる場合は最大5件まで出してよい。
-  - 無理に水増しせず、ゲーム固有の特徴に基づく高品質なプレイヤー像のみ生成する。
+- audiencePositive：4〜5件  
+  - 無理に水増しせず、ゲーム固有の特徴に基づく高品質なものだけ出す。
 
-- audienceNegative：**2〜4件**
-  - 無理に欠点を捻出する必要はない。
-  - 顕著な欠点はもちろん、プレイヤーが実際に言及している“価値のある細かな不満”も拾ってよい。
-  - ただし以下のような不満は除外する：
-      ● 抽象的・一般的な不満（例：つまらない、人を選ぶ）
-      ● ゲーム外の不満（例：価格が高い、期待と違う）
-      ● 個人環境依存が強い不満
-  - 拾うべき不満は以下を優先する：
-      ● 明確に複数レビューで繰り返されているポイント
-      ● ゲームのコア体験に影響する具体的欠点
-      ● 軽微でもプレイの流れや快適さに影響する不満
-      ● 特定のプレイヤータイプに特有の“つまずきポイント”
-  - 質が担保できない場合は無理に4件埋めず、2〜3件でよい。
+- audienceNeutral：1〜3件  
+  - 賛否が明確に分かれている「両面性のある特徴」（テンポ、運要素、難易度、情報量など）だけを出す。  
+  - 「人による」「好き嫌いが分かれる」といった一般論だけのカードは作らない。
+
+- audienceNegative：2〜4件  
+  - 明確に複数レビューで語られている欠点・つまずきポイントを優先。  
+  - 抽象的な不満、ゲーム外の不満、環境依存が強い不満は除外する。
 
 
 ───────────────────────────────
-【代表レビュー（hit/miss）— 一人称ルール（STRICT）】
+【代表レビュー（hit/miss）— 一人称ルール + 捏造禁止 + 固有名詞保護】
 ───────────────────────────────
 
-代表レビューは **レビュワー本人が書いたような“一人称・主観”**で記述する。
+● 代表レビュー（Original / Paraphrased）は「翻訳」ではない。
+  与えられたレビュー本文の内容に基づき、
+  自然な日本語の一人称文として “新しく書き起こす”。
+  翻訳調・直訳調は禁止。
 
-● 文体ルール（必須）
-- 「〜だと感じた」「〜で困った」「〜が気に入った」「〜に驚いた」など主観文  
-- 第三者視点の説明禁止  
-  - NG：高評価が多い／意見が分かれている／レビューでは〜と言われる  
-- 引用符禁止（「」 “”）  
-- 原文コピペ禁止  
-- 必ず日本語で自然な文章に再構成する  
+● 代表レビューは必ず **実際のレビュー本文に存在する内容のみ** を使用し、
+  元レビューにない出来事・感情・仕様・エピソードを
+  新しく創作（捏造）してはならない。
 
-● 内容レベル（重要）
-- **浅い感想のみの文は厳禁**。  
-  - NG例：  
-    - 「キャンペーンモードが充実していて楽しかった。」  
-    - 「ストーリーが最高で全部のミッションを楽しめた。」  
-  これらのように「良かった」と言うだけで、どこがどう良かったのかが分からない文は採用しない。
-- 代表レビューでは必ず、  
-  **「どの要素／どの場面が」「どのように良かった／つらかったのか」「その結果どんな感情になったか」**  
-  まで踏み込んで書く。
-  - 例（ポジティブのイメージ）：  
-    - 「キャンペーンは各ミッションごとに小さな山場が用意されていて、仲間と並んで戦うシーンが続くおかげで最後まで一気に遊んでしまった。  
-       特に終盤で仲間が次々と離れていく流れは、展開が分かっていても胸にくるものがあった。」
-- 1つのレビューは **2〜3文程度** を目安にし、具体的な描写と感情を含める。
+● 次の行為は禁止：
+  - 元レビューに存在しない事実・場面を追加する
+  - 内容や方向性を誇張して歪める
+  - 架空の好感・不満・イベントなどを創作する
+  - 原文にない不具合・特徴・仕様を「代表的意見」として記述する
+
+● Paraphrased（2件目）は翻訳ではなく、
+  Original の内容と意味の範囲内で自然な日本語に “言い換える”。
+  原文の言語構造に引きずられたり、翻訳的表現を使ってはならない。
+
+● 固有名詞（ゲームタイトル・シリーズ名・キャラクター名など）は
+  絶対に翻訳・意訳しない。
+  英語名または一般的なカタカナ表記のみ使用する。
+  （例：Slay the Spire → スレイ・ザ・スパイア / Slay the Spire）
+
+───────────────────────────────
+
+● 文体
+- 「〜だと感じた」「〜で困った」「〜が気に入った」「〜に驚いた」など主観文。
+- 「高評価が多い」「レビューでは〜と言われる」など第三者視点は禁止。
+- 引用符、ユーザー名、原文コピペは禁止。必ず自然な日本語に書き直す。
+
+● 内容
+- 「楽しかった」「最高だった」だけの浅い感想は禁止。
+- 「どの要素／どの場面が」「どう良かった／つらかったか」「その結果どう感じたか」
+  まで説明すること。
+- 1レビューは **2〜3文程度** を目安に、具体的な描写と感情を含める。
 
 ● 出力ルール
 - audiencePositive → hitReviewOriginal + hitReviewParaphrased の2件を埋める（miss系は空）  
@@ -842,39 +784,57 @@ label は、本文（description / reason）で扱われた特徴を
    「日本語として自然な一人称の要約文」を新しく書き起こすこと。
 
 
-   ───────────────────────────────
-【NEGATIVE CARD REVIEW REQUIREMENT（更新版）】
+───────────────────────────────
+【NEGATIVE CARD REVIEW REQUIREMENT】
 ───────────────────────────────
 
-audienceNegative が1件以上出力される場合、  
-各ネガティブカードには **最低1件の missReviewOriginal を必ず付与すること。**
+audienceNegative が1件以上ある場合、  
+各ネガティブカードには **missReviewOriginal と missReviewParaphrased の2件の代表レビュー** を必ず付与する。
 
-- 代表レビューが0件の状態は絶対に許可しない。
-- missReviewParaphrased と合わせて2件生成できる場合は、2件を必ず埋める。
-- レビュー量が不足しており、2件分の根拠を捻出できない場合のみ、
-  missReviewOriginal（1件）＋ missReviewParaphrased（空 or null）を許可する。
-- 1件しか出力しない場合も、その1件は必ず実際の不満・つまずきに基づき、
-  自然な日本語の一人称表現で書くこと。
-- 2件生成する場合は必ず別内容にし、重複は不可。
+- どちらかが空文字・null の状態は許可しない。
+- 2件とも自然な日本語の一人称表現にし、それぞれ別の内容・別視点の不満やつまずきを扱う。
+- 実際のレビューで繰り返し語られている不満・つまずきに基づかせ、架空の不満は書かない。
 
 ───────────────────────────────
 【Current State / Historical Issues】
 ───────────────────────────────
 
-- 最近のレビュー傾向を最重要視して currentStateSummary を作成  
-- 過去の問題点は historicalIssuesSummary に分離  
-- hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断  
-- currentStateReliability / historicalIssuesReliability を適切に判定
+- 最近のレビュー傾向を最重要視し currentStateSummary を作成する。  
+- 過去の問題点は historicalIssuesSummary に分ける。  
+- hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
+- currentStateReliability / historicalIssuesReliability を妥当に設定する。
 
 ───────────────────────────────
 【aiTags / aiPrimaryGenre】
 ───────────────────────────────
 
-- Steamで一般的に使われる **英語タグのみ**  
-- 文禁止（例："fast-paced roguelike" → NG）  
-- 類義語・重複禁止  
-- 5〜10個程度  
-- aiPrimaryGenre は1つだけ（代表ジャンル）
+- Steamで一般的に使われる英語タグのみを使用。  
+- 文ではなく単語タグとし、類義語・重複は避ける。  
+- 5〜10個程度。  
+- aiPrimaryGenre は代表ジャンル1つだけ。
+
+================================================================
+【CARD TAG LABELS（labels 配列）】
+================================================================
+
+SearchResultCard 上部の labels は短いタグピルとして表示される。
+
+- 各 label は日本語 4〜12文字程度。  
+- 文は禁止。名詞・体言止めのみ。  
+- 「〜が好きな人」「〜する人向け」など文末「人」は禁止。  
+- 「、」「。」を含めない。  
+- ゲーム固有の体験を示す1トピックのみを書く。
+
+================================================================
+【AUDIENCE BADGES（audienceBadges）】
+================================================================
+
+audienceBadges は SearchResultCard の小型ピル。
+
+- label は日本語 6〜16文字程度。  
+- 文は禁止。説明的にしない。  
+- 「〜な人」「〜が好きな人」など人を指す表現は禁止。  
+- 1バッジ1テーマとし、audiencePositive / Negative の特徴を短く圧縮する。
 
 ───────────────────────────────
 【JSON SCHEMA】
@@ -920,6 +880,22 @@ audienceNegative が1件以上出力される場合、
       "missReviewOriginal": string | "" | null
     }
   ],
+
+    "audienceNeutral": [
+    {
+      "id": string,
+      "label": string,
+      "description": string | "" | null,
+      "sub": string | "" | null,
+      "fitScore": number | null,
+      "reason": string | "" | null,
+      "hitReviewParaphrased": string | "" | null,
+      "hitReviewOriginal": string | "" | null,
+      "missReviewParaphrased": string | "" | null,
+      "missReviewOriginal": string | "" | null
+    }
+  ],
+
   "audienceNegative": [
     {
       "id": string,
@@ -960,7 +936,7 @@ IMPORTANT:
 `.trim();
     const controller = new AbortController();
     try {
-      const timeoutMs = 60000; // or 60000
+      const timeoutMs = 90000; // or 60000
       const timeoutId = setTimeout(() => {
         controller.abort("AI request timeout");
       }, timeoutMs);
@@ -981,6 +957,9 @@ IMPORTANT:
               { role: "user", content: userPrompt },
             ],
             temperature: 0.7,
+            // ★ 追加：出力トークンの上限
+            // max_tokens: 3000, // 1400〜2000 の範囲でお好みで調整
+            response_format: { type: "json_object" }, // ★ 追加（対応モデルであれば有効）
           }),
           signal: controller.signal,
         }
@@ -1056,18 +1035,24 @@ IMPORTANT:
       // Parse JSON from AI response
       let analysis: HiddenGemAnalysis;
       try {
-        const jsonMatch =
-          typeof content === "string"
-            ? content.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
-            : null;
-        const jsonStr =
-          jsonMatch && jsonMatch[1]
-            ? jsonMatch[1]
-            : typeof content === "string"
-            ? content
-            : JSON.stringify(content);
+        // 1) まずは string 化
+        let raw =
+          typeof content === "string" ? content : JSON.stringify(content);
 
-        const parsed = JSON.parse(jsonStr.trim());
+        // 2) ```json ... ``` で囲まれていたら中身だけ抜き出す
+        const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (fenceMatch && fenceMatch[1]) {
+          raw = fenceMatch[1];
+        }
+
+        // 3) 先頭の { 〜 最後の } だけを抜き出す（前後にゴミがあっても無視）
+        const firstBrace = raw.indexOf("{");
+        const lastBrace = raw.lastIndexOf("}");
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          raw = raw.slice(firstBrace, lastBrace + 1);
+        }
+
+        const parsed = JSON.parse(raw.trim());
         analysis = normalizeAnalysisPayload(parsed);
 
         // -----------------------------
@@ -1424,6 +1409,11 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   );
   if (audiencePositive.length > 0) {
     normalized.audiencePositive = audiencePositive;
+  }
+
+  const audienceNeutral = normalizeAudienceSegmentList(parsed?.audienceNeutral);
+  if (audienceNeutral.length > 0) {
+    normalized.audienceNeutral = audienceNeutral;
   }
 
   const audienceNegative = normalizeAudienceSegmentList(

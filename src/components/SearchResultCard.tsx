@@ -149,6 +149,8 @@ export const SearchResultCard = ({
     ? Math.round(positiveRatio)
     : 0;
 
+    
+
   const rawMoodScore =
     typeof moodScore === "number"
       ? moodScore
@@ -500,7 +502,7 @@ export const SearchResultCard = ({
           )}
 
           {/* 可変スコア軸（このゲームの強み 〜 Hidden / Quality / Comeback / Niche / Innovation） */}
-          {highlightedScoreBadges.length > 0 && (
+          {/* {highlightedScoreBadges.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-1">
               {highlightedScoreBadges.map((axis) => (
                 <span
@@ -514,7 +516,7 @@ export const SearchResultCard = ({
                 </span>
               ))}
             </div>
-          )}
+          )} */}
 
         </div>
 

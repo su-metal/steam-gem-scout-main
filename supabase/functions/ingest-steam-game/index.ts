@@ -142,48 +142,58 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
   };
 
   // 🔸 price 系の扱い
-  //    ・既存レコードがあれば、基本は既存値を優先
-  //    ・既存値がない場合のみ、rankingGame 側の値で埋める
+  //    ・価格／割引情報は常に最新の Steam 情報（rankingGame）を優先
+  //    ・rankingGame 側の値が不正なときだけ既存値でフォールバック
   //    ・レコードが存在しない場合（初回）は rankingGame の値を書き込む
   if (existing) {
-    // price: 既存に数値があればそれを使い、なければ rankingGame.price を利用
-    if (typeof existing.price === "number" && Number.isFinite(existing.price)) {
-      upsertRow.price = existing.price;
-    } else if (
+    // price: rankingGame を優先し、なければ既存値を使う
+    if (
       typeof rankingGame.price === "number" &&
       Number.isFinite(rankingGame.price)
     ) {
       upsertRow.price = rankingGame.price;
+    } else if (
+      typeof existing.price === "number" &&
+      Number.isFinite(existing.price)
+    ) {
+      upsertRow.price = existing.price;
     }
 
-    // price_original: 既存の元値があれば維持し、なければ rankingGame.priceOriginal を使う
+    // price_original: rankingGame を優先し、なければ既存値
     if (
-      typeof existing.price_original === "number" &&
-      Number.isFinite(existing.price_original)
-    ) {
-      upsertRow.price_original = existing.price_original;
-    } else if (
       typeof rankingGame.priceOriginal === "number" &&
       Number.isFinite(rankingGame.priceOriginal)
     ) {
       upsertRow.price_original = rankingGame.priceOriginal;
+    } else if (
+      typeof existing.price_original === "number" &&
+      Number.isFinite(existing.price_original)
+    ) {
+      upsertRow.price_original = existing.price_original;
     }
 
-    // discount_percent: 既存値があれば維持、なければ rankingGame 側
+    // discount_percent: rankingGame を優先し、なければ既存値、どちらもなければ 0
     if (
+      typeof rankingGame.discountPercent === "number" &&
+      Number.isFinite(rankingGame.discountPercent)
+    ) {
+      upsertRow.discount_percent = rankingGame.discountPercent;
+    } else if (
       typeof existing.discount_percent === "number" &&
       Number.isFinite(existing.discount_percent)
     ) {
       upsertRow.discount_percent = existing.discount_percent;
     } else {
-      upsertRow.discount_percent = rankingGame.discountPercent ?? 0;
+      upsertRow.discount_percent = 0;
     }
 
-    // is_on_sale: 既存の boolean があれば維持、なければ rankingGame 側
-    if (typeof existing.is_on_sale === "boolean") {
+    // is_on_sale: rankingGame を優先し、なければ既存値、どちらもなければ false
+    if (typeof rankingGame.isOnSale === "boolean") {
+      upsertRow.is_on_sale = rankingGame.isOnSale;
+    } else if (typeof existing.is_on_sale === "boolean") {
       upsertRow.is_on_sale = existing.is_on_sale;
     } else {
-      upsertRow.is_on_sale = rankingGame.isOnSale ?? false;
+      upsertRow.is_on_sale = false;
     }
   } else {
     // 🔰 steam_games にまだ行がない場合 → rankingGame の情報で初期化
@@ -204,8 +214,6 @@ async function upsertSteamGameFromRanking(rankingGame: RankingGameData) {
     upsertRow.discount_percent = rankingGame.discountPercent ?? 0;
     upsertRow.is_on_sale = rankingGame.isOnSale ?? false;
   }
-
-  // existing が無い場合は price 系のプロパティ自体を upsertRow に入れない → DB 側は null のまま
 
   const { error } = await supabase
     .from("steam_games")
