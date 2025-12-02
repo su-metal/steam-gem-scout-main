@@ -810,6 +810,25 @@ export default function GameDetail() {
         ? "text-amber-200/90"
         : "text-emerald-300/90";
 
+  // ★ Player Match 極性ラベル（Pattern C ステータスバンド用）
+  const POLARITY_STATUS_CONFIG: Record<
+    PlayerFitTag["polarity"],
+    { text: string; bandClass: string }
+  > = {
+    positive: {
+      text: "POSITIVE MATCH",
+      bandClass: "from-emerald-300/80 via-emerald-200/80 to-sky-200/80",
+    },
+    neutral: {
+      text: "SPLIT OPINION",
+      bandClass: "from-amber-200/85 via-amber-150/85 to-amber-100/80",
+    },
+    negative: {
+      text: "HIGH RISK MATCH",
+      bandClass: "from-rose-300/85 via-rose-200/85 to-orange-200/80",
+    },
+  };
+
 
   // ★ 詳細カード用の代表レビュー（最大2件／極性ごと）
   const activePositiveReviews =
@@ -1875,12 +1894,32 @@ export default function GameDetail() {
         overflow-y-auto
       "
                                           >
+                                            {/* ★ Pattern C: 極性ステータス・バンド（モバイル） */}
+                                            {(() => {
+                                              const cfg = POLARITY_STATUS_CONFIG[tag.polarity];
+                                              return (
+                                                <div className="mb-3 overflow-hidden rounded-xl">
+                                                  <div
+                                                    className={
+                                                      "h-7 w-full bg-gradient-to-r flex items-center justify-between px-3 text-[10px] font-semibold tracking-[0.18em] uppercase text-slate-950/90 " +
+                                                      cfg.bandClass
+                                                    }
+                                                  >
+                                                    <span className="flex items-center gap-1">
+                                                      <span className="text-[11px]">◎</span>
+                                                      {cfg.text}
+                                                    </span>
+                                                    <span className="text-[9px] opacity-80">PLAYER MATCH</span>
+                                                  </div>
+                                                </div>
+                                              );
+                                            })()}
 
                                             {/* ヘッダー（タイトルのみ） */}
                                             <div className="flex items-center gap-3 mb-4">
-                                              <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
+                                              {/* <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-800 border border-slate-700 text-xl">
                                                 <span>{tag.icon}</span>
-                                              </div>
+                                              </div> */}
                                               <div className="flex-1 min-w-0">
                                                 <div className="text-[11px] uppercase tracking-widest text-slate-400">
                                                   DETAIL
@@ -2087,6 +2126,26 @@ export default function GameDetail() {
                                       detailBorderClass
                                     }
                                   >
+                                    {/* ★ Pattern C: 極性ステータス・バンド */}
+                                    {(() => {
+                                      const cfg = POLARITY_STATUS_CONFIG[activePlayerFitTag.polarity];
+                                      return (
+                                        <div className="mb-2 overflow-hidden rounded-xl">
+                                          <div
+                                            className={
+                                              "h-7 w-full bg-gradient-to-r flex items-center justify-between px-3 text-[10px] font-semibold tracking-[0.18em] uppercase text-slate-950/90 " +
+                                              cfg.bandClass
+                                            }
+                                          >
+                                            <span className="flex items-center gap-1">
+                                              <span className="text-[11px]">◎</span>
+                                              {cfg.text}
+                                            </span>
+                                            <span className="text-[9px] opacity-80">PLAYER MATCH</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                     {/* ヘッダー */}
                                     <div className="flex items-start gap-2">
                                       <div

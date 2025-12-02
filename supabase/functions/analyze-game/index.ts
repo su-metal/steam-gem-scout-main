@@ -770,6 +770,7 @@ audiencePositive / audienceNeutral / audienceNegative では、
   まで説明すること。
 - 1レビューは **2〜3文程度** を目安に、具体的な描写と感情を含める。
 
+
 ● 出力ルール
 - audiencePositive → hitReviewOriginal + hitReviewParaphrased の2件を埋める（miss系は空）  
 - audienceNegative → missReviewOriginal + missReviewParaphrased の2件を埋める（hit系は空）  
@@ -782,6 +783,29 @@ audiencePositive / audienceNeutral / audienceNegative では、
 - いずれのレビューも引用符禁止、ユーザー名禁止、原文コピペ禁止。
 ※ hitReviewParaphrased / missReviewParaphrased は、元レビューの言語に影響されない。
    「日本語として自然な一人称の要約文」を新しく書き起こすこと。
+   
+───────────────────────────────
+【NEUTRAL CARD REVIEW REQUIREMENT（賛否分岐カード向け）】
+───────────────────────────────
+
+audienceNeutral が存在する場合、
+各ニュートラルカードには **賛否それぞれ 1 件ずつ** の代表レビューを必ず付与する。
+
+● hitReviewOriginal / hitReviewParaphrased
+  → その特徴を「好意的に評価している」実際のレビュー内容を基にした一人称文を書く。
+
+● missReviewOriginal / missReviewParaphrased
+  → 同じ特徴について「不満として語られている」実際のレビュー内容を基にした一人称文を書く。
+
+● ニュートラルカードは「ひとりの中立意見」を生成してはならない。
+  実レビューの中に存在する “賛成側の声” と “反対側の声” を
+  両方 1 件ずつ対比させる形式にする。
+
+● いずれのレビューも、捏造・誇張は禁止。
+  実際のレビュー本文に存在する具体的な描写と感情のみを使用し、
+  日本語の一人称として自然な文に書き起こすこと。
+
+● hit と miss の2件は必ず別の内容・別の視点で書く。
 
 
 ───────────────────────────────
