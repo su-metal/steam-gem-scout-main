@@ -149,7 +149,7 @@ export const SearchResultCard = ({
     ? Math.round(positiveRatio)
     : 0;
 
-    
+
 
   const rawMoodScore =
     typeof moodScore === "number"
@@ -489,7 +489,7 @@ export const SearchResultCard = ({
 
           {(audienceBadges.length > 0 || normalizedMoodScore !== null) && (
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {audienceBadges.map((badge, i) => (
+              {/* {audienceBadges.map((badge, i) => (
                 <Badge
                   key={`${badge.id ?? badge.label}-${i}`}
                   variant="outline"
@@ -497,7 +497,7 @@ export const SearchResultCard = ({
                 >
                   {badge.label}
                 </Badge>
-              ))}
+              ))} */}
             </div>
           )}
 
@@ -521,50 +521,55 @@ export const SearchResultCard = ({
         </div>
 
 
-       <div className="mt-4 grid grid-cols-2 gap-3 text-xs items-center">
-  {/* Release（シンプル） */}
-  <div className="px-3 py-2">
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-[11px] text-muted-foreground">Release: {releaseDisplay}</span>
-     
-    </div>
-  </div>
+        <div className="grid grid-cols-2 gap-3 text-xs items-center">
+          {/* Release（ラベル + 日付の縦並び） */}
+          <div className="px-3 py-2">
+            <div className="flex flex-col">
+              <span className="text-[11px] text-muted-foreground">
+                Release
+              </span>
+              <span className="text-xs font-semibold text-slate-50 leading-tight">
+                {releaseDisplay}
+              </span>
+            </div>
+          </div>
 
- {/* Price — Pattern E: Steam風ディスカウントリボン（右寄せ） */}
-<div className="px-3 py-2">
-  {/* ★ ここで justify-end を付与 */}
-  <div className="flex items-center h-full justify-end">
-    {hasDiscount ? (
-      // 割引あり：Steam風リボン
-      <div className="flex overflow-hidden rounded-md shadow-md">
-        <div className="px-2 py-3 bg-lime-500 flex items-center justify-center">
-          <span className="text-[16px] font-extrabold text-slate-900">
-            -{discountPercentDisplay}%
-          </span>
-        </div>
-        <div className="px-2 py-1 bg-blue-600/80 flex flex-col justify-center items-end">
-          <span className="text-[10px] text-slate-200/80 line-through leading-none">
-            {priceOriginalDisplay}
-          </span>
-          <span className="text-lg font-bold text-blue-50 leading-none">
-            {priceDisplay}
-          </span>
-        </div>
-      </div>
-    ) : (
-      // ★ 割引なし：Pattern E の通常価格版
-      <div className="flex justify-end">
-        <div className="flex overflow-hidden rounded-md shadow-md bg-blue-600/80 px-4 py-2">
-          <span className="text-base font-bold text-blue-50 leading-[1]">
-            {priceDisplay}
-          </span>
-        </div>
-      </div>
-    )}
-  </div>
-</div>
 
-</div>
+          {/* Price — Pattern E: Steam風ディスカウントリボン（右寄せ） */}
+          <div className="px-3 py-2">
+            {/* ★ ここで justify-end を付与 */}
+            <div className="flex items-center h-full justify-end">
+              {hasDiscount ? (
+                // 割引あり：Steam風リボン
+                <div className="flex overflow-hidden rounded-md shadow-md">
+                  <div className="px-2 py-3 bg-lime-500 flex items-center justify-center">
+                    <span className="text-[16px] font-extrabold text-slate-900">
+                      -{discountPercentDisplay}%
+                    </span>
+                  </div>
+                  <div className="px-2 py-1 bg-blue-600/80 flex flex-col justify-center items-end">
+                    <span className="text-[10px] text-slate-200/80 line-through leading-none">
+                      {priceOriginalDisplay}
+                    </span>
+                    <span className="text-lg font-bold text-blue-50 leading-none">
+                      {priceDisplay}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                // ★ 割引なし：Pattern E の通常価格版
+                <div className="flex justify-end">
+                  <div className="flex overflow-hidden rounded-md shadow-md bg-blue-600/80 px-4 py-2">
+                    <span className="text-base font-bold text-blue-50 leading-[1]">
+                      {priceDisplay}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
 
 
 
