@@ -151,6 +151,8 @@ interface GameDetailState {
     releaseDate?: string | null;
     releaseYear?: number | null;
     headerImage?: string | null;
+    priceOriginal?: number | null;
+    discountPercent?: number | null;
   };
   analysis?: AnalysisData;
   analysisData?: AnalysisData;
@@ -955,7 +957,6 @@ export default function GameDetail() {
       ? Math.round(rawMatchScoreForDisplay * 100)
       : null;
 
-  // --- mood_scores からムード別スコアを抽出（0〜1 を想定） ---
   const rawMoodScores =
     // ① analyze-game の解析結果（analysisData）優先
     (analysisData as any)?.mood_scores ??
@@ -967,7 +968,6 @@ export default function GameDetail() {
     (game as any)?.mood_scores ??
     (game as any)?.moodScores ??
     null;
-
 
   type MoodScoreItem = { key: string; value: number };
 
@@ -983,8 +983,72 @@ export default function GameDetail() {
         })
         .filter((item) => item.value > 0)
         .sort((a, b) => b.value - a.value)
-        .slice(0, 5) // ★ 上位5件まで表示（brain / story / session / tension / operation を想定）
+        .slice(0, 5)
       : [];
+
+  // ★ オーバーレイで強調するムード（とりあえず上位2件をハイライト）
+  const selectedMoodKeys = moodScoreItems.slice(0, 2).map((item) => item.key);
+
+  const selectedMoodLabelText =
+    selectedMoodKeys.length > 0
+      ? selectedMoodKeys.map((key) => formatMoodLabel(key)).join(" & ")
+      : null;
+
+  // ★ Mood Match の「重なり」可視化用データ
+  type MoodAlignmentItem = {
+    key: string;
+    basePercent: number;      // ゲーム側の mood_score（0-100）
+    overlayPercent: number;   // 気分フィルター側の強さ（0-100）
+    alignmentPercent: number; // 両者の重なり具合（0-100）
+  };
+
+  const moodAlignmentItems: MoodAlignmentItem[] = moodScoreItems.map((item) => {
+    const basePercent = Math.round(item.value * 100);
+
+    const userMoodScalar =
+      rawMatchScoreForDisplay !== null
+        ? Math.max(0, Math.min(1, rawMatchScoreForDisplay))
+        : null;
+
+    const overlayPercent =
+      userMoodScalar !== null
+        ? Math.round(userMoodScalar * 100)
+        : basePercent;
+
+    const alignmentPercentRaw =
+      userMoodScalar !== null
+        ? (1 - Math.abs(item.value - userMoodScalar)) * 100
+        : basePercent;
+
+    const alignmentPercent = Math.max(
+      0,
+      Math.min(100, Math.round(alignmentPercentRaw))
+    );
+
+    return {
+      key: item.key,
+      basePercent,
+      overlayPercent,
+      alignmentPercent,
+    };
+  });
+
+  // ★ 気分フィルターとゲームのムードがどれくらい噛み合っているか（上位 mood 2軸の平均）
+  const moodLinkPercent = (() => {
+    if (selectedMoodKeys.length === 0) return null;
+    if (!moodAlignmentItems || moodAlignmentItems.length === 0) return null;
+
+    const relevant = moodAlignmentItems.filter((m) =>
+      selectedMoodKeys.includes(m.key)
+    );
+    if (relevant.length === 0) return null;
+
+    const avg =
+      relevant.reduce((sum, m) => sum + m.alignmentPercent, 0) /
+      relevant.length;
+
+    return Math.round(Math.max(0, Math.min(100, avg)));
+  })();
 
 
   // --- リスク系スコア ---
@@ -1001,13 +1065,17 @@ export default function GameDetail() {
       ? analysisData.refundMentions
       : null;
 
-  // --- Match Score Breakdown 用 内訳スコア --------------------
-
-  // ① Mood match（0-100%）
+  // --- Match Score Breakdown 用 内訳スコア ---
   const moodMatchPercent =
     normalizedMoodScore !== null
       ? Math.round(normalizedMoodScore * 100)
       : null;
+
+  const moodOverlayHeightPercent =
+    moodMatchPercent !== null
+      ? Math.max(0, Math.min(100, moodMatchPercent))
+      : matchScorePercent ?? 0;
+
 
   // ② Playstyle fit（Player Match のポジティブ側スコアから算出：1〜5 → 0〜100%）
   const playstyleFitPercent = (() => {
@@ -1048,6 +1116,40 @@ export default function GameDetail() {
   const totalReviews = baseGame.totalReviews || 0;
   const estimatedOwners = baseGame.estimatedOwners || 0;
   const price = baseGame.price || 0;
+
+  const rawPriceOriginal =
+    (baseGame as any).priceOriginal ??
+    (baseGame as any).price_original ??
+    null;
+
+  const rawDiscountPercent =
+    (baseGame as any).discountPercent ??
+    (baseGame as any).discount_percent ??
+    null;
+
+  const normalizedPrice =
+    typeof price === "number" && Number.isFinite(price) ? price : 0;
+
+  const priceOriginal =
+    typeof rawPriceOriginal === "number" && Number.isFinite(rawPriceOriginal)
+      ? rawPriceOriginal
+      : normalizedPrice;
+
+  const computedDiscountPercent =
+    priceOriginal > 0 && normalizedPrice < priceOriginal
+      ? Math.round((1 - normalizedPrice / priceOriginal) * 100)
+      : 0;
+
+  const discountPercent =
+    typeof rawDiscountPercent === "number" && Number.isFinite(rawDiscountPercent)
+      ? rawDiscountPercent
+      : computedDiscountPercent;
+
+
+
+
+
+
   const averagePlaytime = baseGame.averagePlaytime || 0;
   // 平均プレイ時間（分） → 時間（x.x h）へ変換
   const averagePlaytimeHours =
@@ -1056,6 +1158,19 @@ export default function GameDetail() {
   const tags = baseGame.tags || [];
   const steamUrl = baseGame.steamUrl;
   const reviewScoreDesc = baseGame.reviewScoreDesc;
+
+  // 「Overwhelmingly Positive • Metacritic: 90」から
+  // 「Metacritic: 90」だけを抜き出す
+  const metacriticBadgeText =
+    reviewScoreDesc &&
+      reviewScoreDesc.toLowerCase().includes("metacritic")
+      ? reviewScoreDesc
+        .split("•")
+        .map((part) => part.trim())
+        .find((part) =>
+          part.toLowerCase().startsWith("metacritic")
+        ) ?? null
+      : null;
 
   const releaseDateValue =
     baseGame.releaseDate ?? game.releaseDate ?? null;
@@ -1090,8 +1205,7 @@ export default function GameDetail() {
 
 
   const isFree = price === 0;
-  const normalizedPrice =
-    typeof price === "number" && Number.isFinite(price) ? price : 0;
+
   const priceDisplay =
     normalizedPrice === 0 ? "Free" : `$${normalizedPrice.toFixed(2)}`;
   const positiveRatioDisplay = Math.round(positiveRatio);
@@ -1302,19 +1416,8 @@ export default function GameDetail() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                      Hidden Gem Analyzer
+                      Vibe Gem Analyzer
                     </p>
-
-                    {/* ★ Metacritic バッジをここに移動 */}
-                    {reviewScoreDesc && (
-                      <Badge
-                        variant="outline"
-                        className="inline-flex items-center gap-1 rounded-full border-amber-400/80 bg-amber-500/15 text-[11px] md:text-xs text-amber-50 px-3 py-1"
-                      >
-                        <ThumbsUp className="w-3.5 h-3.5" />
-                        <span>{reviewScoreDesc}</span>
-                      </Badge>
-                    )}
                   </div>
 
                   <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
@@ -1453,77 +1556,122 @@ export default function GameDetail() {
                   </CardContent>
                 </Card>
 
-                {/* Match Score — Pattern B: 極太バー + 円形エンブレム + mood_scores ピル */}
+                {/* Match Score — Pattern B: Mood Filter Overlay Bars Mock レイアウト */}
                 {matchScorePercent !== null && (
                   <div className="mt-4 mb-3">
-                    <div className="rounded-3xl bg-[#050816] border border-white/10 px-4 py-4 md:px-6 md:py-6 flex flex-row items-center gap-4 md:gap-6">
-                      {/* 左：極太バー＋円形スコアバッジ */}
-                      <div className="flex items-center gap-3 md:gap-4 flex-shrink-0">
-                        {/* 極太サイドメーター */}
-                        <div className="flex flex-col items-center w-16 md:w-20">
-                          <div className="h-32 md:h-40 w-7 md:w-8 bg-slate-900 rounded-full overflow-hidden relative shadow-[0_0_0_1px_rgba(148,163,184,0.4)]">
+                    <div className="rounded-3xl bg-[#050816] border border-white/10 px-4 py-4 md:px-6 md:py-6">
+                      {/* Header inside card */}
+                      <div className="text-center mb-4">
+                        <p className="text-[11px] md:text-xs uppercase tracking-[0.18em] text-slate-400">
+                          MATCH SCORE
+                        </p>
+                        <p className="text-xs md:text-sm text-slate-200/90">
+                          How well this game fits your vibe.
+                        </p>
+                      </div>
+
+                      {/* Main layout: モバイル = 縦積み / md+ = 左右並び */}
+                      <div className="flex flex-col md:flex-row gap-6 md:gap-8 justify-center md:items-center">
+                        {/* LEFT: vertical bar + circle */}
+                        <div className="flex items-center justify-center gap-4 md:gap-6">
+                          {/* Vertical bar */}
+                          <div className="h-32 md:h-40 w-6 md:w-7 bg-[#0d1324] rounded-full overflow-hidden relative">
+                            {/* base layer */}
                             <div
-                              className="absolute bottom-0 w-full bg-gradient-to-t from-cyan-400 via-fuchsia-400 to-emerald-300"
+                              className="absolute bottom-0 w-full bg-gradient-to-t from-cyan-400 via-fuchsia-400 to-emerald-300 opacity-60"
                               style={{ height: `${matchScorePercent}%` }}
                             />
+                            {/* overlay mood layer */}
+                            <div
+                              className="absolute bottom-0 w-full bg-gradient-to-t from-yellow-400/80 to-yellow-200/60"
+                              style={{ height: `${moodOverlayHeightPercent}%` }}
+                            />
                           </div>
-                        </div>
 
-                        {/* 円形エンブレム */}
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="relative w-20 h-20 md:w-24 md:h-24 flex items-center justify-center rounded-full bg-slate-900 border border-white/20 shadow-[0_0_40px_rgba(59,130,246,0.25)]">
-                            <div className="absolute inset-[4px] rounded-full bg-gradient-to-br from-fuchsia-500/25 via-slate-900 to-cyan-400/25" />
-                            <div className="relative flex flex-col items-center justify-center">
-                              <p className="text-[9px] md:text-[10px] tracking-[0.18em] text-slate-300 uppercase mb-0.5">
-                                Match
-                              </p>
-                              <div className="flex items-baseline gap-0.5">
-                                <span className="text-2xl md:text-3xl font-extrabold bg-gradient-to-b from-fuchsia-200 via-purple-200 to-cyan-100 bg-clip-text text-transparent">
-                                  {matchScorePercent}
-                                </span>
-                                <span className="text-sm md:text-base text-slate-200">
-                                  %
-                                </span>
-                              </div>
+                          {/* Circle score */}
+                          <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full bg-[#0d1324] border border-white/20 flex flex-col items-center justify-center shadow-[0_0_25px_rgba(240,200,80,0.45)]">
+                            <div className="text-[10px] tracking-widest text-slate-300 uppercase">
+                              Match
+                            </div>
+                            <div className="flex items-end gap-1 mt-1">
+                              <span className="text-3xl md:text-4xl font-bold bg-gradient-to-b from-yellow-200 to-yellow-100 bg-clip-text text-transparent">
+                                {matchScorePercent}
+                              </span>
+                              <span className="text-slate-300 text-sm md:text-base">%</span>
                             </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* 右：mood_scores をピルで表示（5本まで） */}
-                      {moodScoreItems.length > 0 && (
-                        <div className="flex-1 text-[11px] md:text-xs">
-                          <div className="flex flex-wrap gap-2 justify-end">
-                            {moodScoreItems.map((mood) => {
-                              const percent = Math.round(mood.value * 100);
+                        {/* RIGHT: mood bars with overlay segments */}
+                        {moodAlignmentItems.length > 0 && (
+                          <div className="flex flex-col gap-3 w-full md:w-80 lg:w-96 mt-4 md:mt-0">
+                            {moodAlignmentItems.map((mood) => {
+                              const label = formatMoodLabel(mood.key);
+                              const isHighlighted = selectedMoodKeys.includes(mood.key);
+
                               return (
                                 <div
                                   key={mood.key}
-                                  className="inline-flex items-center gap-2 rounded-full bg-slate-950/70 border border-slate-700 px-2.5 py-1"
+                                  className="flex items-center w-full bg-slate-950/70 border border-slate-700 rounded-full px-4 py-2"
                                 >
-                                  <span className="text-slate-200 whitespace-nowrap">
-                                    {formatMoodLabel(mood.key)}
+                                  {/* ラベル */}
+                                  <span className="text-sm text-slate-200 whitespace-nowrap">
+                                    {label}
                                   </span>
-                                  <div className="flex items-center gap-1">
-                                    <div className="w-8 h-[3px] rounded-full bg-slate-800 overflow-hidden">
+
+                                  {/* 2本バー + alignment％ */}
+                                  <div className="flex items-center gap-2 ml-auto w-40 md:w-56">
+                                    {/* 上下2本のバー */}
+                                    <div className="flex flex-col flex-1 gap-1">
+                                      {/* 上：ゲーム側 mood_score（basePercent） */}
+                                      <div className="relative h-[4px] w-full bg-slate-800 rounded-full overflow-hidden">
+                                        <div
+                                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-sky-400 to-emerald-300 opacity-80"
+                                          style={{ width: `${mood.basePercent}%` }}
+                                        />
+                                      </div>
+
+                                      {/* 下：気分フィルター側の値（overlayPercent）— 全軸で表示 */}
                                       <div
-                                        className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-300"
-                                        style={{ width: `${percent}%` }}
-                                      />
+                                        className={`relative h-[4px] w-full rounded-full overflow-hidden ${isHighlighted ? "bg-slate-800/80" : "bg-slate-800/40"
+                                          }`}
+                                      >
+                                        <div
+                                          className="absolute inset-y-0 left-0 bg-gradient-to-r from-yellow-300 to-yellow-500"
+                                          style={{ width: `${mood.overlayPercent}%` }}
+                                        />
+                                      </div>
                                     </div>
-                                    <span className="text-[10px] text-slate-500">
-                                      {percent}%
+
+                                    {/* 右端：alignment（マッチ率） */}
+                                    <span className="text-[11px] text-slate-400 text-right min-w-[3ch]">
+                                      {mood.alignmentPercent}%
                                     </span>
                                   </div>
                                 </div>
                               );
                             })}
                           </div>
+                        )}
+
+                      </div>
+
+                      {/* Mood influence indicator */}
+                      {selectedMoodLabelText && (
+                        <div className="mt-4 text-center text-[11px] text-yellow-300/80 tracking-wide">
+                          Mood influence: {selectedMoodLabelText} highlighted
+                        </div>
+                      )}
+
+                      {moodLinkPercent !== null && (
+                        <div className="mt-1 text-center text-[11px] text-slate-400">
+                          Mood link: {moodLinkPercent}% match between your mood filter and the game&apos;s mood.
                         </div>
                       )}
                     </div>
                   </div>
                 )}
+
 
 
                 {/* Player Fit: どんなプレイヤーに刺さるか／刺さらないか */}
@@ -1554,7 +1702,7 @@ export default function GameDetail() {
                             className="relative max-w-5xl mx-auto flex gap-4 md:gap-6 overflow-hidden"
                           >
                             {/* 左：プレイヤータイプカード一覧 */}
-                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md items-stretch">
                               {allPlayerFitTags.map((tag, index) => {
                                 const isActive = activePlayerFitId === tag.id;
 
@@ -1565,7 +1713,7 @@ export default function GameDetail() {
                                   : "top-full mt-2";
 
                                 return (
-                                  <div key={tag.id} className="relative">
+                                  <div key={tag.id} className="relative w-full">
                                     <motion.button
                                       type="button"
                                       onClick={() => {
@@ -1592,7 +1740,7 @@ export default function GameDetail() {
                                         delay: index * 0.06,
                                       }}
                                       viewport={{ once: true, amount: 0.25 }}
-                                      className={`relative rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
+                                      className={`relative w-full rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
                                         ? "border-2 border-fuchsia-300/80 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.45)]"
                                         : "border border-white/5 bg-slate-900/70"
                                         }`}
@@ -1695,14 +1843,14 @@ export default function GameDetail() {
 
 
                                             {/* 本文：サマリ + 理由 */}
-                                            {tag.sub && (
+                                            {/* {tag.sub && (
                                               <p className="text-[15px] text-slate-300 leading-relaxed mb-2">
                                                 {tag.sub}
                                               </p>
-                                            )}
+                                            )} */}
 
                                             {tag.reason && (
-                                              <p className="text-[14px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
+                                              <p className="text-[13px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
                                                 {tag.reason}
                                               </p>
                                             )}
@@ -1750,19 +1898,29 @@ export default function GameDetail() {
                                                   {tag.polarity === "positive" &&
                                                     positiveReviews.length > 0 && (
                                                       <div>
-                                                        <div className="text-[16px] font-semibold text-emerald-300/90 mb-3">
-                                                          刺さった理由（代表的なレビュー）
+                                                        <div className="text-[15px] font-semibold text-emerald-300/90 mb-3">
+                                                          USER'S VOICE
                                                         </div>
-                                                        {positiveReviews.map(
-                                                          (text, idx) => (
-                                                            <p
-                                                              key={idx}
-                                                              className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                        {positiveReviews.map((text, idx) => (
+                                                          <div
+                                                            key={idx}
+                                                            className="flex items-start gap-2 mb-2"
+                                                          >
+                                                            <span
+                                                              className="
+            mt-0.5 inline-flex h-5 w-5 items-center justify-center
+    flex-none shrink-0 aspect-square
+    rounded-full bg-emerald-400 text-[11px] font-bold text-slate-950
+    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
+          "
                                                             >
+                                                              {idx + 1}
+                                                            </span>
+                                                            <p className="text-[13px] text-slate-100/90 leading-relaxed">
                                                               {text}
                                                             </p>
-                                                          )
-                                                        )}
+                                                          </div>
+                                                        ))}
                                                       </div>
                                                     )}
 
@@ -1771,18 +1929,28 @@ export default function GameDetail() {
                                                     negativeReviews.length > 0 && (
                                                       <div>
                                                         <div className="text-[16px] font-semibold text-rose-300/90 mt-1 mb-3">
-                                                          刺さらなかった理由（代表的なレビュー）
+                                                          USER'S VOICE
                                                         </div>
-                                                        {negativeReviews.map(
-                                                          (text, idx) => (
-                                                            <p
-                                                              key={idx}
-                                                              className="text-[14px] text-slate-100/90 leading-relaxed mb-1"
+                                                        {negativeReviews.map((text, idx) => (
+                                                          <div
+                                                            key={idx}
+                                                            className="flex items-start gap-2 mb-2"
+                                                          >
+                                                            <span
+                                                              className="
+           mt-0.5 inline-flex h-5 w-5 items-center justify-center
+    flex-none shrink-0 aspect-square
+    rounded-full bg-rose-400 text-[11px] font-bold text-slate-950
+    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
+          "
                                                             >
+                                                              {idx + 1}
+                                                            </span>
+                                                            <p className="text-[13px] text-slate-100/90 leading-relaxed">
                                                               {text}
                                                             </p>
-                                                          )
-                                                        )}
+                                                          </div>
+                                                        ))}
                                                       </div>
                                                     )}
                                                 </div>
@@ -1897,15 +2065,27 @@ export default function GameDetail() {
                                             activePositiveReviews.length > 0 && (
                                               <div>
                                                 <div className="text-[10px] font-semibold text-emerald-300/90 mb-0.5">
-                                                  刺さった理由（代表的なレビュー）
+                                                  USER'S VOICE
                                                 </div>
                                                 {activePositiveReviews.map((text, idx) => (
-                                                  <p
+                                                  <div
                                                     key={idx}
-                                                    className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                                    className="flex items-start gap-2 mb-1.5"
                                                   >
-                                                    {text}
-                                                  </p>
+                                                    <span
+                                                      className="
+          mt-0.5 inline-flex h-5 w-5 items-center justify-center
+    flex-none shrink-0 aspect-square
+    rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950
+    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
+      "
+                                                    >
+                                                      {idx + 1}
+                                                    </span>
+                                                    <p className="text-[11px] text-slate-100/90 leading-relaxed">
+                                                      {text}
+                                                    </p>
+                                                  </div>
                                                 ))}
                                               </div>
                                             )}
@@ -1915,15 +2095,27 @@ export default function GameDetail() {
                                             activeNegativeReviews.length > 0 && (
                                               <div>
                                                 <div className="text-[10px] font-semibold text-rose-300/90 mb-0.5">
-                                                  刺さらなかった理由（代表的なレビュー）
+                                                  USER'S VOICE
                                                 </div>
                                                 {activeNegativeReviews.map((text, idx) => (
-                                                  <p
+                                                  <div
                                                     key={idx}
-                                                    className="text-[11px] text-slate-100/90 leading-relaxed mb-1"
+                                                    className="flex items-start gap-2 mb-1.5"
                                                   >
-                                                    {text}
-                                                  </p>
+                                                    <span
+                                                      className="
+        mt-0.5 inline-flex h-5 w-5 items-center justify-center
+    flex-none shrink-0 aspect-square
+    rounded-full bg-rose-400 text-[10px] font-bold text-slate-950
+    shadow-[0_0_0_1px_rgba(15,23,42,0.6)]
+      "
+                                                    >
+                                                      {idx + 1}
+                                                    </span>
+                                                    <p className="text-[11px] text-slate-100/90 leading-relaxed">
+                                                      {text}
+                                                    </p>
+                                                  </div>
                                                 ))}
                                               </div>
                                             )}

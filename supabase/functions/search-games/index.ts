@@ -2,10 +2,7 @@
 
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
-import {
-  MoodSliderId,
-  MoodVector,
-} from "../_shared/mood.ts";
+import { MoodSliderId, MoodVector } from "../_shared/mood.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -212,7 +209,10 @@ const calcMoodMatchScore = (
   return distanceToScore(d, maxD);
 };
 
-const calcFinalRankingScore = (baseScore: number, moodScore: number): number => {
+const calcFinalRankingScore = (
+  baseScore: number,
+  moodScore: number
+): number => {
   const BASE_WEIGHT = 0.6;
   const MOOD_WEIGHT = 0.4;
 
@@ -350,7 +350,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // まずは JSON データをまとめて取得
     const { data, error } = await supabase
       .from("game_rankings_cache")
-      .select("data");
+      .select("data, price, price_original, discount_percent");
 
     if (error) {
       console.error("search-games db error", error);
@@ -362,9 +362,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const rows = (data ?? []) as any[];
 
-    // JSONB カラム data から RankingGame 相当の形に整形
+    // JSONB data と物理カラム（price 系）をマージして RankingGame 相当に整形
     const rawGames = rows
-      .map((row) => row.data ?? row) // 念のため row.data 優先
+      .map((row) => {
+        const base = row.data ?? {};
+        return {
+          ...base,
+          // 物理カラムが入っていればそちらを優先して上書き
+          price: typeof row.price === "number" ? row.price : base.price,
+          price_original:
+            typeof row.price_original === "number"
+              ? row.price_original
+              : base.price_original,
+          discount_percent:
+            typeof row.discount_percent === "number"
+              ? row.discount_percent
+              : base.discount_percent,
+        };
+      })
       .filter((g) => g && g.appId != null);
 
     const mapped = rawGames.map((g) => {

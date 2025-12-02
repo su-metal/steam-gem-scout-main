@@ -36,6 +36,8 @@ interface SearchResultCardProps {
   headerImage?: string | null;
   moodScore?: number;
   finalScore?: number;
+  priceOriginal?: number | null;
+  discountPercent?: number | null;
 }
 
 // スコア軸のキー
@@ -324,12 +326,53 @@ export const SearchResultCard = ({
     }
   }
 
+  // price は既存のまま
   const normalizedPrice =
     typeof price === "number" && Number.isFinite(price) ? price : 0;
+
   const isFree = normalizedPrice === 0;
-  const priceDisplay = isFree
-    ? "Free"
-    : `$${normalizedPrice.toFixed(2)}`;
+
+  // gameData から元価格と割引率を拾う（props は使わない）
+  const rawPriceOriginal =
+    typeof (gameData as any)?.priceOriginal === "number"
+      ? (gameData as any).priceOriginal
+      : typeof (gameData as any)?.price_original === "number"
+        ? (gameData as any).price_original
+        : null;
+
+  const effectivePriceOriginal =
+    typeof rawPriceOriginal === "number" && Number.isFinite(rawPriceOriginal)
+      ? rawPriceOriginal
+      : normalizedPrice;
+
+  const rawDiscountPercent =
+    typeof (gameData as any)?.discountPercent === "number"
+      ? (gameData as any).discountPercent
+      : typeof (gameData as any)?.discount_percent === "number"
+        ? (gameData as any).discount_percent
+        : null;
+
+  const computedDiscountPercent =
+    effectivePriceOriginal > 0 && normalizedPrice < effectivePriceOriginal
+      ? Math.round((1 - normalizedPrice / effectivePriceOriginal) * 100)
+      : 0;
+
+  const discountPercentDisplay =
+    typeof rawDiscountPercent === "number" && Number.isFinite(rawDiscountPercent)
+      ? Math.max(0, Math.min(100, Math.round(rawDiscountPercent)))
+      : computedDiscountPercent;
+
+  const hasDiscount =
+    effectivePriceOriginal > 0 &&
+    normalizedPrice < effectivePriceOriginal &&
+    discountPercentDisplay > 0;
+
+  const formatPrice = (v: number) =>
+    v === 0 ? "Free" : `$${v.toFixed(2)}`;
+
+  const priceDisplay = formatPrice(normalizedPrice);
+  const priceOriginalDisplay = formatPrice(effectivePriceOriginal);
+
 
   // Playtime: averagePlaytime は分単位で渡ってくる想定なので h に変換して表示する
   const playtimeMinutes =
@@ -350,6 +393,29 @@ export const SearchResultCard = ({
       playtimeDisplay = `${Math.round(hours)}h`;
     }
   }
+
+  // Release date display
+  const rawReleaseDate: string | undefined =
+    (gameData as any)?.releaseDate ??
+    (analysisData as any)?.releaseDate ??
+    undefined;
+
+  let releaseDisplay = "-";
+  if (rawReleaseDate) {
+    const d = new Date(rawReleaseDate);
+    if (!Number.isNaN(d.getTime())) {
+      // 例: Jan 5, 2024 形式で表示（ロケールは環境依存）
+      releaseDisplay = d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } else {
+      // すでにフォーマット済みの文字列が来ている場合はそのまま
+      releaseDisplay = rawReleaseDate;
+    }
+  }
+
 
   return (
     <Card
@@ -452,48 +518,54 @@ export const SearchResultCard = ({
 
         </div>
 
-                {/* Stats (Positive, Reviews, Price, Playtime) */}
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          {/* Positive */}
-          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Positive</span>
-              <span className="text-sm font-semibold text-primary">
-                {positiveDisplay}%
-              </span>
-            </div>
-          </div>
 
-          {/* Reviews */}
-          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Reviews</span>
-              <span className="text-sm font-semibold">
-                {totalReviews?.toLocaleString?.() ?? "-"}
-              </span>
-            </div>
-          </div>
+       <div className="mt-4 grid grid-cols-2 gap-3 text-xs items-center">
+  {/* Release（シンプル） */}
+  <div className="px-3 py-2">
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[11px] text-muted-foreground">Release: {releaseDisplay}</span>
+     
+    </div>
+  </div>
 
-          {/* Price */}
-          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Price</span>
-              <span className="text-sm font-semibold">
-                {priceDisplay}
-              </span>
-            </div>
-          </div>
-
-          {/* Playtime */}
-          <div className="rounded-lg border border-border/60 bg-background/60 px-3 py-2 shadow-sm">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[11px] text-muted-foreground">Playtime</span>
-              <span className="text-sm font-semibold">
-                {playtimeDisplay}
-              </span>
-            </div>
-          </div>
+ {/* Price — Pattern E: Steam風ディスカウントリボン（右寄せ） */}
+<div className="px-3 py-2">
+  {/* ★ ここで justify-end を付与 */}
+  <div className="flex items-center h-full justify-end">
+    {hasDiscount ? (
+      // 割引あり：Steam風リボン
+      <div className="flex overflow-hidden rounded-md shadow-md">
+        <div className="px-2 py-3 bg-lime-500 flex items-center justify-center">
+          <span className="text-[16px] font-extrabold text-slate-900">
+            -{discountPercentDisplay}%
+          </span>
         </div>
+        <div className="px-2 py-1 bg-blue-600/80 flex flex-col justify-center items-end">
+          <span className="text-[10px] text-slate-200/80 line-through leading-none">
+            {priceOriginalDisplay}
+          </span>
+          <span className="text-lg font-bold text-blue-50 leading-none">
+            {priceDisplay}
+          </span>
+        </div>
+      </div>
+    ) : (
+      // ★ 割引なし：Pattern E の通常価格版
+      <div className="flex justify-end">
+        <div className="flex overflow-hidden rounded-md shadow-md bg-blue-600/80 px-4 py-2">
+          <span className="text-base font-bold text-blue-50 leading-[1]">
+            {priceDisplay}
+          </span>
+        </div>
+      </div>
+    )}
+  </div>
+</div>
+
+</div>
+
+
+
       </div>
     </Card>
   );
