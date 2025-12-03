@@ -1,624 +1,599 @@
 // src/pages/Index.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Slider } from "@/components/ui/slider";
-import { Button } from "@/components/ui/button";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Wind,
+  Zap,
+  BookOpen,
+  Crosshair,
+  Timer,
+  Star,
+  ArrowRight,
+  Gamepad2,
+} from "lucide-react";
 
-/* ====== 気分スライダー定義 ====== */
+// --- Types & Data ---
 
-type MoodSliderId = "operation" | "session" | "tension" | "story" | "brain";
+type VibeType = 'Chill' | 'Focus' | 'Story' | 'Speed' | 'Short';
 
-type MoodState = Record<MoodSliderId, number>;
-
-type SliderConfig = {
-  key: MoodSliderId;
+interface VibeData {
+  id: VibeType;
   title: string;
-  mainLabel: string;
-  leftLabel: string;
-  rightLabel: string;
-};
-
-const VIBE_MAX = 4; // 0〜4 の 5 段階
-
-const BASE_VIBE_SLIDERS: SliderConfig[] = [
-  {
-    key: "operation",
-    title: "操作量",
-    mainLabel: "Passive ↔ Active",
-    leftLabel: "リラックス",
-    rightLabel: "アクティブ",
-  },
-  {
-    key: "session",
-    title: "セッション長",
-    mainLabel: "Short ↔ Long",
-    leftLabel: "短時間",
-    rightLabel: "長時間",
-  },
-  {
-    key: "tension",
-    title: "テンション",
-    mainLabel: "Cozy ↔ Intense",
-    leftLabel: "まったり",
-    rightLabel: "高テンション",
-  },
-];
-
-const ADVANCED_VIBE_SLIDERS: SliderConfig[] = [
-  {
-    key: "story",
-    title: "ストーリー濃度",
-    mainLabel: "Story-Light ↔ Story-Heavy",
-    leftLabel: "プレイ重視",
-    rightLabel: "物語重視",
-  },
-  {
-    key: "brain",
-    title: "思考負荷",
-    mainLabel: "Simple ↔ Deep",
-    leftLabel: "シンプル",
-    rightLabel: "じっくり",
-  },
-];
-
-const DEFAULT_MOOD: MoodState = {
-  operation: 2,
-  session: 2,
-  tension: 2,
-  story: 2,
-  brain: 2,
-};
-
-const HERO_FLOAT_KEYFRAMES = `
-.hero-visual {
-  position: relative;
-}
-
-/* 本体パッド（Index - コピー (2) ＋ landing.css 準拠） */
-.pad-shell {
-  position: relative;
-  width: 100%;
-  max-width: 360px;
-  aspect-ratio: 4 / 3;
-  margin-left: auto;
-  border-radius: 40px;
-  background: radial-gradient(
-    circle at 20% 10%,
-    #ffffff 0,
-    #f4f4ff 18%,
-    #d6d6ff 48%,
-    #8a4fff 100%
-  );
-  box-shadow: 0 28px 40px rgba(0, 0, 0, 0.65), 0 0 0 6px #050509;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transform: rotate(-6deg);
-  animation: float 4s ease-in-out infinite;
-}
-
-/* パッドのふわふわアニメーション */
-@keyframes float {
-  0% {
-    transform: translateY(0) rotate(-6deg);
-  }
-  50% {
-    transform: translateY(-8px) rotate(-7.5deg);
-  }
-  100% {
-    transform: translateY(0) rotate(-6deg);
-  }
-}
-
-.pad-top-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.pad-chip {
-  width: 42px;
-  height: 24px;
-  border-radius: 999px;
-  background-image: linear-gradient(135deg, #8a4fff, #ff47b6);
-  box-shadow: 0 0 0 4px rgba(5, 5, 9, 0.2);
-}
-
-.pad-pill {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(5, 5, 9, 0.06);
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #050509;
-}
-
-.pad-pill-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #00e5ff;
-  box-shadow: 0 0 0 5px rgba(0, 229, 255, 0.35);
-}
-
-/* 画面グリッド（6枚のタイル） */
-.pad-screen {
-  margin-top: 12px;
-  flex: 1;
-  border-radius: 18px;
-  background: #050509;
-  padding: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.pad-game-tile {
-  border-radius: 10px;
-  padding: 6px;
-  background: radial-gradient(
-    circle at 0 0,
-    #ff47b6 0,
-    #1c1c2e 48%,
-    #050509 100%
-  );
-  position: relative;
-  overflow: hidden;
-  border: 2px solid #050509;
-  color: #f9f9ff;
-}
-
-.pad-game-title {
-  font-size: 8px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.pad-game-tag {
-  font-size: 7px;
-  color: #f3f3ff;
-  opacity: 0.82;
-}
-
-.pad-game-score {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  font-size: 8px;
-  padding: 3px 6px;
-  border-radius: 999px;
-  background: rgba(5, 5, 9, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-/* 下部のスティック＋丸ボタン */
-.pad-controls {
-  margin-top: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.pad-stick {
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
-  background: radial-gradient(circle at 30% 30%, #ffffff, #d2d2ff);
-  box-shadow: inset -4px -6px 10px rgba(0, 0, 0, 0.25),
-    0 8px 14px rgba(0, 0, 0, 0.35);
-}
-
-.pad-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.pad-btn {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #050509;
-  border: 2px solid #050509;
-  box-shadow: 0 0 0 2px #ffffff;
-}
-
-/* 吹き出し（テキストは静止：アニメーションなし） */
-.hero-floating-tag {
-  position: absolute;
-  right: 0;
-  top: 8%;
-  transform: translateX(18%);
-  padding: 10px 14px;
-  border-radius: 18px;
-  background: rgba(5, 5, 9, 0.9);
-  border: 2px solid #ffffff;
-  font-size: 11px;
-  max-width: 180px;
-  box-shadow: 5px 5px 0 #050509;
-}
-
-/* モバイル時の配置（landing.css と同じ挙動） */
-@media (max-width: 800px) {
-  .pad-shell {
-    margin: 12px auto 0;
-    transform: rotate(-3deg);
-  }
-  .hero-floating-tag {
-    position: static;
-    transform: none;
-    margin-top: 10px;
-  }
-}
-`;
-
-
-
-const Index: React.FC = () => {
-  const navigate = useNavigate();
-  const [vibes, setVibes] = useState<MoodState>(() => ({ ...DEFAULT_MOOD }));
-  const [showAdvancedVibes, setShowAdvancedVibes] = useState(false);
-
-  const goToSearchWithMood = () =>
-    navigate("/search", { state: { userMood: vibes } });
-
-  // 追加：Vibeセクションへスクロールするだけのハンドラ
-  const scrollToVibeSection = () => {
-    const el = document.getElementById("vibe");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  subtitle: string;
+  tags: string[];
+  colors: {
+    primary: string;    // Main Pop Color
+    secondary: string;  // Gradient/Accent
+    shadow: string;     // Glow color
   };
+  icon: any;
+  stats: { label: string; value: number }[];
+}
+
+const VIBES: VibeData[] = [
+  {
+    id: "Chill",
+    title: "Zen Mode",
+    subtitle: "Relax & Build",
+    tags: ["Sim", "Atmospheric", "Cozy"],
+    colors: {
+      primary: "#00ffa3",
+      secondary: "#00b8ff",
+      shadow: "#00ffa3",
+    },
+    icon: Wind,
+    // カードに表示するのは「気分が伝わる3本」だけ
+    stats: [
+      { label: "CHILL", value: 100 },       // このプリセットそのもの
+      { label: "VIBES", value: 90 },        // 「らしさ」全体
+      { label: "RELAX", value: 90 },        // 体験イメージ（ゆったり度）
+    ],
+  },
+  {
+    id: "Focus",
+    title: "Tactical",
+    subtitle: "Strategy & Think",
+    tags: ["RTS", "Puzzle", "4X"],
+    colors: {
+      primary: "#0099ff",
+      secondary: "#5e00ff",
+      shadow: "#0099ff",
+    },
+    icon: Crosshair,
+    stats: [
+      { label: "FOCUS", value: 100 },
+      { label: "VIBES", value: 95 },
+      { label: "STRATEGY", value: 95 },     // 頭を使う・考える度合い
+    ],
+  },
+  {
+    id: "Story",
+    title: "Narrative",
+    subtitle: "Deep Immersion",
+    tags: ["RPG", "Lore", "Adventure"],
+    colors: {
+      primary: "#cc00ff",
+      secondary: "#ff0066",
+      shadow: "#cc00ff",
+    },
+    icon: BookOpen,
+    stats: [
+      { label: "STORY", value: 100 },
+      { label: "VIBES", value: 100 },
+      { label: "NARRATIVE", value: 95 },    // 物語への没入度
+    ],
+  },
+  {
+    id: "Speed",
+    title: "Adrenaline",
+    subtitle: "Fast & Furious",
+    tags: ["FPS", "Racing", "Action"],
+    colors: {
+      primary: "#ff0055",
+      secondary: "#ff5e00",
+      shadow: "#ff0055",
+    },
+    icon: Zap,
+    stats: [
+      { label: "SPEED", value: 100 },
+      { label: "VIBES", value: 95 },
+      { label: "INTENSITY", value: 100 },   // テンション・スピード感
+    ],
+  },
+  {
+    id: "Short",
+    title: "Quick Run",
+    subtitle: "Jump In & Out",
+    tags: ["Roguelike", "Arcade", "Indie"],
+    colors: {
+      primary: "#ffcc00",
+      secondary: "#ff6600",
+      shadow: "#ffcc00",
+    },
+    icon: Timer,
+    stats: [
+      { label: "SHORT", value: 100 },
+      { label: "VIBES", value: 90 },
+      { label: "PICK-UP", value: 95 },      // さっと遊べる気軽さ
+    ],
+  },
+];
+
+
+// Sub Vibes は「今日の気分の追加意図」として 7 種類に統一
+const SUB_VIBES = [
+  { id: "cozy", label: "Cozy" },         // ほっこり・落ち着いた
+  { id: "emotional", label: "Emotional" },    // 泣ける・感情を揺さぶる
+  { id: "difficult", label: "Difficult" },    // 歯ごたえ・挑戦
+  { id: "puzzle-lite", label: "Puzzle-lite" },  // 軽いパズル感
+  { id: "atmospheric", label: "Atmospheric" },  // 雰囲気・世界観重視
+  { id: "humor", label: "Humor" },        // 軽い笑い・ゆるさ
+  { id: "strategic", label: "Strategic" },    // 戦略性・計画性
+];
+
+
+// --- Utilities ---
+
+const wrap = (min: number, max: number, v: number) => {
+  const rangeSize = max - min;
+  return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
+};
+
+// --- Animations ---
+
+const swipeConfidenceThreshold = 10000;
+const swipePower = (offset: number, velocity: number) => {
+  return Math.abs(offset) * velocity;
+};
+
+// BIG BOUNCY ANIMATION RESTORED
+const swipeVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 800 : -800, // Large distance for fly-in
+    y: 0,
+    opacity: 0,
+    scale: 0.2, // Start very small
+    rotate: direction > 0 ? 90 : -90, // Big rotation
+  }),
+  center: {
+    zIndex: 1,
+    x: 0,
+    y: 0,
+    opacity: 1,
+    scale: 1,
+    rotate: 0,
+    transition: {
+      x: { type: "spring", stiffness: 350, damping: 25 }, // Bouncy spring
+      opacity: { duration: 0.2 },
+      scale: { type: "spring", stiffness: 350, damping: 25 },
+      rotate: { type: "spring", stiffness: 350, damping: 25 }
+    }
+  },
+  exit: (direction: number) => ({
+    zIndex: 0,
+    x: direction < 0 ? 800 : -800, // Fly out far
+    opacity: 0,
+    scale: 0.2,
+    rotate: direction < 0 ? -90 : 90, // Big rotation on exit
+    transition: {
+      x: { type: "spring", stiffness: 350, damping: 25 },
+      opacity: { duration: 0.2 },
+      scale: { duration: 0.3 }
+    }
+  })
+};
+
+// --- Components ---
+
+const FloatingParticles = ({ color }: { color: string }) => {
+  const particles = Array.from({ length: 20 }).map((_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    size: Math.random() * 20 + 5,
+    duration: Math.random() * 10 + 10,
+    type: i % 3
+  }));
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#181830_0,_#050509_55%,_#050509_100%)] text-slate-50 flex flex-col">
-      {/* ヒーロー用ふわふわアニメーション */}
-      <style>{HERO_FLOAT_KEYFRAMES}</style>
-
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-white/5 bg-slate-950/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-          <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.18em]">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-slate-950 bg-gradient-to-tr from-fuchsia-500 to-sky-400 text-base shadow-[0_18px_40px_rgba(0,0,0,0.6)]">
-              G
-            </div>
-            <span className="translate-y-[1px] text-xs md:text-sm">
-              Hidden Gems
-            </span>
-          </div>
-          <nav className="hidden items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300 md:flex">
-            <a href="#features" className="hover:text-slate-50">
-              Features
-            </a>
-            <a href="#gems" className="hover:text-slate-50">
-              Gems
-            </a>
-            <a href="#reviews" className="hover:text-slate-50">
-              Voices
-            </a>
-            <a href="#faq" className="hover:text-slate-50">
-              FAQ
-            </a>
-            <button
-              type="button"
-              onClick={goToSearchWithMood}
-              className="rounded-full border-2 border-slate-950 bg-gradient-to-r from-sky-400 to-pink-500 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-950 shadow-[4px_4px_0_#020617] transition-transform hover:-translate-y-0.5 hover:shadow-[6px_6px_0_#020617]"
-            >
-              Appを試す
-            </button>
-          </nav>
-        </div>
-      </header>
-
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden py-10 md:py-14">
-          <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-            <div className="h-full w-full bg-[radial-gradient(circle_at_10%_0%,rgba(129,140,248,0.5),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(56,189,248,0.45),transparent_55%),radial-gradient(circle_at_20%_80%,rgba(244,114,182,0.4),transparent_60%)] blur-xl" />
-          </div>
-
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:px-6 md:items-center">
-            {/* Left copy */}
-            <div className="space-y-5">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/60 px-3 py-1 text-[11px] text-slate-300">
-                <span className="h-2 w-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-sky-400 shadow-[0_0_0_6px_rgba(244,114,182,0.25)]" />
-                <span>FOR STEAM PLAYERS / 隠れた名作ハンター向け</span>
-              </div>
-
-              <h1 className="text-3xl font-black uppercase leading-tight tracking-[0.08em] md:text-4xl">
-                Find Your Next{" "}
-                <span className="bg-gradient-to-r from-fuchsia-400 via-pink-500 to-sky-400 bg-clip-text text-transparent">
-                  Steam Gem
-                </span>
-                .
-              </h1>
-
-              <p className="max-w-md text-sm text-slate-300">
-                何を遊ぶか迷ったら、まずは今の“気分”から。
-                <br />
-                3つのVibeスライダーを動かすだけで、AIが数千本のSteamタイトルから
-                <span className="font-semibold text-slate-50">
-                  「今日の自分に刺さる一本」
-                </span>
-                を見つけてきます。
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  onClick={scrollToVibeSection}
-                  className="h-11 rounded-full border-2 border-slate-950 bg-gradient-to-r from-fuchsia-500 via-pink-500 to-amber-400 px-6 text-xs font-bold uppercase tracking-[0.18em] text-slate-950 shadow-[6px_6px_0_#020617] hover:-translate-y-0.5 hover:shadow-[8px_8px_0_#020617]"
-                >
-                  気分スライダーで始める
-                </Button>
-                <button
-                  type="button"
-                  onClick={() => navigate("/rankings?mode=today-hidden")}
-                  className="inline-flex h-11 items-center gap-2 rounded-full border border-white/25 bg-slate-950/60 px-4 text-[11px] font-medium tracking-[0.16em] text-slate-200 shadow-[0_12px_30px_rgba(15,23,42,0.9)] transition hover:border-white/60 hover:bg-slate-900/80 hover:text-slate-50"
-                >
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100/10 text-xs">
-                    ▶
-                  </span>
-                  <span>60秒で分かるアプリ紹介</span>
-                </button>
-              </div>
-
-              <p className="text-[11px] text-slate-400">
-                Steamログイン不要。
-                まずは下の
-                <span className="text-sky-300"> 気分スライダーで今の気分をセット</span>
-                してから、「この気分で探す」で検索に進めます。
-              </p>
-
-            </div>
-
-            {/* Right visual（Index - コピー (2) ＋ landing.css 準拠） */}
-            <div className="hero-visual">
-              <div className="pad-shell">
-                <div className="pad-top-row">
-                  <div className="pad-chip" />
-                  <div className="pad-pill">
-                    <div className="pad-pill-dot" />
-                    <span>AI Gem Detector</span>
-                  </div>
-                </div>
-
-                <div className="pad-screen">
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Pixel Haunt</div>
-                    <div className="pad-game-tag">Story / Atmosphere</div>
-                    <div className="pad-game-score">★ 9.1</div>
-                  </div>
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Neon Courier</div>
-                    <div className="pad-game-tag">Action / Roguelite</div>
-                    <div className="pad-game-score">★ 8.7</div>
-                  </div>
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Quiet Nights</div>
-                    <div className="pad-game-tag">Chill / Relax</div>
-                    <div className="pad-game-score">★ 9.4</div>
-                  </div>
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Deck & Dice</div>
-                    <div className="pad-game-tag">Deckbuilder</div>
-                    <div className="pad-game-score">★ 8.9</div>
-                  </div>
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Sky Threads</div>
-                    <div className="pad-game-tag">Adventure</div>
-                    <div className="pad-game-score">★ 9.0</div>
-                  </div>
-                  <div className="pad-game-tile">
-                    <div className="pad-game-title">Metro Bloom</div>
-                    <div className="pad-game-tag">Puzzle</div>
-                    <div className="pad-game-score">★ 8.5</div>
-                  </div>
-                </div>
-
-                <div className="pad-controls">
-                  <div className="pad-stick" />
-                  <div className="pad-buttons">
-                    <div className="pad-btn" />
-                    <div className="pad-btn" />
-                    <div className="pad-btn" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="hero-floating-tag">
-                🔍 「レビューは微妙なのに自分は刺さる」
-                <br />
-                そんな“ズレた名作”も拾ってくれるのが、このアプリ。
-              </div>
-            </div>
-
-
-          </div>
-        </section>
-
-        {/* Vibe Match section（キャンバス反映版） */}
-        <section
-          id="vibe"
-          className="border-t border-white/5 bg-slate-950/90 py-12"
-        >
-          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 md:px-6">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold tracking-[0.2em] text-fuchsia-300">
-                VIBE MATCH
-              </p>
-              <h2 className="text-2xl font-semibold md:text-3xl">
-                スライダーを動かすだけで、今の
-                <span className="text-fuchsia-300">“気分”</span>に合う一本を。
-              </h2>
-              <p className="max-w-2xl text-sm text-slate-300 md:text-base">
-                難しい条件入力は不要です。ストーリー重視か、アクション重視か、今日はまったりしたいのか──
-                3つのVibeスライダーを動かすだけで、AIが数千本のレビューから候補を絞り込みます。
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-900/70 shadow-[0_0_80px_rgba(168,85,247,0.18)]">
-              <div className="flex flex-col gap-8 p-6 md:p-8 lg:flex-row">
-                {/* 左：メイン3本スライダー */}
-                <div className="flex-1 space-y-6">
-                  <p className="text-xs font-semibold tracking-wide text-slate-400">
-                    今日の気分を3つの質問で調整
-                  </p>
-
-                  {BASE_VIBE_SLIDERS.map((slider) => (
-                    <MoodSlider
-                      key={slider.key}
-                      label={slider.mainLabel}
-                      caption={`${slider.leftLabel} ←→ ${slider.rightLabel}`}
-                      value={vibes[slider.key]}
-                      onChange={(val) =>
-                        setVibes((prev) => ({ ...prev, [slider.key]: val }))
-                      }
-                    />
-                  ))}
-
-                  {/* 詳細 2軸：3本のすぐ下に出す */}
-                  {showAdvancedVibes && (
-                    <div className="mt-2 space-y-4">
-                      {ADVANCED_VIBE_SLIDERS.map((slider) => (
-                        <MoodSlider
-                          key={slider.key}
-                          label={slider.mainLabel}
-                          caption={`${slider.leftLabel} ←→ ${slider.rightLabel}`}
-                          value={vibes[slider.key]}
-                          onChange={(val) =>
-                            setVibes((prev) => ({
-                              ...prev,
-                              [slider.key]: val,
-                            }))
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedVibes((v) => !v)}
-                    className="inline-flex items-center gap-1 text-xs text-slate-300 underline underline-offset-4 hover:text-slate-50"
-                  >
-                    {showAdvancedVibes
-                      ? "詳細な気分調整を閉じる"
-                      : "詳細な気分調整（＋2軸）"}
-                  </button>
-                </div>
-
-                {/* 右：サマリー + CTA + Advanced */}
-                <div className="flex w-full flex-col justify-between gap-4 rounded-2xl bg-slate-950/70 p-5 md:max-w-xs lg:max-w-sm">
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold tracking-[0.18em] text-fuchsia-300">
-                      TODAY&apos;S VIBE
-                    </p>
-                    <h3 className="text-lg font-semibold">
-                      今の設定から見つかるゲームの傾向
-                    </h3>
-                    <p className="text-xs text-slate-300">
-                      アクション強め・プレイ時間やや長め・ややまったり寄り。
-                      ストーリーとゲームプレイのバランスが良い、じっくり遊べる良作が中心に並びます。
-                    </p>
-
-                    <div className="flex flex-wrap gap-2 text-[11px]">
-                      <span className="rounded-full bg-fuchsia-500/15 px-3 py-1 text-fuchsia-200">
-                        高評価だけど知られていない
-                      </span>
-                      <span className="rounded-full bg-sky-500/10 px-3 py-1 text-sky-200">
-                        ストーリー重視
-                      </span>
-                      <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-200">
-                        1〜2時間で様子見OK
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      onClick={goToSearchWithMood}
-                      className="h-12 w-full rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-rose-500 text-sm font-semibold shadow-[0_0_40px_rgba(236,72,153,0.35)] transition-transform hover:-translate-y-0.5 hover:shadow-[0_0_60px_rgba(236,72,153,0.5)]"
-                    >
-                      この気分で探す
-                    </Button>
-                    <p className="text-[11px] leading-relaxed text-slate-400">
-                      Steamログイン不要。ボタンを押すと、この気分にマッチしたタイトルだけを優先して並び替えます。
-                    </p>
-                  </div>
-
-                  <div className="mt-2 space-y-3 border-t border-slate-800 pt-3">
-                    <div className="space-y-2 text-[11px] text-slate-300">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-slate-950/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]">
-                        <span className="h-2 w-2 rounded-full bg-sky-400" />
-                        Advanced Filters
-                      </span>
-                      <p>
-                        ストーリーの濃さと「頭をどれくらい使うか」を細かく調整できます。
-                        デフォルトのままでも十分ですが、こだわり派の方はこちらで微調整してください。
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="border-t border-white/10 bg-slate-950/95 py-6 text-center text-[11px] text-slate-400">
-        Hidden Gems for Steam – Concept Mock Page.
-        <br />
-        これはデザイン・構成のモックであり、Valve / Steam とは無関係の非公式コンセプトです。
-      </footer>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+      {particles.map((p) => (
+        <motion.div
+          key={p.id}
+          className="absolute opacity-20 mix-blend-screen"
+          style={{
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            width: p.size,
+            height: p.size,
+            backgroundColor: color,
+            borderRadius: p.type === 0 ? '50%' : p.type === 1 ? '4px' : '0',
+            clipPath: p.type === 2 ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none'
+          }}
+          animate={{
+            y: [0, -100, 0],
+            rotate: [0, 180, 360],
+            scale: [1, 1.5, 1],
+            opacity: [0.1, 0.4, 0.1]
+          }}
+          transition={{ duration: p.duration, repeat: Infinity, ease: "linear" }}
+        />
+      ))}
     </div>
   );
 };
 
-type MoodSliderProps = {
-  label: string;
-  caption: string;
-  value: number; // 0〜4
-  onChange: (value: number) => void;
+const Background = ({ activeVibe }: { activeVibe: VibeData }) => {
+  return (
+    <div className="fixed inset-0 z-0 overflow-hidden bg-[#0f0c29] transition-colors duration-500">
+      <motion.div
+        className="absolute inset-0 opacity-40"
+        animate={{ background: `radial-gradient(circle at 50% 50%, ${activeVibe.colors.primary}40 0%, ${activeVibe.colors.secondary}20 50%, transparent 100%)` }}
+        transition={{ duration: 0.8 }}
+      />
+      <motion.div
+        className="absolute top-[-20%] left-[-10%] w-[80vw] h-[80vw] rounded-full opacity-30 blur-[100px]"
+        animate={{ backgroundColor: activeVibe.colors.primary, x: [0, 50, 0], y: [0, 30, 0] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="absolute bottom-[-20%] right-[-10%] w-[70vw] h-[70vw] rounded-full opacity-30 blur-[80px]"
+        animate={{ backgroundColor: activeVibe.colors.secondary, x: [0, -40, 0], y: [0, -40, 0] }}
+        transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+      />
+      <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: `radial-gradient(white 1px, transparent 1px)`, backgroundSize: '30px 30px' }} />
+      <FloatingParticles color={activeVibe.colors.primary} />
+    </div>
+  );
 };
 
-// 0〜4（VIBE_MAX）を 0〜100 のUIスライダーにマッピング
-const MoodSlider: React.FC<MoodSliderProps> = ({
-  label,
-  caption,
-  value,
-  onChange,
+const StatBar = ({ label, value, color }: { label: string, value: number, color: string }) => {
+  return (
+    <div className="flex flex-col w-full gap-1">
+      <div className="flex justify-between items-end text-xs font-bold text-white opacity-80 font-space">
+        <span className="uppercase tracking-wider">{label}</span>
+        <span>{value}%</span>
+      </div>
+      <div className="h-3 w-full overflow-hidden bg-black/30 rounded-full border border-white/5">
+        <motion.div
+          className="h-full relative rounded-full"
+          style={{ backgroundColor: color }}
+          initial={{ width: 0 }}
+          animate={{ width: `${value}%` }}
+          transition={{ type: "spring", stiffness: 100, damping: 15 }}
+        >
+          <div className="absolute right-0 top-0 bottom-0 w-full bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.4)_50%,transparent_100%)] opacity-50" />
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+const MainCard = ({
+  vibe,
+  isActive,
+  ...props
+}: {
+  vibe: VibeData;
+  isActive: boolean;
+  [key: string]: any;
 }) => {
-  const uiValue = Math.round((value / VIBE_MAX) * 100);
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs font-medium text-slate-200">
-        <span>{label}</span>
-        <span className="text-[11px] font-normal text-slate-400">
-          {caption}
-        </span>
+    <motion.div
+      {...props}
+      className={`${props.className || 'relative'} cursor-grab active:cursor-grabbing group ${isActive ? 'z-30' : 'z-10'}`}
+      whileHover={isActive ? { scale: 1.02 } : { scale: 0.9 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      <div
+        className="w-[340px] h-[460px] md:w-[420px] md:h-[520px] overflow-hidden relative transition-all duration-300 pointer-events-none flex flex-col items-center text-center p-8 bg-[#191923]/70 backdrop-blur-xl border-[3px] rounded-[3rem]"
+        style={{
+          borderColor: isActive ? vibe.colors.primary : 'rgba(255,255,255,0.1)',
+          boxShadow: isActive ? `0 20px 60px -20px ${vibe.colors.primary}60` : 'none',
+        }}
+      >
+        {/* Card Background Decor */}
+        <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent opacity-50" />
+
+        {/* Card Content */}
+        <div className="relative z-10 w-full h-full flex flex-col items-center text-white">
+
+          {/* Icon */}
+          <div className="mt-4 mb-6 relative">
+            <motion.div
+              className="absolute inset-[-20px] rounded-full opacity-40 blur-xl"
+              style={{ background: vibe.colors.primary }}
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 3, repeat: Infinity }}
+            />
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center relative shadow-lg"
+              style={{
+                background: `linear-gradient(135deg, ${vibe.colors.primary}, ${vibe.colors.secondary})`,
+                boxShadow: `0 10px 20px -5px ${vibe.colors.shadow}80`
+              }}
+            >
+              <vibe.icon className="w-12 h-12 text-white drop-shadow-md" />
+            </div>
+          </div>
+
+          {/* Titles */}
+          <div className="mb-8 w-full font-space">
+            <h2 className="text-4xl mb-2 font-bold">
+              {vibe.title}
+            </h2>
+            <div
+              className="inline-block px-3 py-1 font-bold uppercase tracking-widest text-xs bg-white/10 border border-white/10 rounded-full"
+              style={{ color: vibe.colors.primary }}
+            >
+              {vibe.subtitle}
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div
+            className={`w-full space-y-2 px-1.5 transition-all duration-300 ${isActive ? "opacity-100 translate-y-0 delay-100" : "opacity-0 translate-y-4"
+              }`}
+          >
+            {vibe.stats.map((stat, i) => (
+              <StatBar key={i} label={stat.label} value={stat.value} color={vibe.colors.primary} />
+            ))}
+          </div>
+
+          {/* Tags */}
+          <div className="mt-auto flex flex-wrap justify-center gap-2 font-inter">
+            {vibe.tags.map(tag => (
+              <span
+                key={tag}
+                className="text-[10px] px-3 py-1.5 font-bold tracking-wide bg-black/40 rounded-full text-white/80 border border-white/5"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="flex items-center gap-3">
-        <Slider
-          value={[uiValue]}
-          max={100}
-          step={25}
-          className="flex-1"
-          onValueChange={(vals) => {
-            const raw = vals[0] ?? 0;
-            const next = Math.round((raw / 100) * VIBE_MAX);
-            onChange(next);
-          }}
+    </motion.div>
+  );
+};
+
+const SubVibeSelector = ({
+  activeVibe,
+  selectedTags,
+  onToggleTag
+}: {
+  activeVibe: VibeData;
+  selectedTags: string[];
+  onToggleTag: (tagId: string) => void;
+}) => {
+  return (
+    <div className="relative z-30 flex flex-col items-center mt-8 w-full max-w-2xl px-6">
+      <div className="flex flex-wrap justify-center gap-3">
+        {SUB_VIBES.map((tag) => {
+          const isSelected = selectedTags.includes(tag.id);
+
+          return (
+            <motion.button
+              key={tag.id}
+              onClick={() => onToggleTag(tag.id)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`px-5 py-2.5 text-sm font-bold transition-all duration-200 rounded-full border-2 ${isSelected
+                  ? "text-black shadow-lg"
+                  : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+                }`}
+              style={{
+                backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
+                borderColor: isSelected ? activeVibe.colors.primary : undefined,
+                boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
+              }}
+            >
+              <span className="inline-flex items-center gap-1">
+                <span>{tag.label}</span>
+                <Star
+                  className={`w-3 h-3 inline-block ml-1 transition-opacity duration-150 ${isSelected ? "opacity-100 fill-current" : "opacity-0"
+                    }`}
+                />
+              </span>
+            </motion.button>
+
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const Dock = ({
+  vibes,
+  activeVibeId,
+  onSelect
+}: {
+  vibes: VibeData[];
+  activeVibeId: VibeType;
+  onSelect: (vibe: VibeData) => void;
+}) => {
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4">
+      <div className="flex items-center justify-between p-2 transition-all duration-500 bg-[#1a1a2e]/90 border border-white/10 backdrop-blur-2xl rounded-[2rem] shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)]">
+        {vibes.map((vibe) => {
+          const isActive = activeVibeId === vibe.id;
+          return (
+            <button
+              key={vibe.id}
+              onClick={() => onSelect(vibe)}
+              className="relative w-12 h-12 flex items-center justify-center transition-all duration-300 group"
+            >
+              {isActive && (
+                <motion.div
+                  layoutId="dock-active"
+                  className="absolute inset-0 bg-white/10 border border-white/20 rounded-full"
+                  transition={{ type: "spring", bounce: 0.3, duration: 0.6 }}
+                />
+              )}
+              <vibe.icon
+                className={`w-6 h-6 relative z-10 transition-all duration-300 ${isActive ? 'scale-110' : 'text-white/40'}`}
+                style={{
+                  color: isActive ? vibe.colors.primary : undefined,
+                  filter: isActive ? `drop-shadow(0 0 8px ${vibe.colors.primary})` : 'none'
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// --- Main App ---
+
+const Index: React.FC = () => {
+  const [[page, direction], setPage] = useState<[number, number]>([0, 0]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // 後述の navigate 用
+  const navigate = useNavigate();
+
+  const vibeIndex = wrap(0, VIBES.length, page);
+  const activeVibe = VIBES[vibeIndex];
+
+  const prevIndex = wrap(0, VIBES.length, page - 1);
+  const nextIndex = wrap(0, VIBES.length, page + 1);
+  const prev = VIBES[prevIndex];
+  const next = VIBES[nextIndex];
+
+  const paginate = (newDirection: number) => {
+    setPage([page + newDirection, newDirection]);
+  };
+
+  const setVibeById = (vibe: VibeData) => {
+    const targetIndex = VIBES.findIndex((v) => v.id === vibe.id);
+    const currentIndex = vibeIndex;
+    let diff = targetIndex - currentIndex;
+    if (diff > VIBES.length / 2) diff -= VIBES.length;
+    if (diff < -VIBES.length / 2) diff += VIBES.length;
+    setPage([page + diff, diff > 0 ? 1 : -1]);
+  };
+
+  const MAX_SUB_VIBES = 3;
+
+  const toggleTag = (tagId: string) => {
+    setSelectedTags((prev) => {
+      // すでに選択されている → 解除（トグル OFF）
+      if (prev.includes(tagId)) {
+        return prev.filter((id) => id !== tagId);
+      }
+
+      // まだ選ばれていない → 上限チェック
+      if (prev.length < MAX_SUB_VIBES) {
+        // 上限未満ならそのまま追加
+        return [...prev, tagId];
+      }
+
+      // ここに来たら prev.length === MAX_SUB_VIBES
+      // 一番古いもの（先頭）を押し出して、新しいタグを末尾に追加
+      const [, ...rest] = prev; // 先頭を捨てて残りを取得
+      return [...rest, tagId];
+    });
+  };
+
+  return (
+    <div className="min-h-screen relative flex flex-col font-inter selection:bg-white/30 overflow-hidden text-white">
+      <Background activeVibe={activeVibe} />
+
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-6 md:px-12 pointer-events-none">
+        <div className="flex items-center gap-3 pointer-events-auto">
+          <div className="w-10 h-10 flex items-center justify-center transition-all duration-300 rounded-2xl bg-white/10 backdrop-blur-md border-2 border-white/20 shadow-[0_4px_0_rgba(0,0,0,0.2)] text-white">
+            <Gamepad2 className="w-5 h-5" />
+          </div>
+          <span className="text-2xl font-bold tracking-tight drop-shadow-md font-space text-white">
+            VIBE
+          </span>
+        </div>
+      </header>
+
+      <main className="flex-grow flex flex-col items-center justify-center relative z-10 px-4 pt-10 pb-32">
+
+        <div className="relative flex items-center justify-center w-full max-w-6xl h-[520px] shrink-0 touch-none">
+          {/* Back Cards (Static Visuals) */}
+          <div className="absolute left-[5%] xl:left-[20%] hidden md:block opacity-40 scale-90 pointer-events-none z-0">
+            <MainCard vibe={prev} isActive={false} />
+          </div>
+          <div className="absolute right-[5%] xl:right-[20%] hidden md:block opacity-40 scale-90 pointer-events-none z-0">
+            <MainCard vibe={next} isActive={false} />
+          </div>
+
+          {/* Active Card Container */}
+          <div className="z-20 w-[340px] md:w-[420px] h-[460px] md:h-[520px] relative perspective-1000">
+
+            <AnimatePresence initial={false} custom={direction}>
+              <MainCard
+                key={page}
+                vibe={activeVibe}
+                isActive={true}
+                custom={direction}
+                variants={swipeVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.6}
+                onDragEnd={(e, { offset, velocity }) => {
+                  const swipe = swipePower(offset.x, velocity.x);
+                  if (swipe < -swipeConfidenceThreshold) paginate(1);
+                  else if (swipe > swipeConfidenceThreshold) paginate(-1);
+                }}
+                className="absolute inset-0"
+              />
+            </AnimatePresence>
+          </div>
+        </div>
+
+        <SubVibeSelector
+          activeVibe={activeVibe}
+          selectedTags={selectedTags}
+          onToggleTag={toggleTag}
         />
-        <span className="w-10 text-right text-xs text-slate-300">
-          {value}/{VIBE_MAX}
-        </span>
-      </div>
+
+        {/* CTA Button */}
+        <motion.div
+          className="mt-12"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          key={activeVibe.id}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => navigate("/search")}
+            className="group relative px-12 py-5 font-black text-xl overflow-hidden transition-all bg-black/30 text-white/50 border border-white/5 rounded-full hover:bg-white/10 hover:text-white font-space"
+            style={{
+              boxShadow: `0 10px 40px -10px ${activeVibe.colors.primary}90`
+            }}
+          >
+            <div className="relative z-10 flex items-center gap-3">
+              <span className="uppercase tracking-widest text-white">Lets Go</span>
+              <div className="bg-black text-white p-1 rounded-full">
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" style={{ background: `linear-gradient(90deg, ${activeVibe.colors.primary}, ${activeVibe.colors.secondary})` }} />
+          </motion.button>
+        </motion.div>
+
+      </main>
+
+      <Dock
+        vibes={VIBES}
+        activeVibeId={activeVibe.id}
+        onSelect={setVibeById}
+      />
     </div>
   );
 };
