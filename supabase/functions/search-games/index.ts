@@ -213,96 +213,116 @@ const calcFinalRankingScore = (
   baseScore: number,
   moodScore: number
 ): number => {
-  const BASE_WEIGHT = 0.6;
-  const MOOD_WEIGHT = 0.4;
+  // base: 品質フィルター / mood: 気分マッチ度（主役）
+  const BASE_WEIGHT = 0.3;
+  const MOOD_WEIGHT = 0.7;
 
   if (moodScore <= 0) return baseScore;
 
   return BASE_WEIGHT * baseScore + MOOD_WEIGHT * moodScore;
 };
 
-// ★ Base Hidden Gem Score (0〜100) を計算するヘルパー
-//   指標: positive_ratio / reviews / owners / price / playtime / release_year
-//   重み: 40 / 20 / 15 / 10 / 10 / 5
+// ★ Base Score: 「気分マッチの土台となる品質フィルター」寄りに再設計
 const computeBaseScore = (g: {
   positiveRatio: number;
   totalReviews: number;
   estimatedOwners: number;
-  price: number; // cents
+  price: number; // USD 想定 or 正規化済み
   averagePlaytime: number; // hours 想定
   releaseYear: number;
 }) => {
   const currentYear = new Date().getFullYear();
 
-  // 1) positive_ratio: 0〜100 → 0〜1
+  // 1) レビューの質：好評率 (0〜100) → 0〜1
   const pr = Math.max(0, Math.min(100, g.positiveRatio));
   const positiveScore = pr / 100;
 
-  // 2) reviews: 30〜5000 を log スケールで 0〜1
-  let reviewsScore = 0;
+  // 2) レビューの信頼性：件数を log スケールで 0〜1
+  let reviewsReliability = 0;
   if (g.totalReviews > 0) {
-    const minR = 30;
+    const minR = 20;
     const maxR = 5000;
     const clamped = Math.min(maxR, Math.max(minR, g.totalReviews));
     const logMin = Math.log10(minR);
     const logMax = Math.log10(maxR);
-    reviewsScore = (Math.log10(clamped) - logMin) / (logMax - logMin);
-    if (!Number.isFinite(reviewsScore)) reviewsScore = 0;
-    reviewsScore = Math.max(0, Math.min(1, reviewsScore));
+    reviewsReliability = (Math.log10(clamped) - logMin) / (logMax - logMin);
+    if (!Number.isFinite(reviewsReliability)) reviewsReliability = 0;
+    reviewsReliability = Math.max(0, Math.min(1, reviewsReliability));
   }
 
-  // 3) owners:「隠れ度」重視。〜20k なら満点、200k で 0 に落ちる
-  let ownersScore = 0;
-  if (g.estimatedOwners > 0) {
-    const ideal = 20000; // ここまでは「かなり隠れてる」
-    const maxOwners = 200000;
-    const clamped = Math.min(maxOwners, Math.max(0, g.estimatedOwners));
-    if (clamped <= ideal) {
-      ownersScore = 1;
-    } else {
-      ownersScore = 1 - (clamped - ideal) / (maxOwners - ideal);
-    }
-    ownersScore = Math.max(0, Math.min(1, ownersScore));
-  }
+  // 「質 × 信頼性」を 0〜1 にまとめる（最低でも質の40%は反映）
+  const reviewScore = positiveScore * (0.4 + 0.6 * reviewsReliability);
 
-  // 4) price: 2〜40ドルを想定。安いほど高スコア
-  let priceScore = 0;
+  // 3) 価格スコア：極端な罠価格を避けるための軽い補正
+  //   - 5〜40ドル → ほぼフラット（0.8〜1.0）
+  //   - 1ドル未満 or 60ドル超 → やや減点
+  let priceScore = 1;
   if (g.price > 0) {
-    const priceUsd = g.price;
-    const minPrice = 2;
-    const maxPrice = 40;
-    const clamped = Math.min(maxPrice, Math.max(minPrice, priceUsd));
-    priceScore = 1 - (clamped - minPrice) / (maxPrice - minPrice); // 2ドルで1, 40ドルで0
-    priceScore = Math.max(0, Math.min(1, priceScore));
+    const price = g.price;
+    if (price < 1) {
+      priceScore = 0.6;
+    } else if (price < 5) {
+      priceScore = 0.8;
+    } else if (price <= 40) {
+      priceScore = 1.0;
+    } else if (price <= 60) {
+      priceScore = 0.85;
+    } else {
+      priceScore = 0.7;
+    }
   }
 
-  // 5) playtime: 0〜50時間を 0〜1 に正規化（長く遊ばれているほど高評価）
-  let playtimeScore = 0;
+  // 4) プレイ時間スコア：
+  //   - 0〜2時間 → かなり低め（体験として薄い可能性）
+  //   - 2〜20時間 → 徐々に 1.0 へ
+  //   - 20時間以上 → 1.0 で頭打ち（それ以上は盛りすぎない）
+  let playtimeScore = 0.5;
   if (g.averagePlaytime > 0) {
-    const maxPlay = 50;
-    const clamped = Math.min(maxPlay, Math.max(0, g.averagePlaytime));
-    playtimeScore = clamped / maxPlay;
-    playtimeScore = Math.max(0, Math.min(1, playtimeScore));
+    const h = g.averagePlaytime;
+    if (h <= 2) {
+      playtimeScore = 0.3;
+    } else if (h >= 20) {
+      playtimeScore = 1.0;
+    } else {
+      // 2〜20h を 0.3〜1.0 の間で線形に
+      const t = (h - 2) / (20 - 2);
+      playtimeScore = 0.3 + t * (1.0 - 0.3);
+    }
   }
 
-  // 6) release_year: 新しいほど高スコア。10年差までを見る
-  let yearScore = 0.5;
+  // 5) リリース年スコア：
+  //   - 0〜5年以内 → 高評価
+  //   - 10年以上前 → 少し減点
+  let yearScore = 0.8;
   if (g.releaseYear && Number.isFinite(g.releaseYear)) {
-    const diff = Math.max(0, Math.min(10, currentYear - g.releaseYear));
-    yearScore = 1 - diff / 10; // 今年=1, 10年前=0
-    yearScore = Math.max(0, Math.min(1, yearScore));
+    const diff = currentYear - g.releaseYear;
+    if (diff <= 0) {
+      yearScore = 1.0;
+    } else if (diff <= 5) {
+      yearScore = 0.9;
+    } else if (diff <= 10) {
+      yearScore = 0.8;
+    } else if (diff <= 20) {
+      yearScore = 0.6;
+    } else {
+      yearScore = 0.5;
+    }
   }
 
-  // 重み付け合計（重みは 40/20/15/10/10/5 = 100）
-  const score =
-    positiveScore * 40 +
-    reviewsScore * 20 +
-    ownersScore * 15 +
-    priceScore * 10 +
-    playtimeScore * 10 +
-    yearScore * 5;
+  // ★ 所有者数はここでは評価に使わない（気分検索の目的とズレるため）
+  //    必要なら ownersScore をごく弱く入れることも可能だが、現時点では 1.0 固定
+  const ownersScore = 1.0;
+  void ownersScore; // eslint 対策（@ts-nocheck なら不要だが一応）
 
-  // 少しだけ見やすく 0.1 刻みに丸める（好みで変えてOK）
+  // 重み付け合計（合計 = 100）
+  //  - reviewScore      : 60
+  //  - playtimeScore    : 15
+  //  - priceScore       : 15
+  //  - yearScore        : 10
+  const score =
+    reviewScore * 60 + playtimeScore * 15 + priceScore * 15 + yearScore * 10;
+
+  // 見やすく 0.1 刻みに丸める
   return Math.round(score * 10) / 10;
 };
 
