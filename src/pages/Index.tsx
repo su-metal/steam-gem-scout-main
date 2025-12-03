@@ -375,29 +375,32 @@ const SubVibeSelector = ({
           const isSelected = selectedTags.includes(tag.id);
 
           return (
-            <motion.button
-              key={tag.id}
-              onClick={() => onToggleTag(tag.id)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`px-5 py-2.5 text-sm font-bold transition-all duration-200 rounded-full border-2 ${isSelected
-                  ? "text-black shadow-lg"
-                  : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
-                }`}
-              style={{
-                backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
-                borderColor: isSelected ? activeVibe.colors.primary : undefined,
-                boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
-              }}
-            >
-              <span className="inline-flex items-center gap-1">
-                <span>{tag.label}</span>
-                <Star
-                  className={`w-3 h-3 inline-block ml-1 transition-opacity duration-150 ${isSelected ? "opacity-100 fill-current" : "opacity-0"
-                    }`}
-                />
-              </span>
-            </motion.button>
+           <motion.button
+  key={tag.id}
+  onClick={() => onToggleTag(tag.id)}
+  whileHover={{ scale: 1.05 }}
+  whileTap={{ scale: 0.95 }}
+  className={`inline-flex items-center justify-center px-4 py-2 text-sm font-bold transition-all duration-200 rounded-full border-2 ${
+    isSelected
+      ? "text-black shadow-lg"
+      : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+  }`}
+  style={{
+    backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
+    borderColor: isSelected ? activeVibe.colors.primary : undefined,
+    boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
+  }}
+>
+  <span className="inline-flex items-center justify-center gap-1">
+    <span className="text-center">{tag.label}</span>
+    {/* ★ は常に描画しておき、選択時だけ表示 */}
+    <Star
+      className={`w-3 h-3 transition-opacity duration-150 ${
+        isSelected ? "opacity-100 fill-current" : "opacity-0"
+      }`}
+    />
+  </span>
+</motion.button>
 
           );
         })}
