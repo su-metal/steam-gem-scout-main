@@ -829,6 +829,31 @@ export default function GameDetail() {
     },
   };
 
+  // ★ Pattern L 用：カードのカプセル行に使う色とラベル
+  const PLAYER_POLARITY_META: Record<
+    PlayerFitTag["polarity"],
+    { label: string; abbr: string; color: string; soft: string }
+  > = {
+    positive: {
+      label: "Positive",
+      abbr: "POS",
+      color: "#22c55e",   // emerald-500
+      soft: "#bbf7d0",    // emerald-100
+    },
+    neutral: {
+      label: "Neutral",
+      abbr: "NEU",
+      color: "#38bdf8",   // sky-400
+      soft: "#e0f2fe",    // sky-100
+    },
+    negative: {
+      label: "Negative",
+      abbr: "NEG",
+      color: "#fb923c",   // orange-400
+      soft: "#ffedd5",    // orange-100
+    },
+  };
+
 
   // ★ 詳細カード用の代表レビュー（最大2件／極性ごと）
   const activePositiveReviews =
@@ -1779,14 +1804,15 @@ export default function GameDetail() {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ type: "spring", stiffness: 140, damping: 16 }}
                             viewport={{ once: true, amount: 0.2 }}
-                            className="relative max-w-5xl mx-auto flex gap-4 md:gap-6 overflow-hidden"
+                            className="relative max-w-5xl mx-auto flex gap-4 md:gap-6"
                           >
                             {/* 左：プレイヤータイプカード一覧 */}
                             <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-md items-stretch">
                               {allPlayerFitTags.map((tag, index) => {
                                 const isActive = activePlayerFitId === tag.id;
+                                const polarityMeta = PLAYER_POLARITY_META[tag.polarity];
 
-                                // モバイルは 2 カラムで最後の 2 枚を最終行とみなす
+                                // モバイルは 2 カラムで最後の 2 枚を最終行とみなす（ロジックはそのまま）
                                 const isLastRow = index >= allPlayerFitTags.length - 2;
                                 const bubblePositionClass = isLastRow
                                   ? "bottom-full mb-2"
@@ -1820,40 +1846,48 @@ export default function GameDetail() {
                                         delay: index * 0.06,
                                       }}
                                       viewport={{ once: true, amount: 0.25 }}
-                                      className={`relative w-full rounded-2xl p-3 text-left shadow-lg/40 border border-white/5 overflow-hidden ${isActive
-                                        ? "border-2 border-fuchsia-300/80 bg-fuchsia-500/10 shadow-[0_0_0_1px_rgba(236,72,153,0.45)]"
-                                        : "border border-white/5 bg-slate-900/70"
-                                        }`}
-
+                                      className={`
+  relative flex w-full flex-col rounded-3xl border border-slate-700/60
+  bg-slate-900/80 p-3.5 text-left
+  shadow-[0_14px_30px_rgba(15,23,42,0.85)]
+  ${isActive ? "ring-2 ring-fuchsia-300/80 ring-offset-0" : ""}
+`}
                                     >
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-lg">{tag.icon}</span>
-                                        <span className="text-[13px] font-semibold leading-snug">
-                                          {tag.label}
-                                        </span>
+                                      {/* ▼ Pattern H: Badge & Stripe */}
+                                      {/* 斜めストライプテクスチャ */}
+                                      <div
+                                        className="pointer-events-none absolute inset-0 opacity-50"
+                                        style={{
+                                          backgroundImage:
+                                            "repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(255,255,255,0.04) 6px, rgba(255,255,255,0.04) 10px)",
+                                        }}
+                                      />
+
+                                      {/* 左の丸バッジ＋ラベル */}
+                                      <div className="relative mb-2 flex items-center gap-2">
+                                        <div
+                                          className="flex h-9 w-9 items-center justify-center rounded-full border-2 bg-slate-900 text-[10px] font-bold tracking-[0.18em]"
+                                          style={{ borderColor: polarityMeta.color, color: polarityMeta.color }}
+                                        >
+                                          {polarityMeta.abbr}
+                                        </div>
+                                        <div className="flex flex-col leading-tight">
+                                          <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                                            Review tone
+                                          </span>
+                                          <span
+                                            className="text-xs font-semibold"
+                                            style={{ color: polarityMeta.soft }}
+                                          >
+                                            {polarityMeta.label}
+                                          </span>
+                                        </div>
                                       </div>
 
-                                      <div className="flex gap-1 mb-1">
-                                        {SCORE_STEPS.map((step) => (
-                                          <div
-                                            key={step}
-                                            className={`h-1.5 flex-1 rounded-full ${getPlayerFitHeatColor(
-                                              tag,
-                                              step
-                                            )}`}
-                                          />
-                                        ))}
+                                      {/* タイトル（タグ名） */}
+                                      <div className="relative text-[13px] font-medium leading-snug line-clamp-3">
+                                        {tag.label}
                                       </div>
-
-                                      {/* {tag.sub && (
-                                        <p className="mt-1 text-[11px] text-slate-200 mb-1 line-clamp-2">
-                                          {tag.sub}
-                                        </p>
-                                      )} */}
-
-
-                                      {/* うっすら光のグラデーション */}
-                                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-emerald-500/10" />
                                     </motion.button>
 
                                     {/* ★ モバイル用：カードの近くにふきだし表示（既存挙動を維持） */}
