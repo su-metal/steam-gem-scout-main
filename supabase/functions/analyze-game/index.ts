@@ -247,8 +247,8 @@ function buildFallbackAnalysis(
   };
 }
 
-const RECENT_REVIEW_LIMIT = 40;
-const HISTORICAL_REVIEW_LIMIT = 40;
+const RECENT_REVIEW_LIMIT = 25;
+const HISTORICAL_REVIEW_LIMIT = 25;
 
 // Reduce and sanitize review text to avoid oversized prompts
 function prepareReviews(
