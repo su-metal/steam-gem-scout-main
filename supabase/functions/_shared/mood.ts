@@ -55,13 +55,15 @@ export const TAG_TO_MOOD: Record<string, TagWeights> = {
   // --- RPG / 物語重視 ---
   RPG: { story: 1.5, brain: 0.8, session: 1.8 },
   JRPG: { story: 2.0, brain: 0.8, session: 2.2 },
-  "Story Rich": { story: 2.5 },
-  "Visual Novel": {
-    operation: -2.0,
-    story: 3.0,
-    session: 1.5,
-    brain: 0.8,
-  },
+
+  "Visual Novel": { story: 2.5, brain: 0.8, tension: -0.5 },
+  "Story Rich": { story: 2.0 },
+  Narrative: { story: 2.0 },
+  "Interactive Fiction": { story: 2.3, brain: 1.0 },
+  "Walking Simulator": { story: 1.8, tension: -1.5 },
+  Detective: { story: 1.5, brain: 1.5 },
+  Mystery: { story: 1.5, brain: 1.2 },
+
   Adventure: { story: 1.0, tension: 0.2 },
 
   // --- 思考系 ---
@@ -80,6 +82,32 @@ export const TAG_TO_MOOD: Record<string, TagWeights> = {
   Short: { session: -2.0 },
   "Short Game": { session: -2.0 },
   "Open World": { session: 2.0 },
+
+  // --- Sports / Racing 系（ストーリー薄い傾向） ---
+  Sports: { operation: 1.5, tension: 1.0, story: -2.0 },
+  Soccer: { operation: 1.5, tension: 1.0, story: -2.0 },
+  Football: { operation: 1.5, tension: 1.0, story: -2.0 },
+  Basketball: { operation: 1.5, tension: 1.0, story: -2.0 },
+  Baseball: { operation: 1.5, tension: 1.0, story: -2.0 },
+
+  Racing: { operation: 1.8, tension: 1.5, story: -2.2 },
+  "Racing Sim": { operation: 1.8, tension: 1.5, story: -2.2 },
+  Driving: { operation: 1.5, tension: 1.2, story: -2.0 },
+  "Car Racing": { operation: 1.8, tension: 1.5, story: -2.2 },
+  Motorsport: { operation: 1.8, tension: 1.5, story: -2.2 },
+
+  // --- 対戦専 / 競技性メイン ---
+  "Battle Royale": { operation: 1.8, tension: 2.0, story: -2.0 },
+  MOBA: { operation: 1.8, tension: 1.8, brain: 1.2, story: -1.8 },
+  "Arena Shooter": { operation: 2.0, tension: 1.8, story: -1.8 },
+  "Online PvP": { operation: 1.8, tension: 1.8, story: -1.8 },
+  "Team-Based Shooter": { operation: 2.0, tension: 1.8, story: -1.8 },
+
+  // --- パーティゲーム / ミニゲーム集 ---
+  "Party Game": { operation: 1.2, tension: 0.8, session: -1.5, story: -1.8 },
+  "Mini Games": { operation: 1.2, tension: 0.8, session: -1.5, story: -1.8 },
+  "4 Player Local": { operation: 1.2, tension: 0.8, story: -1.5 },
+  "Local Multiplayer": { operation: 1.2, tension: 0.8, story: -1.5 },
 
   // TODO: 実際の Steam タグを見ながら、ここにさらに追加していく
 };
@@ -183,7 +211,21 @@ export function applyAiMoodAdjustment(
   const out: MoodVector = { ...base };
 
   // --- Story 濃度: Play-focused ↔ Narrative ---
-  if (/(物語重視|ストーリー重視|物語|ストーリー|narrative|story[- ]rich)/.test(text)) {
+  // まず「ストーリーがほとんどない/薄い」系を下げる
+  if (
+    /(ストーリー(性)?|物語)(が)?(ほとんど|あまり)?(ない|薄い|皆無|希薄)/.test(
+      text
+    ) ||
+    /(no (real )?story|little story|hardly any story|minimal story)/i.test(text)
+  ) {
+    bumpAxis(out, "story", -0.25);
+  }
+
+  // 次にポジティブ文脈で上げる
+  if (
+    /(物語重視|ストーリー重視|物語が良い|ストーリーが良い)/.test(text) ||
+    /(narrative (is )?(great|good)|story[- ]rich)/i.test(text)
+  ) {
     bumpAxis(out, "story", 0.18);
   }
   if (/(キャラ|キャラクター|会話|ドラマ)/.test(text)) {
@@ -191,7 +233,11 @@ export function applyAiMoodAdjustment(
   }
 
   // --- テンション: Cozy ↔ Intense ---
-  if (/(ホラー|恐怖|スリル|緊張感|サバイバル|心臓に悪い|びっくり|jumpscare|intense|tense)/.test(text)) {
+  if (
+    /(ホラー|恐怖|スリル|緊張感|サバイバル|心臓に悪い|びっくり|jumpscare|intense|tense)/.test(
+      text
+    )
+  ) {
     bumpAxis(out, "tension", 0.22);
   }
   if (/(まったり|癒し|ゆったり|リラックス|chill|cozy|のんびり)/.test(text)) {
@@ -199,7 +245,11 @@ export function applyAiMoodAdjustment(
   }
 
   // --- 操作量: Passive ↔ Active ---
-  if (/(アクション|爽快|テンポが速い|スピーディ|忙しい操作|コンボ|連打|dodgeroll|bullet hell)/.test(text)) {
+  if (
+    /(アクション|爽快|テンポが速い|スピーディ|忙しい操作|コンボ|連打|dodgeroll|bullet hell)/.test(
+      text
+    )
+  ) {
     bumpAxis(out, "operation", 0.18);
   }
   if (/(放置|眺める|idle|オートプレイ|自動で進む)/.test(text)) {
@@ -207,7 +257,11 @@ export function applyAiMoodAdjustment(
   }
 
   // --- 思考負荷: Simple ↔ Deep ---
-  if (/(戦略|ストラテジー|タクティクス|戦術|パズル|頭を使う|思考|ビルド構築|デッキ構築|tactical|strategy|planning)/.test(text)) {
+  if (
+    /(戦略|ストラテジー|タクティクス|戦術|パズル|頭を使う|思考|ビルド構築|デッキ構築|tactical|strategy|planning)/.test(
+      text
+    )
+  ) {
     bumpAxis(out, "brain", 0.22);
   }
   if (/(単純|シンプル|気軽|カジュアル|難しくない)/.test(text)) {
@@ -215,10 +269,18 @@ export function applyAiMoodAdjustment(
   }
 
   // --- セッション長: Short ↔ Long ---
-  if (/(短時間|サクッと|スキマ時間|1時間程度|30分程度|ショートセッション|short session|bite[- ]sized)/.test(text)) {
+  if (
+    /(短時間|サクッと|スキマ時間|1時間程度|30分程度|ショートセッション|short session|bite[- ]sized)/.test(
+      text
+    )
+  ) {
     bumpAxis(out, "session", -0.18);
   }
-  if (/(長時間|腰を据えて|ボリューム|周回プレイ|やり込み|何十時間|長く遊べる|long session)/.test(text)) {
+  if (
+    /(長時間|腰を据えて|ボリューム|周回プレイ|やり込み|何十時間|長く遊べる|long session)/.test(
+      text
+    )
+  ) {
     bumpAxis(out, "session", 0.18);
   }
 

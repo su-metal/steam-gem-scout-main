@@ -132,6 +132,52 @@ const SUB_VIBES = [
   { id: "strategic", label: "Strategic" },    // 戦略性・計画性
 ];
 
+// --- Experience Classes per Vibe ---
+
+type ExperienceClassOption = {
+  id: string;
+  label: string;
+};
+
+const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
+  Chill: [
+    { id: "cozy-relaxation", label: "Cozy Relaxation" },
+    { id: "build-craft", label: "Build & Craft" },
+    { id: "puzzle-light", label: "Puzzle / Light" },
+    { id: "exploration", label: "Calm Exploration" },
+    { id: "any", label: "Any" },
+  ],
+  Focus: [
+    { id: "tactical-strategy", label: "Tactical Strategy" },
+    { id: "puzzle-deep", label: "Deep Puzzle" },
+    { id: "grand-strategy", label: "Grand Strategy (Light)" },
+    { id: "efficiency-build", label: "Efficiency Build" },
+    { id: "any", label: "Any" },
+  ],
+  Story: [
+    { id: "narrative-adventure", label: "Narrative Adventure" },
+    { id: "immersive-exploration", label: "Immersive Exploration" },
+    { id: "story-puzzle", label: "Story Puzzle" },
+    { id: "cozy-story", label: "Cozy Story" },
+    { id: "any", label: "Any" },
+  ],
+  Speed: [
+    { id: "action-combat", label: "Action Combat" },
+    { id: "shooter-aim", label: "Shooter / Aim" },
+    { id: "racing", label: "Racing" },
+    { id: "roguelike-fast", label: "Fast Roguelike" },
+    { id: "any", label: "Any" },
+  ],
+  Short: [
+    { id: "run-based", label: "Run-based Roguelike" },
+    { id: "short-action", label: "Short Action Stages" },
+    { id: "arcade-shooter", label: "Arcade Shooter" },
+    { id: "short-puzzle", label: "Short Puzzle" },
+    { id: "any", label: "Any" },
+  ],
+};
+
+
 
 // --- Utilities ---
 
@@ -183,6 +229,8 @@ const swipeVariants = {
     }
   })
 };
+
+
 
 // --- Components ---
 
@@ -273,10 +321,12 @@ const StatBar = ({ label, value, color }: { label: string, value: number, color:
 const MainCard = ({
   vibe,
   isActive,
+  experienceClassLabel,
   ...props
 }: {
   vibe: VibeData;
   isActive: boolean;
+  experienceClassLabel?: string;
   [key: string]: any;
 }) => {
 
@@ -288,7 +338,7 @@ const MainCard = ({
       whileTap={{ scale: 0.98 }}
     >
       <div
-        className="w-[340px] h-[460px] md:w-[420px] md:h-[520px] overflow-hidden relative transition-all duration-300 pointer-events-none flex flex-col items-center text-center p-8 bg-[#191923]/70 backdrop-blur-xl border-[3px] rounded-[3rem]"
+        className="w-[340px] h-[480px] md:w-[420px] md:h-[520px] overflow-hidden relative transition-all duration-300 pointer-events-none flex flex-col items-center text-center p-8 bg-[#191923]/70 backdrop-blur-xl border-[3px] rounded-[3rem]"
         style={{
           borderColor: isActive ? vibe.colors.primary : 'rgba(255,255,255,0.1)',
           boxShadow: isActive ? `0 20px 60px -20px ${vibe.colors.primary}60` : 'none',
@@ -301,7 +351,7 @@ const MainCard = ({
         <div className="relative z-10 w-full h-full flex flex-col items-center text-white">
 
           {/* Icon */}
-          <div className="mt-4 mb-6 relative">
+          <div className="mt-2 mb-4 relative">
             <motion.div
               className="absolute inset-[-20px] rounded-full opacity-40 blur-xl"
               style={{ background: vibe.colors.primary }}
@@ -319,18 +369,54 @@ const MainCard = ({
             </div>
           </div>
 
-          {/* Titles */}
-          <div className="mb-8 w-full font-space">
-            <h2 className="text-4xl mb-2 font-bold">
+          {/* Titles + Experience Focus pill */}
+          <div className="mb-6 w-full font-space flex flex-col items-center gap-3">
+            <h2 className="text-4xl font-bold">
               {vibe.title}
             </h2>
+
             <div
               className="inline-block px-3 py-1 font-bold uppercase tracking-widest text-xs bg-white/10 border border-white/10 rounded-full"
               style={{ color: vibe.colors.primary }}
             >
               {vibe.subtitle}
             </div>
+
+            {experienceClassLabel && (
+              <motion.div
+                key={experienceClassLabel} // ラベルが変わるたびにリマウントしてアニメ再生
+                initial={{
+                  scale: 0.9,
+                  opacity: 0,
+                  boxShadow: "0 0 0 0 rgba(0,0,0,0)",
+                }}
+                animate={{
+                  scale: 1,
+                  opacity: 1,
+                  boxShadow: `0 0 18px ${vibe.colors.primary}66`,
+                }}
+                transition={{ type: "spring", stiffness: 260, damping: 18 }}
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 border border-white/15 text-[11px] uppercase tracking-[0.18em] text-white/70"
+              >
+                <motion.span
+                  className="w-1.5 h-1.5 rounded-full"
+                  initial={{
+                    scale: 1,
+                    boxShadow: `0 0 0 0 ${vibe.colors.primary}55`,
+                  }}
+                  animate={{
+                    scale: 1.4,
+                    boxShadow: `0 0 0 8px ${vibe.colors.primary}00`,
+                  }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  style={{ backgroundColor: vibe.colors.primary }}
+                />
+                <span>{experienceClassLabel}</span>
+              </motion.div>
+            )}
+
           </div>
+
 
           {/* Stats */}
           <div
@@ -359,6 +445,71 @@ const MainCard = ({
   );
 };
 
+const ExperienceClassSelector = ({
+  activeVibe,
+  selectedId,
+  onSelect,
+}: {
+  activeVibe: VibeData;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) => {
+  const options = EXPERIENCE_CLASSES[activeVibe.id];
+
+  // activeVibe が変わったときに以前の選択が外れていたら、先頭をデフォルトとする
+  const effectiveSelectedId =
+    selectedId && options.some((o) => o.id === selectedId)
+      ? selectedId
+      : options[0].id;
+
+  return (
+    <div className="relative z-30 flex flex-col items-center mt-6 w-full max-w-2xl px-6">
+      {/* ヘッダー行 */}
+      <div className="flex w-full items-baseline justify-between mb-2 px-1">
+        <span className="text-[10px] tracking-[0.25em] uppercase text-white/70">
+          EXPERIENCE FOCUS
+        </span>
+        <span className="text-[10px] text-white/50">
+          Tune what &quot;{activeVibe.title}&quot; means
+        </span>
+      </div>
+
+      {/* ピルレール */}
+      <div className="flex w-full gap-2 overflow-x-auto py-1">
+        {options.map((opt) => {
+          const isActive = opt.id === effectiveSelectedId;
+          return (
+            <motion.button
+              key={opt.id}
+              type="button"
+              onClick={() => onSelect(opt.id)}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              className={`inline-flex items-center justify-center px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${isActive
+                ? "shadow-lg"
+                : "bg-black/40 border-white/15 text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
+              style={
+                isActive
+                  ? {
+                    background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.95))`,
+                    borderColor: activeVibe.colors.primary,
+                    color: "#fff",
+                    boxShadow: `0 0 22px -6px ${activeVibe.colors.primary}`,
+                  }
+                  : undefined
+              }
+            >
+              {opt.label}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+
 const SubVibeSelector = ({
   activeVibe,
   selectedTags,
@@ -370,37 +521,40 @@ const SubVibeSelector = ({
 }) => {
   return (
     <div className="relative z-30 flex flex-col items-center mt-8 w-full max-w-2xl px-6">
+      {/* Apple風の短い説明文 */}
+      <p className="text-[11px] text-white/40 tracking-wide mb-4 text-center max-w-xs">
+        Add a touch of today’s mood — subtle nuances that shape how the experience feels.
+      </p>
+
       <div className="flex flex-wrap justify-center gap-3">
         {SUB_VIBES.map((tag) => {
           const isSelected = selectedTags.includes(tag.id);
 
           return (
-           <motion.button
-  key={tag.id}
-  onClick={() => onToggleTag(tag.id)}
-  whileHover={{ scale: 1.05 }}
-  whileTap={{ scale: 0.95 }}
-  className={`inline-flex items-center justify-center px-4 py-2 text-sm font-bold transition-all duration-200 rounded-full border-2 ${
-    isSelected
-      ? "text-black shadow-lg"
-      : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
-  }`}
-  style={{
-    backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
-    borderColor: isSelected ? activeVibe.colors.primary : undefined,
-    boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
-  }}
->
-  <span className="inline-flex items-center justify-center gap-1">
-    <span className="text-center">{tag.label}</span>
-    {/* ★ は常に描画しておき、選択時だけ表示 */}
-    <Star
-      className={`w-3 h-3 transition-opacity duration-150 ${
-        isSelected ? "opacity-100 fill-current" : "opacity-0"
-      }`}
-    />
-  </span>
-</motion.button>
+            <motion.button
+              key={tag.id}
+              onClick={() => onToggleTag(tag.id)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className={`inline-flex items-center justify-center px-4 py-2 text-sm font-bold transition-all duration-200 rounded-full border-2 ${isSelected
+                ? "text-black shadow-lg"
+                : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+                }`}
+              style={{
+                backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
+                borderColor: isSelected ? activeVibe.colors.primary : undefined,
+                boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
+              }}
+            >
+              <span className="inline-flex items-center justify-center gap-1">
+                <span className="text-center">{tag.label}</span>
+                {/* ★ は常に描画しておき、選択時だけ表示 */}
+                <Star
+                  className={`w-3 h-3 transition-opacity duration-150 ${isSelected ? "opacity-100 fill-current" : "opacity-0"
+                    }`}
+                />
+              </span>
+            </motion.button>
 
           );
         })}
@@ -455,13 +609,30 @@ const Dock = ({
 
 const Index: React.FC = () => {
   const [[page, direction], setPage] = useState<[number, number]>([0, 0]);
+
+  // ★ Experience Class の選択状態（null = まだ未選択）
+  const [selectedExperienceClass, setSelectedExperienceClass] =
+    useState<string | null>(null);
+
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // 後述の navigate 用
   const navigate = useNavigate();
 
+
   const vibeIndex = wrap(0, VIBES.length, page);
   const activeVibe = VIBES[vibeIndex];
+
+  const optionsForActive = EXPERIENCE_CLASSES[activeVibe.id];
+  const effectiveExperienceId =
+    selectedExperienceClass &&
+      optionsForActive.some((o) => o.id === selectedExperienceClass)
+      ? selectedExperienceClass
+      : optionsForActive[0].id;
+
+  const activeExperienceLabel =
+    optionsForActive.find((o) => o.id === effectiveExperienceId)?.label ?? "";
+
 
   const prevIndex = wrap(0, VIBES.length, page - 1);
   const nextIndex = wrap(0, VIBES.length, page + 1);
@@ -519,9 +690,13 @@ const Index: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-grow flex flex-col items-center justify-center relative z-10 px-4 pt-10 pb-32">
-
-        <div className="relative flex items-center justify-center w-full max-w-6xl h-[520px] shrink-0 touch-none">
+      <main className="mt-6 flex-grow flex flex-col items-center justify-center relative z-10 px-4 pt-10 pb-32">
+        <ExperienceClassSelector
+          activeVibe={activeVibe}
+          selectedId={effectiveExperienceId}
+          onSelect={setSelectedExperienceClass}
+        />
+        <div className="relative flex items-center justify-center w-full max-w-6xl h-[520px] shrink-0 touch-pan-y md:touch-none">
           {/* Back Cards (Static Visuals) */}
           <div className="absolute left-[5%] xl:left-[20%] hidden md:block opacity-40 scale-90 pointer-events-none z-0">
             <MainCard vibe={prev} isActive={false} />
@@ -530,14 +705,16 @@ const Index: React.FC = () => {
             <MainCard vibe={next} isActive={false} />
           </div>
 
+
           {/* Active Card Container */}
-          <div className="z-20 w-[340px] md:w-[420px] h-[460px] md:h-[520px] relative perspective-1000">
+          <div className="z-20 w-[340px] md:w-[420px] h-[480px] md:h-[520px] relative perspective-1000">
 
             <AnimatePresence initial={false} custom={direction}>
               <MainCard
                 key={page}
                 vibe={activeVibe}
                 isActive={true}
+                experienceClassLabel={activeExperienceLabel}
                 custom={direction}
                 variants={swipeVariants}
                 initial="enter"
@@ -574,7 +751,15 @@ const Index: React.FC = () => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate("/search")}
+            onClick={() =>
+              navigate("/search", {
+                state: {
+                  primaryVibePreset: activeVibe.id,
+                  subVibes: selectedTags,
+                  experienceClass: selectedExperienceClass ?? "any",
+                },
+              })
+            }
             className="group relative px-12 py-5 font-black text-xl overflow-hidden transition-all bg-black/30 text-white/50 border border-white/5 rounded-full hover:bg-white/10 hover:text-white font-space"
             style={{
               boxShadow: `0 10px 40px -10px ${activeVibe.colors.primary}90`

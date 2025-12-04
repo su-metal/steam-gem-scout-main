@@ -35,6 +35,7 @@ interface SearchBody {
   recencyWeight?: number;
   userMood?: Partial<Record<MoodSliderId, number>>;
   vibes?: Partial<Record<MoodSliderId, number>>;
+  aiTags?: string[];
 }
 
 const toNumber = (val: any, fallback = 0): number => {
@@ -83,6 +84,43 @@ const normalizeReliability = (
   return RELIABILITY_VALUES.includes(value as string)
     ? (value as "high" | "medium" | "low")
     : null;
+};
+
+// ---- Low-story genre detection (Narrative フィルタ用の保険) ----
+
+const LOW_STORY_GENRES = ["sports", "racing", "fighting"];
+const LOW_STORY_TAGS = [
+  "sports",
+  "football",
+  "soccer",
+  "basketball",
+  "baseball",
+  "racing",
+  "driving",
+  "car racing",
+  "motorsport",
+  "fighting",
+  "mma",
+  "wrestling",
+];
+
+const isLowStoryGenreGame = (g: any): boolean => {
+  const genresRaw =
+    (Array.isArray(g.genres) && g.genres) ||
+    (Array.isArray(g.store_genres) && g.store_genres) ||
+    [];
+  const tagsRaw = Array.isArray(g.tags) ? g.tags : [];
+
+  const genres = genresRaw.map((s: string) =>
+    typeof s === "string" ? s.toLowerCase() : s
+  );
+  const tags = tagsRaw.map((s: string) =>
+    typeof s === "string" ? s.toLowerCase() : s
+  );
+
+  const hitGenre = genres.some((x) => LOW_STORY_GENRES.includes(x));
+  const hitTag = tags.some((x) => LOW_STORY_TAGS.includes(x));
+  return hitGenre || hitTag;
 };
 
 const normalizeStringArray = (value: unknown): string[] => {
@@ -169,13 +207,45 @@ const slidersToUserMood = (
   };
 };
 
-const MOOD_WEIGHTS: Record<MoodSliderId, number> = {
+// デフォルトのムード重み（従来と同じ）
+const MOOD_WEIGHTS_DEFAULT: Record<MoodSliderId, number> = {
   operation: 1.1,
   session: 0.9,
   tension: 1.1,
   story: 0.8,
   brain: 0.9,
 };
+
+// ストーリー重視モード（Narrative 系プリセット想定）
+const MOOD_WEIGHTS_STORY_FOCUSED: Record<MoodSliderId, number> = {
+  operation: 0.5,
+  session: 0.6,
+  tension: 0.6,
+  story: 2.4, // ★ Story を最重要に
+  brain: 0.8,
+};
+
+// ユーザーのスライダーから「ストーリー重視かどうか」を判定
+const isStoryFocusedMood = (
+  user: UserMoodPrefs | null | undefined
+): boolean => {
+  if (!user) return false;
+  const { story, operation, session, tension, brain } = user;
+  if (typeof story !== "number") return false;
+
+  const others = [operation, session, tension, brain].filter(
+    (v): v is number => typeof v === "number"
+  );
+  const maxOther = others.length ? Math.max(...others) : 0;
+
+  // Story が 0.75 以上かつ他軸より十分高いときに「ストーリー重視」とみなす
+  return story >= 0.75 && story >= maxOther + 0.1;
+};
+
+const getMoodWeightsFor = (
+  user: UserMoodPrefs | null | undefined
+): Record<MoodSliderId, number> =>
+  isStoryFocusedMood(user) ? MOOD_WEIGHTS_STORY_FOCUSED : MOOD_WEIGHTS_DEFAULT;
 
 const distanceToScore = (d: number, maxD: number): number => {
   const norm = Math.min(1, d / maxD);
@@ -189,11 +259,14 @@ const calcMoodMatchScore = (
 ): number => {
   if (!game || !user) return 0;
 
+  // ★ ユーザーの気分から重みプロファイルを決定
+  const weights = getMoodWeightsFor(user);
+
   let sum = 0;
   let weightSum = 0;
 
-  (Object.keys(MOOD_WEIGHTS) as MoodSliderId[]).forEach((key) => {
-    const w = MOOD_WEIGHTS[key];
+  (Object.keys(weights) as MoodSliderId[]).forEach((key) => {
+    const w = weights[key];
     const g = (game as any)?.[key];
     const u = (user as any)?.[key];
     if (typeof g !== "number" || typeof u !== "number") return;
@@ -370,7 +443,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // まずは JSON データをまとめて取得
     const { data, error } = await supabase
       .from("game_rankings_cache")
-      .select("data, price, price_original, discount_percent");
+      .select("data, price, price_original, discount_percent, tags");
 
     if (error) {
       console.error("search-games db error", error);
@@ -386,9 +459,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const rawGames = rows
       .map((row) => {
         const base = row.data ?? {};
+
+        // AIタグ（game_rankings_cache.tags）
+        const aiTags = Array.isArray(row.tags) ? row.tags : [];
+
+        // 既存の tags（もし data 側にもあれば）
+        const legacyTags = Array.isArray(base.tags) ? base.tags : [];
+
+        // 優先順位：AIタグ > 旧タグ（重複排除）
+        const tagSet = new Set<string>();
+        const mergedTags: string[] = [];
+
+        for (const t of [...aiTags, ...legacyTags]) {
+          if (typeof t !== "string") continue;
+          const trimmed = t.trim();
+          if (!trimmed || tagSet.has(trimmed)) continue;
+          tagSet.add(trimmed);
+          mergedTags.push(trimmed);
+        }
+
         return {
           ...base,
-          // 物理カラムが入っていればそちらを優先して上書き
+          // 物理カラム優先
           price: typeof row.price === "number" ? row.price : base.price,
           price_original:
             typeof row.price_original === "number"
@@ -398,6 +490,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
             typeof row.discount_percent === "number"
               ? row.discount_percent
               : base.discount_percent,
+
+          // ここで tags を「AIタグ優先のマージ済み」に差し替え
+          tags: mergedTags,
+          // 必要なら別フィールドとして aiTags も持たせておく
+          aiTags,
         };
       })
       .filter((g) => g && g.appId != null);
@@ -576,6 +673,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // ---- フィルタ ----
     let filtered = mapped;
 
+    // ★ aiTags の事前整形（検索ボディから配列を取り出してクリーンアップ）
+    const aiTagsFilter =
+      Array.isArray(body.aiTags) && body.aiTags.length > 0
+        ? body.aiTags.filter(
+            (t) => typeof t === "string" && t.trim() !== ""
+          )
+        : [];
+
+
     if (genre && genre.trim() !== "") {
       filtered = filtered.filter((g) => g.tags?.includes(genre.trim()));
     }
@@ -741,12 +847,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
       case "gemScore":
       case "custom": {
         const isCustom = sort === "custom";
+        const storyFocused = isStoryFocusedMood(userMood); // ★ 追加
+
         sorted = [...filtered]
           .map((g) => {
             const compositeScore = computeScore(g, isCustom) ?? 0;
-            const moodScore = userMood
+
+            const rawMoodScore = userMood
               ? calcMoodMatchScore(g.moodScores, userMood)
               : 0;
+
+            let moodScore = rawMoodScore;
+
+            // ★ Narrative（ストーリー重視）モード時の「物語薄いジャンル」ペナルティ
+            if (
+              storyFocused &&
+              moodScore > 0 &&
+              g.moodScores &&
+              typeof g.moodScores.story === "number" &&
+              g.moodScores.story < 0.45 &&
+              isLowStoryGenreGame(g)
+            ) {
+              // かなり強く下げる（例: 70% 減）
+              moodScore *= 0.3;
+            }
 
             const normalizedBase = isCustom
               ? compositeScore
@@ -761,7 +885,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             return {
               ...g,
               compositeScore,
-              moodScore,
+              moodScore, // ★ ペナルティ後の値を保存
               finalScore: finalNormalized,
               finalCompositeScore: finalComposite,
             };
@@ -769,6 +893,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
         break;
       }
+
       default:
         break;
     }

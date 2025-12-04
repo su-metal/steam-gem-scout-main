@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation, type Location } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { SearchResultCard } from "@/components/SearchResultCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Home, X } from "lucide-react";
+
+
 
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -50,6 +53,11 @@ interface RankingGame {
     full?: string;
     thumbnail?: string;
   }[];
+}
+
+interface SearchPageNavigationState {
+  primaryVibePreset?: string;
+  subVibes?: string[];
 }
 
 // -----------------------------
@@ -125,6 +133,96 @@ const MOOD_SLIDERS: Array<{
   ];
 
 // 価格スライダーの最大値（ここを変えれば一括で反映）
+const PRESET_MOOD_BASE: Record<
+  "Chill" | "Focus" | "Story" | "Speed" | "Short",
+  Record<MoodSliderId, number>
+> = {
+  Chill: {
+    brain: 0.4,
+    story: 0.8,
+    session: 3.6,
+    tension: 0.4,
+    operation: 0.8,
+  },
+  Focus: {
+    brain: 3.6,
+    story: 1.2,
+    session: 1.6,
+    tension: 2,
+    operation: 3.2,
+  },
+  Story: {
+    brain: 0.8,
+    story: 3.8,
+    session: 1.2,
+    tension: 0.8,
+    operation: 1.2,
+  },
+  Speed: {
+    brain: 1.6,
+    story: 0.4,
+    session: 0.8,
+    tension: 3.6,
+    operation: 2.8,
+  },
+  Short: {
+    brain: 1.2,
+    story: 1.6,
+    session: 3.8,
+    tension: 1.2,
+    operation: 2,
+  },
+};
+
+const SUB_VIBE_MOOD_MODIFIERS: Record<
+  string,
+  Partial<Record<MoodSliderId, number>>
+> = {
+  cozy: { tension: -1, brain: -0.2, session: 0.3, operation: -0.3 },
+  emotional: { story: 0.8, tension: -0.4, brain: -0.2 },
+  difficult: { tension: 1.2, brain: 0.5, operation: 0.2 },
+  "puzzle-lite": { brain: 0.7, tension: -0.6, session: 0.2 },
+  atmospheric: { story: 0.6, tension: -0.5, session: 0.2, operation: -0.1 },
+  humor: { tension: -0.7, session: 0.4, story: 0.3 },
+  strategic: { brain: 1, operation: 0.4, session: -0.1, tension: 0.2 },
+};
+
+const clampMoodValue = (value: number) => {
+  if (value < 0) return 0;
+  if (value > MOOD_SLIDER_MAX) return MOOD_SLIDER_MAX;
+  return value;
+};
+
+const computeDesiredMood = (
+  presetId?: string,
+  subVibes: string[] = []
+): Record<MoodSliderId, number> | null => {
+  if (!presetId) {
+    return null;
+  }
+
+  const lookup = presetId as keyof typeof PRESET_MOOD_BASE;
+  const baseMood = PRESET_MOOD_BASE[lookup];
+  if (!baseMood) {
+    return null;
+  }
+
+  const mood: Record<MoodSliderId, number> = { ...baseMood };
+
+  subVibes.forEach((subVibeId) => {
+    const modifiers = SUB_VIBE_MOOD_MODIFIERS[subVibeId];
+    if (!modifiers) return;
+
+    (Object.keys(modifiers) as MoodSliderId[]).forEach((axis) => {
+      const delta = modifiers[axis];
+      if (typeof delta !== "number") return;
+      mood[axis] = clampMoodValue((mood[axis] ?? DEFAULT_MOOD[axis]) + delta);
+    });
+  });
+
+  return mood;
+};
+
 const MAX_PRICE_SLIDER = 60;
 
 // フィルター状態保存用の localStorage キー
@@ -137,7 +235,14 @@ const STORAGE_KEYS = {
   minPlaytime: "rankings_minPlaytime",
 } as const;
 
+
 export default function SearchPage() {
+  const location = useLocation() as Location<SearchPageNavigationState>;
+  const navigationState = location.state ?? null;
+  const navMoodOverride = computeDesiredMood(
+    navigationState?.primaryVibePreset,
+    navigationState?.subVibes ?? []
+  );
   const [games, setGames] = useState<RankingGame[]>([]);
 
 
@@ -226,6 +331,9 @@ export default function SearchPage() {
   });
 
   const [userMood, setUserMood] = useState<Record<MoodSliderId, number>>(() => {
+    if (navMoodOverride) {
+      return navMoodOverride;
+    }
     if (typeof window === "undefined") {
       return { ...DEFAULT_MOOD };
     }
@@ -265,7 +373,6 @@ export default function SearchPage() {
 
 
   const { toast } = useToast();
-
   // 初回だけ全件ロード（サーバー側は価格フィルタなし）
   useEffect(() => {
     fetchRankings();
@@ -888,7 +995,16 @@ export default function SearchPage() {
             )}
           </div>
         )}
-                {/* === Bottom Fixed Filter Bar ================================== */}
+
+        {/* 🔍 一時的なデバッグ表示ここから */}
+        <pre className="mt-4 text-[10px] leading-relaxed text-slate-300 bg-black/40 p-3 rounded-lg border border-white/10">
+          navMoodOverride: {JSON.stringify(navMoodOverride)}
+          {"\n"}
+          userMood: {JSON.stringify(userMood)}
+        </pre>
+        {/* 🔍 一時的なデバッグ表示ここまで */}
+
+        {/* === Bottom Fixed Filter Bar ================================== */}
         {!isTopFilterVisible && (
           <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-2 md:px-8">
             <QuickFilterBar />
@@ -926,3 +1042,4 @@ export default function SearchPage() {
   );
 
 }
+
