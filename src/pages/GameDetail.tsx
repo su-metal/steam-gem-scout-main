@@ -1983,11 +1983,11 @@ export default function GameDetail() {
                                               </p>
                                             )} */}
 
-                                            {/* {tag.reason && (
+                                            {tag.reason && (
                                               <p className="text-[13px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
                                                 {tag.reason}
                                               </p>
-                                            )} */}
+                                            )}
 
 
                                             {/* 代表レビュー（モバイル） */}
@@ -2058,7 +2058,7 @@ export default function GameDetail() {
                                                   {tag.polarity === "negative" &&
                                                     negativeReviews.length > 0 && (
                                                       <div>
-                                                        <div className="text-[16px] font-semibold text-rose-300/90 mt-1 mb-3">
+                                                        <div className="text-[15px] font-semibold text-rose-300/90 mt-1 mb-3">
                                                           USER'S VOICE
                                                         </div>
                                                         {negativeReviews.map((text, idx) => (
@@ -2083,6 +2083,52 @@ export default function GameDetail() {
                                                         ))}
                                                       </div>
                                                     )}
+                                                  {/* ニュートラルタイプ → 賛成/反対 両方を表示 */}
+                                                  {activePlayerFitTag.polarity === "neutral" && (
+                                                    <>
+                                                      {activePositiveReviews.length > 0 && (
+                                                        <div>
+                                                          <div className="text-[15px] font-semibold text-emerald-300/90 mt-1 mb-3">
+                                                            LIKED BY SOME
+                                                          </div>
+                                                          {activePositiveReviews.map((text, idx) => (
+                                                            <div
+                                                              key={`pos-${idx}`}
+                                                              className="flex items-start gap-2 mb-1.5"
+                                                            >
+                                                              <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-emerald-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
+                                                                {idx + 1}
+                                                              </span>
+                                                              <p className="text-[13px] text-slate-100/90 leading-relaxed">
+                                                                {text}
+                                                              </p>
+                                                            </div>
+                                                          ))}
+                                                        </div>
+                                                      )}
+
+                                                      {activeNegativeReviews.length > 0 && (
+                                                        <div>
+                                                          <div className="text-[15px] font-semibold text-rose-300/90 mt-1 mb-3">
+                                                            NOT FOR OTHERS
+                                                          </div>
+                                                          {activeNegativeReviews.map((text, idx) => (
+                                                            <div
+                                                              key={`neg-${idx}`}
+                                                              className="flex items-start gap-2 mb-1.5"
+                                                            >
+                                                              <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center flex-none shrink-0 aspect-square rounded-full bg-rose-400 text-[10px] font-bold text-slate-950 shadow-[0_0_0_1px_rgba(15,23,42,0.6)]">
+                                                                {idx + 1}
+                                                              </span>
+                                                              <p className="text-[13px] text-slate-100/90 leading-relaxed">
+                                                                {text}
+                                                              </p>
+                                                            </div>
+                                                          ))}
+                                                        </div>
+                                                      )}
+                                                    </>
+                                                  )}
                                                 </div>
                                               );
                                             })()}
@@ -2141,7 +2187,7 @@ export default function GameDetail() {
                               })}
                             </div>
 
-                          
+
                             {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
                             {!isMobile && activePlayerFitTag && (
                               <>
