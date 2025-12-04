@@ -105,33 +105,10 @@ interface HiddenGemAnalysis {
   historicalIssuesSummary?: string | null;
 
   /**
-   * 「現在の状態」に関する分析の信頼度。
-   * early/recent どちらにも十分なレビューがある場合は "high"。
-   */
-  currentStateReliability?: "high" | "medium" | "low" | null;
-
-  /**
-   * 「過去の問題」に関する分析の信頼度。
-   */
-  historicalIssuesReliability?: "high" | "medium" | "low" | null;
-
-  /**
-   * 気分スライダー用の3軸ベクトル。
-   * 0.0〜1.0 の数値を期待するが、欠損時は null / 未定義も許可。
-   */
-  vibes?: VibeVector | null;
-
-  /**
    * 「どんな人に刺さるか」を表すバッジ一覧。
    * id は固定カタログのキー、label は日本語表示用。
    */
   audienceBadges?: AudienceBadge[] | null;
-
-  /** Steam でメジャーな英語タグ（AI生成） */
-  aiTags?: string[] | null;
-
-  /** 代表的な主ジャンル 1 本（任意） */
-  aiPrimaryGenre?: string | null;
 
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
@@ -174,15 +151,6 @@ interface HiddenGemAnalysis {
   aiError?: boolean;
 }
 
-interface VibeVector {
-  /** 0.0〜1.0 静的〜アクション寄り */
-  active: number;
-  /** 0.0〜1.0 癒し〜緊張・挑戦 */
-  stress: number;
-  /** 0.0〜1.0 短時間〜長時間 */
-  volume: number;
-}
-
 interface AudienceBadge {
   id: string; // 例: "story_focus"
   label: string; // 日本語ラベル。UIにそのまま出す想定
@@ -209,13 +177,9 @@ function buildFallbackAnalysis(
   errorMessage?: string,
   opts?: {
     title?: string;
-    currentStateReliability?: "high" | "medium" | "low";
-    historicalIssuesReliability?: "high" | "medium" | "low";
   }
 ): HiddenGemAnalysis {
   const title = opts?.title ?? "this game";
-  const currentRel = opts?.currentStateReliability ?? null;
-  const historicalRel = opts?.historicalIssuesReliability ?? null;
 
   return {
     hiddenGemVerdict: "Unknown",
@@ -232,17 +196,7 @@ function buildFallbackAnalysis(
     historicalIssuesSummary: null,
     hasImprovedSinceLaunch: null,
     stabilityTrend: "Unknown",
-    currentStateReliability: currentRel,
-    historicalIssuesReliability: historicalRel,
-
-    // ★ 追加
-    vibes: {
-      active: 0.5,
-      stress: 0.5,
-      volume: 0.5,
-    },
     audienceBadges: [],
-
     aiError: true,
   };
 }
@@ -720,9 +674,10 @@ audiencePositive / audienceNeutral / audienceNegative では、
 - audiencePositive：4〜5件  
   - 無理に水増しせず、ゲーム固有の特徴に基づく高品質なものだけ出す。
 
-- audienceNeutral：1〜3件  
-  - 賛否が明確に分かれている「両面性のある特徴」（テンポ、運要素、難易度、情報量など）だけを出す。  
-  - 「人による」「好き嫌いが分かれる」といった一般論だけのカードは作らない。
+audienceNeutral：1〜3件  （※ここでの「件」は **ニュートラルカードの枚数** を指す）  
+   - 賛否が明確に分かれている「両面性のある特徴」（テンポ、運要素、難易度、情報量など）だけを出す。  
+   - 各カードの中には「賛成側の代表レビュー 1件」と「反対側の代表レビュー 1件」だけを書く。  
+   - 「人による」「好き嫌いが分かれる」といった一般論だけのカードは作らない。
 
 - audienceNegative：2〜4件  
   - 明確に複数レビューで語られている欠点・つまずきポイントを優先。  
@@ -772,14 +727,27 @@ audiencePositive / audienceNeutral / audienceNegative では、
 
 
 ● 出力ルール
-- audiencePositive → hitReviewOriginal + hitReviewParaphrased の2件を埋める（miss系は空）  
-- audienceNegative → missReviewOriginal + missReviewParaphrased の2件を埋める（hit系は空）  
+- audiencePositive → hitReviewOriginal + hitReviewParaphrased の2件を埋める（miss系は空）
+- audienceNegative → missReviewOriginal + missReviewParaphrased の2件を埋める（hit系は空）
+
+- audienceNeutral → 
+  - 賛成側は hitReviewOriginal のみ埋める。hitReviewParaphrased は必ず ""（空文字）か null にする。
+  - 反対側は missReviewOriginal のみ埋める。missReviewParaphrased は必ず ""（空文字）か null にする。
+
+※ audiencePositive / audienceNegative では、
+   hitReviewOriginal と hitReviewParaphrased、
+   missReviewOriginal と missReviewParaphrased は
+   同じ1件のレビュー内容を日本語で言い換えたペアとする。
+   別人の意見や別レビュー内容を混ぜてはならない。
+
+- Original / Paraphrased の2つは **同一のレビュー内容の別表現** とし、
+  新しい出来事・別人の意見・別レビュー内容を追加してはならない。
+
 - 2件は必ず別内容にする（重複禁止）
 - hitReviewOriginal / missReviewOriginal は、レビュワー本人が書いたような自然な日本語の一人称文にする。
 - hitReviewParaphrased / missReviewParaphrased も **必ず日本語のみで**記述する。
   - Paraphrased は「内容を変えた日本語の別表現」であり、翻訳元の言語に寄せてはいけない。
   - Original と Paraphrased はどちらも日本語で、トーンは自然で柔らかく、表現だけ変えること。
-- 2つのレビューは必ず別内容にし、同義文の言い換えだけで済ませない。
 - いずれのレビューも引用符禁止、ユーザー名禁止、原文コピペ禁止。
 ※ hitReviewParaphrased / missReviewParaphrased は、元レビューの言語に影響されない。
    「日本語として自然な一人称の要約文」を新しく書き起こすこと。
@@ -789,24 +757,31 @@ audiencePositive / audienceNeutral / audienceNegative では、
 ───────────────────────────────
 
 audienceNeutral が存在する場合、
-各ニュートラルカードには **賛否それぞれ 1 件ずつ** の代表レビューを必ず付与する。
+各ニュートラルカードには **賛成 1件（1人分） + 反対 1件（1人分）** の代表レビューだけを付与する。
 
-● hitReviewOriginal / hitReviewParaphrased
-  → その特徴を「好意的に評価している」実際のレビュー内容を基にした一人称文を書く。
+● 賛成側（LIKED BY SOME）
+  - hitReviewOriginal のみを使用する。
+  - hitReviewParaphrased は必ず ""（空文字）か null にする。
+  - 1レビューは 2〜3文程度の一人称文とし、複数人の体験を混ぜない。
+  - LIKED BY SOME の箇条書きは **必ず1件のみ** になるようにする。
 
-● missReviewOriginal / missReviewParaphrased
-  → 同じ特徴について「不満として語られている」実際のレビュー内容を基にした一人称文を書く。
+● 反対側（NOT FOR OTHERS）
+  - missReviewOriginal のみを使用する。
+  - missReviewParaphrased は必ず ""（空文字）か null にする。
+  - 1レビューは 2〜3文程度の一人称文とし、複数人の体験を混ぜない。
+  - NOT FOR OTHERS の箇条書きは **必ず1件のみ** になるようにする。
 
-● ニュートラルカードは「ひとりの中立意見」を生成してはならない。
-  実レビューの中に存在する “賛成側の声” と “反対側の声” を
-  両方 1 件ずつ対比させる形式にする。
+● 絶対禁止ルール（ニュートラルカード専用）
+  - hitReviewOriginal に 2人以上の意見を詰め込むこと。
+  - missReviewOriginal に 2人以上の意見を詰め込むこと。
+  - 「他のプレイヤーは〜」「別のレビューでは〜」など複数名の視点を1つのテキストに混在させること。
 
-● いずれのレビューも、捏造・誇張は禁止。
-  実際のレビュー本文に存在する具体的な描写と感情のみを使用し、
-  日本語の一人称として自然な文に書き起こすこと。
-
-● hit と miss の2件は必ず別の内容・別の視点で書く。
-
+● まとめ
+  - ニュートラルカードでは、
+    - LIKED BY SOME = hitReviewOriginal だけ
+    - NOT FOR OTHERS = missReviewOriginal だけ
+    を使い、どちらも1件に固定する。
+  - audiencePositive / audienceNegative の Paraphrased 仕様には影響を与えない。
 
 ───────────────────────────────
 【NEGATIVE CARD REVIEW REQUIREMENT】
@@ -826,17 +801,7 @@ audienceNegative が1件以上ある場合、
 - 最近のレビュー傾向を最重要視し currentStateSummary を作成する。  
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
-- currentStateReliability / historicalIssuesReliability を妥当に設定する。
-
 ───────────────────────────────
-【aiTags / aiPrimaryGenre】
-───────────────────────────────
-
-- Steamで一般的に使われる英語タグのみを使用。  
-- 文ではなく単語タグとし、類義語・重複は避ける。  
-- 5〜10個程度。  
-- aiPrimaryGenre は代表ジャンル1つだけ。
-
 ================================================================
 【CARD TAG LABELS（labels 配列）】
 ================================================================
@@ -878,15 +843,6 @@ audienceBadges は SearchResultCard の小型ピル。
   "historicalIssuesSummary": string | "" | null,
   "hasImprovedSinceLaunch": true | false | null,
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
-  "currentStateReliability": "high" | "medium" | "low" | null,
-  "historicalIssuesReliability": "high" | "medium" | "low" | null,
-  "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
-  "aiPrimaryGenre": "Roguelike" | null,
-  "vibes": {
-    "active": number,
-    "stress": number,
-    "volume": number
-  },
   "audienceBadges": [
     { "id": string, "label": string }
   ],
@@ -1235,37 +1191,6 @@ function normalizeStringArray(input?: any[]): string[] {
   return normalized;
 }
 
-function normalizeVibes(raw: any): VibeVector | null {
-  if (!raw || typeof raw !== "object") return null;
-
-  const toNumber = (v: any): number | null => {
-    if (typeof v === "number" && !Number.isNaN(v)) return v;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
-
-  const clamp01 = (v: number): number => {
-    if (v < 0) return 0;
-    if (v > 1) return 1;
-    return v;
-  };
-
-  const active = toNumber((raw as any).active);
-  const stress = toNumber((raw as any).stress);
-  const volume = toNumber((raw as any).volume);
-
-  // 3つとも無い場合は「そもそも未設定」
-  if (active === null && stress === null && volume === null) {
-    return null;
-  }
-
-  return {
-    active: active !== null ? clamp01(active) : 0.5,
-    stress: stress !== null ? clamp01(stress) : 0.5,
-    volume: volume !== null ? clamp01(volume) : 0.5,
-  };
-}
-
 function normalizeAudienceBadges(raw: any): AudienceBadge[] {
   if (!Array.isArray(raw)) return [];
   const badges: AudienceBadge[] = [];
@@ -1306,33 +1231,6 @@ function normalizeAudienceBadges(raw: any): AudienceBadge[] {
   return badges;
 }
 
-function normalizeAiTags(raw: any): string[] {
-  const arr = Array.isArray(raw) ? raw : [raw];
-  const result: string[] = [];
-
-  for (const item of arr) {
-    if (typeof item !== "string") continue;
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-
-    // 大文字小文字をそのまま残しつつ、重複チェック用に lower を使う
-    result.push(trimmed);
-  }
-
-  // 重複除去 & 10件まで
-  const deduped: string[] = [];
-  const seen = new Set<string>();
-  for (const tag of result) {
-    const key = tag.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(tag);
-    if (deduped.length >= 10) break;
-  }
-
-  return deduped;
-}
-
 function clampInt(value: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return min;
@@ -1350,7 +1248,6 @@ const VALID_TRENDS = new Set([
   "Deteriorating",
   "Unknown",
 ]);
-const VALID_RELIABILITIES = new Set(["high", "medium", "low"]);
 
 function normalizeOptionalString(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -1369,14 +1266,6 @@ function normalizeTrend(
   return typeof value === "string" && VALID_TRENDS.has(value)
     ? (value as "Improving" | "Stable" | "Deteriorating" | "Unknown")
     : "Unknown";
-}
-
-function normalizeReliability(
-  value: unknown
-): "high" | "medium" | "low" | null {
-  return typeof value === "string" && VALID_RELIABILITIES.has(value)
-    ? (value as "high" | "medium" | "low")
-    : null;
 }
 
 function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
@@ -1399,12 +1288,6 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
         ? parsed.hasImprovedSinceLaunch
         : null,
     stabilityTrend: normalizeTrend(parsed?.stabilityTrend),
-    currentStateReliability: normalizeReliability(
-      parsed?.currentStateReliability
-    ),
-    historicalIssuesReliability: normalizeReliability(
-      parsed?.historicalIssuesReliability
-    ),
   };
 
   // statGemScore / aiError をそのまま通しておく
@@ -1414,12 +1297,6 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
 
   if (typeof parsed?.aiError === "boolean") {
     normalized.aiError = parsed.aiError;
-  }
-
-  // ★ 追加: vibes / audienceBadges を正規化して取り込む
-  const vibes = normalizeVibes(parsed?.vibes);
-  if (vibes) {
-    normalized.vibes = vibes;
   }
 
   const audienceBadges = normalizeAudienceBadges(parsed?.audienceBadges);
@@ -1445,19 +1322,6 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   );
   if (audienceNegative.length > 0) {
     normalized.audienceNegative = audienceNegative;
-  }
-
-  // ★ ここから aiTags / aiPrimaryGenre
-  const aiTags = normalizeAiTags(parsed?.aiTags);
-  if (aiTags.length > 0) {
-    normalized.aiTags = aiTags;
-  }
-
-  if (typeof parsed?.aiPrimaryGenre === "string") {
-    const primary = parsed.aiPrimaryGenre.trim();
-    if (primary) {
-      normalized.aiPrimaryGenre = primary;
-    }
   }
 
   return normalized;
@@ -1623,7 +1487,7 @@ function computeScores(
   }
   comeback = clamp01(comeback);
 
-  // Niche: audienceBadges や vibes の「とがり具合」からざっくり計算
+  // Niche: audienceBadges の数と偏りからざっくり計算
   let niche = 0;
   if (
     Array.isArray(analysis.audienceBadges) &&
@@ -1633,17 +1497,6 @@ function computeScores(
     niche = 0.4 + Math.min(analysis.audienceBadges.length - 1, 3) * 0.1; // 最大 0.7
   }
 
-  if (analysis.vibes) {
-    const v = analysis.vibes;
-    const vals = [v.active, v.stress, v.volume];
-    const avg = vals.reduce((s, x) => s + x, 0) / vals.length;
-    const sqAvg = vals.reduce((s, x) => s + x * x, 0) / vals.length;
-    const variance = Math.max(sqAvg - avg * avg, 0);
-    const stddev = Math.sqrt(variance);
-    // 振れ幅が大きいほど「尖っている」とみなす（最大 1.0）
-    const extremeness = clamp01(stddev * 2);
-    niche = Math.max(niche, extremeness);
-  }
   niche = clamp01(niche);
 
   // Innovation: ひとまず保留気味に 0〜0.7 の間で軽く振る。
