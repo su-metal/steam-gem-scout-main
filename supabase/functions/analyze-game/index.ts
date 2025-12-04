@@ -110,6 +110,12 @@ interface HiddenGemAnalysis {
    */
   audienceBadges?: AudienceBadge[] | null;
 
+  /** Steam でメジャーな英語タグ（AI生成） */
+  aiTags?: string[] | null;
+
+  /** 代表的な主ジャンル 1 本（任意） */
+  aiPrimaryGenre?: string | null;
+
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
    * 例: true のとき「昔は微妙だったが今は良くなった」系タイトル。
@@ -197,6 +203,8 @@ function buildFallbackAnalysis(
     hasImprovedSinceLaunch: null,
     stabilityTrend: "Unknown",
     audienceBadges: [],
+    aiTags: [],
+    aiPrimaryGenre: null,
     aiError: true,
   };
 }
@@ -802,6 +810,14 @@ audienceNegative が1件以上ある場合、
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
 ───────────────────────────────
+【aiTags / aiPrimaryGenre】
+───────────────────────────────
+
+- Steamで一般的に使われる英語タグのみを使用。  
+- 文ではなく単語タグとし、類義語・重複は避ける。  
+- 5?10個程度。  
+- aiPrimaryGenre は代表ジャンル1つだけ。  
+
 ================================================================
 【CARD TAG LABELS（labels 配列）】
 ================================================================
@@ -843,6 +859,8 @@ audienceBadges は SearchResultCard の小型ピル。
   "historicalIssuesSummary": string | "" | null,
   "hasImprovedSinceLaunch": true | false | null,
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
+  "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
+  "aiPrimaryGenre": "Roguelike" | null,
   "audienceBadges": [
     { "id": string, "label": string }
   ],
@@ -1231,6 +1249,31 @@ function normalizeAudienceBadges(raw: any): AudienceBadge[] {
   return badges;
 }
 
+function normalizeAiTags(raw: any): string[] {
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const result: string[] = [];
+
+  for (const item of arr) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+
+    result.push(trimmed);
+  }
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of result) {
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(tag);
+    if (deduped.length >= 10) break;
+  }
+
+  return deduped;
+}
+
 function clampInt(value: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return min;
@@ -1322,6 +1365,18 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   );
   if (audienceNegative.length > 0) {
     normalized.audienceNegative = audienceNegative;
+  }
+
+  const aiTags = normalizeAiTags(parsed?.aiTags);
+  if (aiTags.length > 0) {
+    normalized.aiTags = aiTags;
+  }
+
+  if (typeof parsed?.aiPrimaryGenre === "string") {
+    const primary = parsed.aiPrimaryGenre.trim();
+    if (primary) {
+      normalized.aiPrimaryGenre = primary;
+    }
   }
 
   return normalized;
