@@ -285,8 +285,7 @@ export const GameCard = ({
 
 
 
-  // Gem スコア（カード右側に表示する唯一のスコア）
-  // 優先順位:
+
   //  1. statGemScore（統計ベースの隠れた名作度）
   //  2. reviewQualityScore（旧AIスコア：statGemScore が無い古いデータ用）
   const aiGemScore: number | null =

@@ -1983,11 +1983,11 @@ export default function GameDetail() {
                                               </p>
                                             )} */}
 
-                                            {tag.reason && (
+                                            {/* {tag.reason && (
                                               <p className="text-[13px] text-slate-100 leading-relaxed mb-2 whitespace-pre-line">
                                                 {tag.reason}
                                               </p>
-                                            )}
+                                            )} */}
 
 
                                             {/* 代表レビュー（モバイル） */}
@@ -2141,7 +2141,7 @@ export default function GameDetail() {
                               })}
                             </div>
 
-                            {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
+                          
                             {/* === Pattern C: 右スライド詳細パネル（PC / タブレット用） === */}
                             {!isMobile && activePlayerFitTag && (
                               <>
@@ -2213,11 +2213,11 @@ export default function GameDetail() {
                                     </div>
 
                                     {/* サブテキスト */}
-                                    {activePlayerFitTag.sub && (
+                                    {/* {activePlayerFitTag.sub && (
                                       <p className="text-[11px] text-slate-200 leading-relaxed">
                                         {activePlayerFitTag.sub}
                                       </p>
-                                    )}
+                                    )} */}
 
                                     {/* 理由本文 */}
                                     {activePlayerFitTag.reason && (
