@@ -14,6 +14,7 @@ import {
   ChevronUp,
   RefreshCw,
   Check,
+  Filter,
 } from "lucide-react";
 
 
@@ -977,6 +978,11 @@ function SearchPageFilters({
   const [filters, setFilters] = useState<FilterState>(initialFilters);
 
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
+  const toggleFiltersOpen = () => {
+    setIsFiltersOpen((prev) => !prev);
+  };
 
   const toggleSection = (sectionId: string) => {
     setExpandedSection((prev) => (prev === sectionId ? null : sectionId));
@@ -1006,8 +1012,6 @@ function SearchPageFilters({
     </div>
   );
 
-
-
   // SearchPage 側の state 変更と同期
   useEffect(() => {
     setFilters(initialFilters);
@@ -1030,6 +1034,7 @@ function SearchPageFilters({
   };
 
   const handleApply = () => {
+    setIsFiltersOpen(false);
     onApply(filters);
   };
 
@@ -1040,27 +1045,42 @@ function SearchPageFilters({
   return (
     <section
       id="detail-filters"
-      className="relative bg-slate-900/60 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl px-4 py-4 md:px-6 md:py-6 space-y-5"
+      className="relative rounded-3xl border border-white/10 bg-slate-900/70 backdrop-blur-xl overflow-hidden shadow-2xl"
     >
-      {/* 背景のグロー（index.tsx と同じ雰囲気） */}
+      {/* 背景グロー（ヘッダー＆コンテンツの下に敷く） */}
       <div className="pointer-events-none absolute top-0 right-0 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-0 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl" />
 
+      {/* ヘッダー行：カード最上部に密着させる */}
+      <button
+        type="button"
+        onClick={toggleFiltersOpen}
+        aria-expanded={isFiltersOpen}
+        className="relative z-10 flex w-full items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-cyan-900/40"
+      >
+        <div className="flex items-center gap-3">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950/80 border border-white/15 text-cyan-300">
+            <Filter size={20} />
+          </span>
+          <span className="text-xs font-semibold uppercase tracking-[0.35em] text-white">
+            Filters & Refinement
+          </span>
+        </div>
+        {isFiltersOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+      </button>
 
-      {/* Body */}
-      <div className="grid grid-cols-1 gap-5 md:gap-6">
-        {/* 左カラム：Sort / Genre / AI Tags */}
-        <div className="space-y-4">
-
-          {/* 左カラム：Sort / Genre / AI Tags */}
-          <div className="space-y-4">
+      {/* 展開時のみ、ヘッダー直下にコンテンツを表示 */}
+      {isFiltersOpen && (
+        <div className="relative z-10 border-t border-white/10 px-4 md:px-6 py-4 md:py-6 space-y-5 bg-slate-900/70/80">
+          <div className="space-y-5">
             {/* Sort */}
             <div className="border-b border-white/5 pb-4 md:pb-6">
               <SectionHeader title="Sort By" id="sort" />
 
               <div
-                className={`${expandedSection === "sort" ? "block" : "hidden"
-                  } md:block mt-2`}
+                className={`${
+                  expandedSection === "sort" ? "block" : "hidden"
+                } md:block mt-2`}
               >
                 <div className="flex flex-wrap gap-3">
                   {SORT_OPTIONS.map((opt) => (
@@ -1087,14 +1107,14 @@ function SearchPageFilters({
               </div>
             </div>
 
-
             {/* Genre */}
             <div className="border-b border-white/5 pb-4 md:pb-5">
               <SectionHeader title="Genres" id="genres" />
 
               <div
-                className={`${expandedSection === "genres" ? "block" : "hidden"
-                  } md:block mt-1`}
+                className={`${
+                  expandedSection === "genres" ? "block" : "hidden"
+                } md:block mt-1`}
               >
                 <div className="flex flex-wrap gap-1.5">
                   {GENRE_OPTIONS.map((genre) => (
@@ -1109,14 +1129,14 @@ function SearchPageFilters({
               </div>
             </div>
 
-
             {/* AI Tags */}
             <div className="border-b border-white/5 pb-4 md:pb-5">
               <SectionHeader title="AI Tags" id="aiTags" />
 
               <div
-                className={`${expandedSection === "aiTags" ? "block" : "hidden"
-                  } md:block mt-1`}
+                className={`${
+                  expandedSection === "aiTags" ? "block" : "hidden"
+                } md:block mt-1`}
               >
                 <div className="flex flex-wrap gap-1.5">
                   {AI_TAG_OPTIONS.map((tag) => (
@@ -1131,7 +1151,6 @@ function SearchPageFilters({
               </div>
             </div>
 
-
             {/* Range + Exclusions */}
             <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-[1.1fr_1fr] md:gap-6 md:rounded-2xl md:border md:border-white/10 md:bg-slate-900/90 md:px-6 md:py-6 md:shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
               {/* Range section */}
@@ -1139,8 +1158,9 @@ function SearchPageFilters({
                 <SectionHeader title="Range" id="range" />
 
                 <div
-                  className={`${expandedSection === "range" ? "block" : "hidden"
-                    } md:block mt-1 space-y-4`}
+                  className={`${
+                    expandedSection === "range" ? "block" : "hidden"
+                  } md:block mt-1 space-y-4`}
                 >
                   <DualRangeSlider
                     label="Price"
@@ -1179,8 +1199,9 @@ function SearchPageFilters({
                 <SectionHeader title="Exclusions" id="exclusions" />
 
                 <div
-                  className={`${expandedSection === "exclusions" ? "block" : "hidden"
-                    } md:block mt-1 space-y-3`}
+                  className={`${
+                    expandedSection === "exclusions" ? "block" : "hidden"
+                  } md:block mt-1 space-y-3`}
                 >
                   {/* Exclude Early Access */}
                   <button
@@ -1221,7 +1242,8 @@ function SearchPageFilters({
                     onClick={() =>
                       setFilters((prev) => ({
                         ...prev,
-                        excludeMultiplayerOnly: !prev.excludeMultiplayerOnly,
+                        excludeMultiplayerOnly:
+                          !prev.excludeMultiplayerOnly,
                       }))
                     }
                     className="flex items-center justify-between w-full py-2"
@@ -1273,7 +1295,9 @@ function SearchPageFilters({
                       <span
                         className={[
                           "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
-                          filters.excludeHorror ? "translate-x-5" : "translate-x-1",
+                          filters.excludeHorror
+                            ? "translate-x-5"
+                            : "translate-x-1",
                         ].join(" ")}
                       />
                     </span>
@@ -1283,11 +1307,8 @@ function SearchPageFilters({
             </div>
           </div>
 
-          {/* Footer */}
-          {/* Footer: RESET / APPLY FILTERS */}
-          <div className="mt-5 md:mt-6 flex flex-row flex-nowrap items-center justify-between gap-3 md:border-t md:border-white/10 py-2 md:pt-5">
-
-            {/* RESET */}
+          {/* RESET / APPLY 行（カード下端） */}
+          <div className="mt-5 md:mt-6 flex flex-row flex-nowrap items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleReset}
@@ -1297,7 +1318,6 @@ function SearchPageFilters({
               <span>RESET</span>
             </button>
 
-            {/* APPLY FILTERS */}
             <button
               type="button"
               onClick={handleApply}
@@ -1309,10 +1329,11 @@ function SearchPageFilters({
             </button>
           </div>
         </div>
-      </div>
+      )}
     </section>
   );
 }
+
 
 
 function ToggleCheckbox({ label, checked, onChange }: ToggleCheckboxProps) {
