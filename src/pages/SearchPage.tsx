@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, type Location } from "react-router-dom";
+import { useLocation, type Location, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
-import { SearchResultCard } from "@/components/SearchResultCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
+import { SearchResultCard } from "@/components/SearchResultCard";
 import {
   Home,
   X,
@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Check,
   Filter,
+  Calendar,
 } from "lucide-react";
 
 
@@ -51,6 +52,7 @@ interface RankingGame {
   analysis: HiddenGemAnalysis;
   moodScore?: number;
   finalScore?: number;
+  header_image?: string | null;
   screenshots?: {
     full?: string;
     thumbnail?: string;
@@ -241,6 +243,7 @@ const STORAGE_KEYS = {
 // SearchPage
 // -----------------------------------------
 export default function SearchPage() {
+  const navigate = useNavigate();
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
   const navMoodOverride = computeDesiredMood(
@@ -753,10 +756,11 @@ export default function SearchPage() {
               />
             ))}
           </div>
-        ) : (
+                ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => (
               <div key={game.appId} className="relative h-full">
+                {/* 1つ目のファイルと同じロジック：SearchResultCard に丸投げ */}
                 <SearchResultCard
                   appId={game.appId}
                   title={game.title}
@@ -784,6 +788,7 @@ export default function SearchPage() {
           </div>
         )}
 
+
         {/* 🔍 デバッグ表示（必要なければあとで削除） */}
         <pre className="mt-4 text-[10px] leading-relaxed text-slate-300 bg-black/40 p-3 rounded-lg border border-white/10">
           navMoodOverride: {JSON.stringify(navMoodOverride)}
@@ -791,7 +796,7 @@ export default function SearchPage() {
           userMood: {JSON.stringify(userMood)}
         </pre>
       </div>
-    </div>
+    </div >
   );
 }
 
