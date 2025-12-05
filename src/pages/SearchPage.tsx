@@ -525,8 +525,28 @@ export default function SearchPage() {
 
 
   return (
-    <div className="min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 opacity-80 text-slate-50">
-      <div className="max-w-7xl mx-auto px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-32 space-y-8">
+    <div className="relative min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
+      {/* --- Background Effects (Matching VIBE Screenshot) --- */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        {/* Deep gradient base */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_#1e1b4b_0%,_#020617_60%)] opacity-80" />
+
+        {/* Dot pattern */}
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-30" />
+
+        {/* Floating Shapes */}
+        <div className="absolute top-[15%] left-[10%] w-64 h-64 bg-cyan-900/20 rounded-full blur-[80px]" />
+        <div className="absolute bottom-[20%] right-[5%] w-96 h-96 bg-purple-900/10 rounded-full blur-[100px]" />
+
+        {/* Geometric Decor elements */}
+        <div className="absolute top-[20%] left-[5%] opacity-10">
+          <div className="w-0 h-0 border-l-[30px] border-l-transparent border-t-[50px] border-t-cyan-500 border-r-[30px] border-r-transparent rotate-[-15deg]" />
+        </div>
+        <div className="absolute top-[40%] right-[10%] opacity-10">
+          <div className="w-16 h-16 border-4 border-purple-500 rounded-full" />
+        </div>
+      </div>
+      <div className="relative z-10 max-w-7xl mx-auto px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-32 space-y-8">
         {/* === Page Header ======================================= */}
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-2">
@@ -1071,16 +1091,16 @@ function SearchPageFilters({
 
       {/* 展開時のみ、ヘッダー直下にコンテンツを表示 */}
       {isFiltersOpen && (
-        <div className="relative z-10 border-t border-white/10 px-4 md:px-6 py-4 md:py-6 space-y-5 bg-slate-900/70/80">
+        <div className="relative z-10 border-t border-white/10 px-4 md:px-6 py-4 md:py-6 space-y-5 bg-slate-900/70/80　overflow-hidden transform-gpu transition-all duration-300 ease-out">
+
           <div className="space-y-5">
             {/* Sort */}
             <div className="border-b border-white/5 pb-4 md:pb-6">
               <SectionHeader title="Sort By" id="sort" />
 
               <div
-                className={`${
-                  expandedSection === "sort" ? "block" : "hidden"
-                } md:block mt-2`}
+                className={`${expandedSection === "sort" ? "block" : "hidden"
+                  } md:block mt-2`}
               >
                 <div className="flex flex-wrap gap-3">
                   {SORT_OPTIONS.map((opt) => (
@@ -1112,9 +1132,8 @@ function SearchPageFilters({
               <SectionHeader title="Genres" id="genres" />
 
               <div
-                className={`${
-                  expandedSection === "genres" ? "block" : "hidden"
-                } md:block mt-1`}
+                className={`${expandedSection === "genres" ? "block" : "hidden"
+                  } md:block mt-1`}
               >
                 <div className="flex flex-wrap gap-1.5">
                   {GENRE_OPTIONS.map((genre) => (
@@ -1134,9 +1153,8 @@ function SearchPageFilters({
               <SectionHeader title="AI Tags" id="aiTags" />
 
               <div
-                className={`${
-                  expandedSection === "aiTags" ? "block" : "hidden"
-                } md:block mt-1`}
+                className={`${expandedSection === "aiTags" ? "block" : "hidden"
+                  } md:block mt-1`}
               >
                 <div className="flex flex-wrap gap-1.5">
                   {AI_TAG_OPTIONS.map((tag) => (
@@ -1158,9 +1176,8 @@ function SearchPageFilters({
                 <SectionHeader title="Range" id="range" />
 
                 <div
-                  className={`${
-                    expandedSection === "range" ? "block" : "hidden"
-                  } md:block mt-1 space-y-4`}
+                  className={`${expandedSection === "range" ? "block" : "hidden"
+                    } md:block mt-1 space-y-4`}
                 >
                   <DualRangeSlider
                     label="Price"
@@ -1199,9 +1216,8 @@ function SearchPageFilters({
                 <SectionHeader title="Exclusions" id="exclusions" />
 
                 <div
-                  className={`${
-                    expandedSection === "exclusions" ? "block" : "hidden"
-                  } md:block mt-1 space-y-3`}
+                  className={`${expandedSection === "exclusions" ? "block" : "hidden"
+                    } md:block mt-1 space-y-3`}
                 >
                   {/* Exclude Early Access */}
                   <button
