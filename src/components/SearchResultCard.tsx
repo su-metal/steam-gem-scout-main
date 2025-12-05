@@ -432,7 +432,7 @@ export const SearchResultCard = ({
           className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
         {normalizedMoodScore !== null && (
-          <div className="absolute right-4 top-[8.5rem] z-30 w-20 h-20 rounded-full bg-[#0b1224] p-0.5 shadow-lg md:top-[10.5rem]">
+          <div className="absolute right-4 top-[6.5rem] z-30 w-20 h-20 rounded-full bg-[#0b1224] p-0.5 shadow-lg md:top-[8.5rem]">
             <div
               className="relative flex h-full w-full flex-col items-center justify-center rounded-full border-[3px] border-transparent bg-gradient-to-r from-purple-500 to-pink-500"
               style={{
