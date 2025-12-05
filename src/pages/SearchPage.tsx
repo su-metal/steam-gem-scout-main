@@ -7,8 +7,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { Home, X } from "lucide-react";
-
+import {
+  Home,
+  X,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+  Check,
+} from "lucide-react";
 
 
 interface HiddenGemAnalysis {
@@ -25,7 +31,6 @@ interface HiddenGemAnalysis {
   aiError?: boolean;
 }
 
-
 interface RankingGame {
   appId: number;
   title: string;
@@ -33,7 +38,7 @@ interface RankingGame {
   totalReviews: number;
   estimatedOwners: number;
   recentPlayers: number;
-  price: number; // セント単位
+  price: number; // セント単位ではなく「ドル相当」で使っている前提
   priceOriginal?: number | null;
   discountPercent?: number;
   isOnSale?: boolean;
@@ -43,12 +48,8 @@ interface RankingGame {
   steamUrl: string;
   reviewScoreDesc: string;
   analysis: HiddenGemAnalysis;
-  // gemLabel: GemLabel;
-  // isStatisticallyHidden: boolean;
   moodScore?: number;
   finalScore?: number;
-  // Edge Function 側で compositeScore を付ける予定（ここでは未使用）
-  // compositeScore?: number;
   screenshots?: {
     full?: string;
     thumbnail?: string;
@@ -81,6 +82,17 @@ const GENRE_OPTIONS = [
   "Indie",
 ];
 
+const AI_TAG_OPTIONS = [
+  "Souls-like",
+  "Deckbuilder",
+  "Rhythm",
+  "JRPG",
+  "Metroidvania",
+  "Survival",
+  "Shooter",
+  "Cozy",
+];
+
 const PERIOD_OPTIONS = [
   { label: "All time", value: "" },
   { label: "Last 30 days", value: "30" },
@@ -96,12 +108,24 @@ const SORT_OPTIONS = [
   { label: "Recentness", value: "newest" },
 ];
 
-type MoodSliderId =
-  | "operation"
-  | "session"
-  | "tension"
-  | "story"
-  | "brain";
+type SortOptionKey = "recommended" | "positive-ratio" | "most-reviews" | "newest";
+
+interface FilterState {
+  sort: SortOptionKey;
+  genre: string;
+  period: string;
+  priceMin: number;
+  priceMax: number;
+  reviewCountMin: number;
+  reviewCountMax: number;
+  aiTags: string[];
+  excludeEarlyAccess: boolean;
+  excludeMultiplayerOnly: boolean;
+  excludeHorror: boolean;
+}
+
+
+type MoodSliderId = "operation" | "session" | "tension" | "story" | "brain";
 
 const DEFAULT_MOOD: Record<MoodSliderId, number> = {
   operation: 2,
@@ -114,25 +138,7 @@ const DEFAULT_MOOD: Record<MoodSliderId, number> = {
 const MOOD_STORAGE_KEY = "rankings_userMood" as const;
 const MOOD_SLIDER_MAX = 4;
 
-const MOOD_SLIDERS: Array<{
-  id: MoodSliderId;
-  label: string;
-  left: string;
-  right: string;
-}> = [
-    { id: "operation", label: "操作量", left: "Passive", right: "Active" },
-    { id: "session", label: "セッション長", left: "Short", right: "Long" },
-    { id: "tension", label: "テンション", left: "Cozy", right: "Intense" },
-    {
-      id: "story",
-      label: "ストーリー密度",
-      left: "Story-Light",
-      right: "Story-Heavy",
-    },
-    { id: "brain", label: "思考負荷", left: "Simple", right: "Deep" },
-  ];
-
-// 価格スライダーの最大値（ここを変えれば一括で反映）
+// プリセットからの userMood 計算用（VIBE / Experience Focus 用）
 const PRESET_MOOD_BASE: Record<
   "Chill" | "Focus" | "Story" | "Speed" | "Short",
   Record<MoodSliderId, number>
@@ -197,15 +203,11 @@ const computeDesiredMood = (
   presetId?: string,
   subVibes: string[] = []
 ): Record<MoodSliderId, number> | null => {
-  if (!presetId) {
-    return null;
-  }
+  if (!presetId) return null;
 
   const lookup = presetId as keyof typeof PRESET_MOOD_BASE;
   const baseMood = PRESET_MOOD_BASE[lookup];
-  if (!baseMood) {
-    return null;
-  }
+  if (!baseMood) return null;
 
   const mood: Record<MoodSliderId, number> = { ...baseMood };
 
@@ -232,10 +234,11 @@ const STORAGE_KEYS = {
   sort: "rankings_selectedSort",
   maxPrice: "rankings_maxPrice",
   minReviews: "rankings_minReviews",
-  minPlaytime: "rankings_minPlaytime",
 } as const;
 
-
+// -----------------------------------------
+// SearchPage
+// -----------------------------------------
 export default function SearchPage() {
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
@@ -243,52 +246,8 @@ export default function SearchPage() {
     navigationState?.primaryVibePreset,
     navigationState?.subVibes ?? []
   );
+
   const [games, setGames] = useState<RankingGame[]>([]);
-
-
-  // ボトム固定フィルタバー / 詳細フィルタの表示制御
-  const [showFilterPanel, setShowFilterPanel] = useState(false); // ボトムから出る詳細フィルタ
-
-  // トップ側クイックフィルタの可視状態を監視するための ref & state
-  const topFilterRef = useRef<HTMLDivElement | null>(null);
-  const [isTopFilterVisible, setIsTopFilterVisible] = useState(true);
-
-
-  // ボトムの詳細フィルタパネルを開いている間だけ背景スクロールをロック
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    document.body.style.overflow = showFilterPanel ? "hidden" : "";
-
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [showFilterPanel]);
-
-  // トップ側のクイックフィルタが画面内に見えているかどうかを監視
-  useEffect(() => {
-    if (!topFilterRef.current || typeof IntersectionObserver === "undefined") {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        setIsTopFilterVisible(entry.isIntersecting);
-      },
-      {
-        threshold: 0.01,
-      }
-    );
-
-    observer.observe(topFilterRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-
   const [loading, setLoading] = useState(true);
 
   // ---- フィルター state（localStorage から復元） ----
@@ -299,7 +258,6 @@ export default function SearchPage() {
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
     if (typeof window === "undefined") return "90";
-    // 保存されていればそれを、なければ "90"（過去90日）
     return window.localStorage.getItem(STORAGE_KEYS.period) ?? "90";
   });
 
@@ -308,7 +266,6 @@ export default function SearchPage() {
     return window.localStorage.getItem(STORAGE_KEYS.sort) ?? "recommended";
   });
 
-  // 「Any」のときはスライダーが MAX_PRICE_SLIDER を指すようにする
   const [maxPrice, setMaxPrice] = useState<number>(() => {
     if (typeof window === "undefined") return MAX_PRICE_SLIDER;
     const saved = window.localStorage.getItem(STORAGE_KEYS.maxPrice);
@@ -323,17 +280,15 @@ export default function SearchPage() {
     return Number.isFinite(n) ? n : 0;
   });
 
-  const [minPlaytime, setMinPlaytime] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const saved = window.localStorage.getItem(STORAGE_KEYS.minPlaytime);
-    const n = saved != null ? Number(saved) : NaN;
-    return Number.isFinite(n) ? n : 0;
-  });
+  // 新 UI 用: AI Tags / Exclusions
+  const [aiTags, setAiTags] = useState<string[]>([]);
+  const [excludeEarlyAccess, setExcludeEarlyAccess] = useState(false);
+  const [excludeMultiplayerOnly, setExcludeMultiplayerOnly] = useState(false);
+  const [excludeHorror, setExcludeHorror] = useState(false);
 
+  // userMood は VIBE / Experience Focus からの引き継ぎのみ（UIでは編集しない）
   const [userMood, setUserMood] = useState<Record<MoodSliderId, number>>(() => {
-    if (navMoodOverride) {
-      return navMoodOverride;
-    }
+    if (navMoodOverride) return navMoodOverride;
     if (typeof window === "undefined") {
       return { ...DEFAULT_MOOD };
     }
@@ -361,19 +316,11 @@ export default function SearchPage() {
     window.localStorage.setItem(STORAGE_KEYS.sort, selectedSort);
     window.localStorage.setItem(STORAGE_KEYS.maxPrice, String(maxPrice));
     window.localStorage.setItem(STORAGE_KEYS.minReviews, String(minReviews));
-    window.localStorage.setItem(STORAGE_KEYS.minPlaytime, String(minPlaytime));
-  }, [
-    selectedGenre,
-    selectedPeriod,
-    selectedSort,
-    maxPrice,
-    minReviews,
-    minPlaytime,
-  ]);
-
+  }, [selectedGenre, selectedPeriod, selectedSort, maxPrice, minReviews]);
 
   const { toast } = useToast();
-  // 初回だけ全件ロード（サーバー側は価格フィルタなし）
+
+  // 初回ロード
   useEffect(() => {
     fetchRankings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,23 +329,36 @@ export default function SearchPage() {
   const fetchRankings = async () => {
     setLoading(true);
     try {
-      console.log("Searching hidden gems with server filters:", {
+      console.log("Searching hidden gems with filters:", {
         genre: selectedGenre || "all",
         period: selectedPeriod || "all time",
         sort: selectedSort,
+        maxPrice,
         minReviews,
-        minPlaytime,
+        aiTags,
+        excludeEarlyAccess,
+        excludeMultiplayerOnly,
+        excludeHorror,
         userMood,
       });
 
       const { data, error } = await supabase.functions.invoke("search-games", {
         body: {
+          // 既存の API 用パラメータ
           genre: selectedGenre || "",
           recentDays: selectedPeriod || "",
           sort: selectedSort,
           minReviews,
-          minPlaytime,
           userMood,
+          // 新仕様向けパラメータ（バックエンド側で順次対応する想定）
+          priceMin: 0,
+          priceMax: maxPrice === MAX_PRICE_SLIDER ? null : maxPrice,
+          reviewCountMin: minReviews || null,
+          reviewCountMax: null,
+          aiTags,
+          excludeEarlyAccess,
+          excludeMultiplayerOnly,
+          excludeHorror,
         },
       });
 
@@ -415,10 +375,10 @@ export default function SearchPage() {
       const rankings = (data as RankingGame[]) ?? [];
       console.log(`Received ${rankings.length} games from server`);
 
-      // ここからクライアント側フィルタを順番に適用
+      // クライアント側フィルタ
       let filtered = rankings;
 
-      // 1) Max Price（price はセント想定なので /100）
+      // 1) Max Price
       if (maxPrice !== MAX_PRICE_SLIDER) {
         filtered = filtered.filter((game) => {
           const priceInDollars =
@@ -434,21 +394,12 @@ export default function SearchPage() {
         filtered = filtered.filter((game) => game.totalReviews >= minReviews);
       }
 
-      // 3) Min Playtime（averagePlaytime は分単位なので時間に換算）
-      if (minPlaytime > 0) {
-        filtered = filtered.filter((game) => {
-          const hours = game.averagePlaytime / 60;
-          return hours >= minPlaytime;
-        });
-      }
-
       console.log(
-        `After client filters (price<=${maxPrice}, reviews>=${minReviews}, playtime>=${minPlaytime}h): ${filtered.length} games`
+        `After client filters (price<=${maxPrice}, reviews>=${minReviews}): ${filtered.length} games`
       );
 
-      // --- クライアント側ソート（特に Mood Match 用） ---
+      // Mood Match ソート（その他はサーバ側の並びを採用）
       if (selectedSort === "recommended") {
-        // Mood Match（moodScore が高い順）で並び替える
         filtered = [...filtered].sort((a, b) => {
           const scoreA =
             a.moodScore ??
@@ -463,16 +414,8 @@ export default function SearchPage() {
           return scoreB - scoreA;
         });
       }
-      // 他の sort（positive-ratio / most-reviews / newest）は
-      // すでに search-games 側で並び替え済み想定なので、ここでは追加処理なし。
-
 
       setGames(filtered);
-      // toast({
-      //   title: "Search complete",
-      //   description: `Found ${filtered.length} hidden gems`,
-      // });
-
     } catch (err) {
       console.error("Exception fetching rankings:", err);
       toast({
@@ -491,10 +434,12 @@ export default function SearchPage() {
     setSelectedSort("recommended");
     setMaxPrice(MAX_PRICE_SLIDER);
     setMinReviews(0);
-    setMinPlaytime(0);
+    setAiTags([]);
+    setExcludeEarlyAccess(false);
+    setExcludeMultiplayerOnly(false);
+    setExcludeHorror(false);
     setUserMood({ ...DEFAULT_MOOD });
   };
-
 
   const removeFilter = (filterType: string) => {
     switch (filterType) {
@@ -513,8 +458,17 @@ export default function SearchPage() {
       case "minReviews":
         setMinReviews(0);
         break;
-      case "minPlaytime":
-        setMinPlaytime(0);
+      case "aiTags":
+        setAiTags([]);
+        break;
+      case "excludeEarlyAccess":
+        setExcludeEarlyAccess(false);
+        break;
+      case "excludeMultiplayerOnly":
+        setExcludeMultiplayerOnly(false);
+        break;
+      case "excludeHorror":
+        setExcludeHorror(false);
         break;
     }
   };
@@ -525,284 +479,49 @@ export default function SearchPage() {
     selectedSort !== "recommended" ||
     maxPrice !== MAX_PRICE_SLIDER ||
     minReviews > 0 ||
-    minPlaytime > 0;
+    aiTags.length > 0 ||
+    excludeEarlyAccess ||
+    excludeMultiplayerOnly ||
+    excludeHorror;
 
-  // 詳細フィルタ内側の共通コンテンツ
-  const DetailedFilterContent = () => (
-    <div className="px-4 py-5 md:px-6 md:py-6 space-y-6">
-      {/* === Filter Panel ====================================== */}
-      <div className="space-y-4 rounded-[24px] border border-white/10 bg-[radial-gradient(circle_at_top_left,_#31235f_0,_#141327_45%,_#050509_100%)] px-4 py-5 md:px-6 md:py-6 shadow-[0_24px_70px_rgba(0,0,0,0.85)]">
-        {/* Top row: genre / period / sort */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {/* Genre */}
-          <div className="space-y-2">
-            <label
-              htmlFor="genre"
-              className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
-            >
-              Genre
-            </label>
-            <select
-              id="genre"
-              value={selectedGenre}
-              onChange={(e) => setSelectedGenre(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
-            >
-              <option value="">All genres</option>
-              {GENRE_OPTIONS.map((genre) => (
-                <option key={genre} value={genre}>
-                  {genre}
-                </option>
-              ))}
-            </select>
-          </div>
+  // ---- UI 用にまとめた現在のフィルター値 ----
+  const currentFilters: FilterState = {
+    sort: selectedSort as SortOptionKey,
+    genre: selectedGenre,
+    period: selectedPeriod,
+    priceMin: 0,
+    priceMax: maxPrice,
+    reviewCountMin: minReviews,
+    reviewCountMax: 10000,
+    aiTags,
+    excludeEarlyAccess,
+    excludeMultiplayerOnly,
+    excludeHorror,
+  };
 
-          {/* Period */}
-          <div className="space-y-2">
-            <label
-              htmlFor="period"
-              className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
-            >
-              Released within
-            </label>
-            <select
-              id="period"
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-black/40 px-3 py-2 text-sm text-slate-50 shadow-inner focus:outline-none focus:ring-2 focus:ring-pink-400/70"
-            >
-              {PERIOD_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+  const handleApplyFilters = (next: FilterState) => {
+    // SearchPage 側の state に書き戻す
+    setSelectedSort(next.sort);
+    setSelectedGenre(next.genre);
+    setSelectedPeriod(next.period);
+    setMaxPrice(next.priceMax);
+    setMinReviews(next.reviewCountMin);
+    setAiTags(next.aiTags);
+    setExcludeEarlyAccess(next.excludeEarlyAccess);
+    setExcludeMultiplayerOnly(next.excludeMultiplayerOnly);
+    setExcludeHorror(next.excludeHorror);
 
-          {/* Sort */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-              Sort by
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {SORT_OPTIONS.map((option) => (
-                <Button
-                  key={option.value}
-                  variant={
-                    selectedSort === option.value ? "default" : "outline"
-                  }
-                  size="sm"
-                  className={
-                    selectedSort === option.value
-                      ? "rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 border-none text-slate-950 shadow-[0_10px_25px_rgba(0,0,0,0.7)]"
-                      : "rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
-                  }
-                  onClick={() => setSelectedSort(option.value)}
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
+    // 実際の検索を実行
+    fetchRankings();
+  };
 
-        <div className="mt-6">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-            MOOD MATCHING
-          </h3>
-          <p className="mb-4 text-xs text-slate-400">
-            スライダーを動かすと気分マッチ度が検索に反映されます。
-          </p>
+  const handleResetFilters = () => {
+    // 既存の clearAllFilters を使って全リセット
+    clearAllFilters();
+    // リセット後の条件で検索を掛け直す
+    fetchRankings();
+  };
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {MOOD_SLIDERS.map((m) => (
-              <div key={m.id}>
-                <div className="mb-1 flex justify-between text-xs text-slate-300">
-                  <span>{m.left}</span>
-                  <span>{m.right}</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={MOOD_SLIDER_MAX}
-                  value={userMood[m.id]}
-                  onChange={(e) =>
-                    setUserMood((prev) => ({
-                      ...prev,
-                      [m.id]: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Additional Filters */}
-        <div className="mt-4 border-t border-white/10 pt-4">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
-            Additional Filters
-          </h3>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {/* Max Price */}
-            <div className="space-y-3">
-              <label
-                htmlFor="maxPrice"
-                className="flex items-center justify-between text-sm font-medium text-slate-100"
-              >
-                <span>Max Price</span>
-                <span className="font-semibold text-pink-300">
-                  {maxPrice === MAX_PRICE_SLIDER ? "Any" : `$${maxPrice}`}
-                </span>
-              </label>
-              <Slider
-                id="maxPrice"
-                value={[maxPrice]}
-                min={0}
-                max={MAX_PRICE_SLIDER}
-                step={1}
-                onValueChange={(vals) => setMaxPrice(vals[0])}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>$0</span>
-                <span>{`$${MAX_PRICE_SLIDER}+`}</span>
-              </div>
-            </div>
-
-            {/* Min Reviews */}
-            <div className="space-y-3">
-              <label
-                htmlFor="minReviews"
-                className="flex items-center justify-between text-sm font-medium text-slate-100"
-              >
-                <span>Min Reviews</span>
-                <span className="font-semibold text-pink-300">
-                  {minReviews === 0 ? "Any" : `${minReviews}+`}
-                </span>
-              </label>
-              <Slider
-                id="minReviews"
-                value={[minReviews]}
-                min={0}
-                max={2000}
-                step={50}
-                onValueChange={(vals) => setMinReviews(vals[0])}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>0</span>
-                <span>2000+</span>
-              </div>
-            </div>
-
-            {/* Min Playtime */}
-            <div className="space-y-3">
-              <label
-                htmlFor="minPlaytime"
-                className="flex items-center justify-between text-sm font-medium text-slate-100"
-              >
-                <span>Min Playtime</span>
-                <span className="font-semibold text-pink-300">
-                  {minPlaytime === 0 ? "Any" : `${minPlaytime}h+`}
-                </span>
-              </label>
-              <Slider
-                id="minPlaytime"
-                value={[minPlaytime]}
-                min={0}
-                max={50}
-                step={1}
-                onValueChange={(vals) => setMinPlaytime(vals[0])}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>0h</span>
-                <span>50h+</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Apply Button */}
-        <div className="flex justify-end pt-4">
-          <Button
-            onClick={() => {
-              fetchRankings();
-              setShowFilterPanel(false); // ボトムの詳細フィルタを閉じる
-            }}
-            disabled={loading}
-            className="rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-6 text-slate-950 font-semibold shadow-[0_14px_40px_rgba(0,0,0,0.75)] hover:brightness-105"
-          >
-            {loading ? "Searching..." : "Apply filters"}
-          </Button>
-
-        </div>
-
-      </div>
-    </div>
-  );
-
-  // トップ / ボトム共通のクイックフィルタバー
-  const QuickFilterBar = () => (
-    <div className="max-w-7xl mx-auto rounded-2xl border border-white/15 bg-black/80 backdrop-blur-md px-4 py-3 flex items-center justify-between gap-3">
-      {/* 左側：Quick filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] text-slate-300/90">Quick filters:</span>
-
-        <button
-          onClick={() => setSelectedSort("recommended")}
-          className="px-3 py-1 rounded-full text-[11px] bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 text-black font-semibold shadow-md hover:brightness-110"
-        >
-          人気の隠れた名作
-        </button>
-
-        <button
-          onClick={() => setSelectedGenre("Relaxing")}
-          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-        >
-          まったり
-        </button>
-
-        <button
-          onClick={() => setSelectedGenre("Horror")}
-          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-        >
-          緊張感
-        </button>
-
-        <button
-          onClick={() => setSelectedGenre("RPG")}
-          className="px-3 py-1 rounded-full text-[11px] bg-white/10 border border-white/20 text-slate-200 hover:bg-white/20"
-        >
-          ストーリー
-        </button>
-      </div>
-
-      {/* 右側：詳細フィルタ / リセット */}
-      <div className="flex items-center gap-2">
-        {hasActiveFilters && (
-          <button
-            type="button"
-            onClick={clearAllFilters}
-            className="text-[11px] text-slate-200/90 underline underline-offset-2 hover:opacity-80"
-          >
-            条件リセット
-          </button>
-        )}
-
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => setShowFilterPanel(true)}
-          className="h-8 rounded-full bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-400 px-3 text-[11px] font-semibold text-slate-950 shadow-[0_14px_40px_rgba(0,0,0,0.75)]"
-        >
-          詳細フィルタ
-        </Button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_50%,_#020008_100%)] text-slate-50">
@@ -837,26 +556,19 @@ export default function SearchPage() {
                 Home
               </a>
             </Button>
-
-            {/* <Button
-              variant="outline"
-              asChild
-              className="rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
-            >
-              <a href="/wishlist">Wishlist</a>
-            </Button> */}
           </div>
         </div>
 
         {/* === Active Filter Chips ================================ */}
         {hasActiveFilters && !loading && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.7)]">
-            <span className="text-xs text-slate-300/90">
-              Active filters:
-            </span>
+            <span className="text-xs text-slate-300/90">Active filters:</span>
 
             {selectedGenre && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
                 Genre: {selectedGenre}
                 <button
                   onClick={() => removeFilter("genre")}
@@ -868,12 +580,12 @@ export default function SearchPage() {
             )}
 
             {selectedPeriod && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
                 Period:{" "}
-                {
-                  PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)
-                    ?.label
-                }
+                {PERIOD_OPTIONS.find((p) => p.value === selectedPeriod)?.label}
                 <button
                   onClick={() => removeFilter("period")}
                   className="rounded-full p-0.5 hover:bg-rose-500/20"
@@ -884,12 +596,11 @@ export default function SearchPage() {
             )}
 
             {selectedSort !== "recommended" && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
-                Sort:{" "}
-                {
-                  SORT_OPTIONS.find((s) => s.value === selectedSort)
-                    ?.label
-                }
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
+                Sort: {SORT_OPTIONS.find((s) => s.value === selectedSort)?.label}
                 <button
                   onClick={() => removeFilter("sort")}
                   className="rounded-full p-0.5 hover:bg-rose-500/20"
@@ -900,7 +611,10 @@ export default function SearchPage() {
             )}
 
             {maxPrice !== MAX_PRICE_SLIDER && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
                 Price ≤ ${maxPrice}
                 <button
                   onClick={() => removeFilter("maxPrice")}
@@ -912,7 +626,10 @@ export default function SearchPage() {
             )}
 
             {minReviews > 0 && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
                 Reviews ≥ {minReviews}
                 <button
                   onClick={() => removeFilter("minReviews")}
@@ -923,11 +640,59 @@ export default function SearchPage() {
               </Badge>
             )}
 
-            {minPlaytime > 0 && (
-              <Badge variant="secondary" className="gap-2 rounded-full bg-[#181626] border-white/20">
-                Playtime ≥ {minPlaytime}h
+            {aiTags.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
+                Tags: {aiTags.join(", ")}
                 <button
-                  onClick={() => removeFilter("minPlaytime")}
+                  onClick={() => removeFilter("aiTags")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {excludeEarlyAccess && (
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
+                Excl. Early Access
+                <button
+                  onClick={() => removeFilter("excludeEarlyAccess")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {excludeMultiplayerOnly && (
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
+                Excl. Multiplayer-only
+                <button
+                  onClick={() => removeFilter("excludeMultiplayerOnly")}
+                  className="rounded-full p-0.5 hover:bg-rose-500/20"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            )}
+
+            {excludeHorror && (
+              <Badge
+                variant="secondary"
+                className="gap-2 rounded-full bg-[#181626] border-white/20"
+              >
+                Excl. Horror
+                <button
+                  onClick={() => removeFilter("excludeHorror")}
                   className="rounded-full p-0.5 hover:bg-rose-500/20"
                 >
                   <X className="w-3 h-3" />
@@ -945,10 +710,17 @@ export default function SearchPage() {
             </Button>
           </div>
         )}
-        {/* === Top Quick Filter Bar =============================== */}
-        <div ref={topFilterRef} className="mt-4">
-          <QuickFilterBar />
-        </div>
+
+        {/* === Detail Filters Panel（インライン / 新デザイン） === */}
+        {/* === Detail Filters Panel（インライン / 新デザイン） === */}
+
+        <SearchPageFilters
+          initialFilters={currentFilters}
+          loading={loading}
+          onApply={handleApplyFilters}
+          onReset={handleResetFilters}
+        />
+
 
         {/* === Results ============================================ */}
         {loading ? (
@@ -962,28 +734,23 @@ export default function SearchPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
-            {games.map((game) => {
-
-
-              return (
-                <div key={game.appId} className="relative h-full">
-                  {/* Gem Label Badge */}
-                  <SearchResultCard
-                    appId={game.appId}
-                    title={game.title}
-                    summary={game.analysis.summary}
-                    labels={game.analysis.labels}
-                    positiveRatio={game.positiveRatio}
-                    totalReviews={game.totalReviews}
-                    price={game.price}
-                    averagePlaytime={game.averagePlaytime}
-                    gameData={game}
-                    analysisData={game.analysis}
-                    screenshots={game.screenshots}
-                  />
-                </div>
-              );
-            })}
+            {games.map((game) => (
+              <div key={game.appId} className="relative h-full">
+                <SearchResultCard
+                  appId={game.appId}
+                  title={game.title}
+                  summary={game.analysis.summary}
+                  labels={game.analysis.labels}
+                  positiveRatio={game.positiveRatio}
+                  totalReviews={game.totalReviews}
+                  price={game.price}
+                  averagePlaytime={game.averagePlaytime}
+                  gameData={game}
+                  analysisData={game.analysis}
+                  screenshots={game.screenshots}
+                />
+              </div>
+            ))}
 
             {games.length === 0 && (
               <div className="py-20 text-center">
@@ -996,50 +763,580 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* 🔍 一時的なデバッグ表示ここから */}
+        {/* 🔍 デバッグ表示（必要なければあとで削除） */}
         <pre className="mt-4 text-[10px] leading-relaxed text-slate-300 bg-black/40 p-3 rounded-lg border border-white/10">
           navMoodOverride: {JSON.stringify(navMoodOverride)}
           {"\n"}
           userMood: {JSON.stringify(userMood)}
         </pre>
-        {/* 🔍 一時的なデバッグ表示ここまで */}
-
-        {/* === Bottom Fixed Filter Bar ================================== */}
-        {!isTopFilterVisible && (
-          <div className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-2 md:px-8">
-            <QuickFilterBar />
-          </div>
-        )}
-
-        {/* === Bottom Sheet: Detailed Filters ============================ */}
-        {showFilterPanel && (
-          <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-5xl rounded-t-3xl bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_55%,_#020008_100%)] shadow-[0_-24px_70px_rgba(0,0,0,0.9)] max-h-[95vh] overflow-y-auto">
-              {/* ヘッダー行 */}
-              <div className="flex items-center justify-between px-4 pt-3 pb-2 md:px-6">
-                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
-                  Search Filters
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowFilterPanel(false)}
-                  className="h-8 w-8 rounded-full text-slate-200 hover:bg-white/10"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* 中身は既存の DetailedFilterContent をそのまま再利用 */}
-              <DetailedFilterContent />
-            </div>
-          </div>
-        )}
-
       </div>
     </div>
   );
-
 }
 
+// -----------------------------------------
+// 小さめのプレゼン用コンポーネント
+// -----------------------------------------
+type ToggleCheckboxProps = {
+  label: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+};
+
+interface ChipProps {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+
+function Chip({ label, active, onClick }: ChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200",
+        active
+          ? "bg-cyan-500/20 border-cyan-500 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]"
+          : "bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200",
+      ].join(" ")}
+    >
+      {label}
+    </button>
+  );
+}
+
+
+interface ToggleProps {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}
+
+function Toggle({ label, description, checked, onChange }: ToggleProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-left hover:bg-slate-800/80 transition"
+    >
+      <div>
+        <p className="text-[11px] font-medium text-slate-100">{label}</p>
+        {description && (
+          <p className="mt-0.5 text-[10px] text-slate-400">{description}</p>
+        )}
+      </div>
+      <span
+        className={[
+          "inline-flex h-4 w-7 items-center rounded-full p-[2px] transition",
+          checked ? "bg-sky-400" : "bg-slate-700/80",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "h-3 w-3 rounded-full bg-white shadow-sm transform transition-transform",
+            checked ? "translate-x-3" : "translate-x-0",
+          ].join(" ")}
+        />
+      </span>
+    </button>
+  );
+}
+
+interface DualRangeSliderProps {
+  label: string;
+  unit?: string;
+  min: number;
+  max: number;
+  minVal: number;
+  maxVal: number;
+  onChange: (min: number, max: number) => void;
+}
+
+function DualRangeSlider({
+  label,
+  unit = "",
+  min,
+  max,
+  minVal,
+  maxVal,
+  onChange,
+}: DualRangeSliderProps) {
+  const [minState, setMinState] = useState(minVal);
+  const [maxState, setMaxState] = useState(maxVal);
+  const minValRef = useRef(minVal);
+  const maxValRef = useRef(maxVal);
+  const range = useRef<HTMLDivElement | null>(null);
+
+  const getPercent = (value: number) =>
+    Math.round(((value - min) / (max - min)) * 100);
+
+  // バーの塗りつぶし部分を更新
+  useEffect(() => {
+    const minPercent = getPercent(minValRef.current);
+    const maxPercent = getPercent(maxValRef.current);
+
+    if (range.current) {
+      range.current.style.left = `${minPercent}%`;
+      range.current.style.right = `${100 - maxPercent}%`;
+    }
+  }, [minState, maxState, min, max]);
+
+  // 外側から値が変わったときに同期
+  useEffect(() => {
+    setMinState(minVal);
+    setMaxState(maxVal);
+    minValRef.current = minVal;
+    maxValRef.current = maxVal;
+  }, [minVal, maxVal]);
+
+  const handleMinChange = (value: number) => {
+    const clamped = Math.min(value, maxState - 1);
+    setMinState(clamped);
+    minValRef.current = clamped;
+    onChange(clamped, maxState);
+  };
+
+  const handleMaxChange = (value: number) => {
+    const clamped = Math.max(value, minState + 1);
+    setMaxState(clamped);
+    maxValRef.current = clamped;
+    onChange(minState, clamped);
+  };
+
+  return (
+    <div className="w-full py-3">
+      <div className="flex justify-between mb-2">
+        <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">
+          {label}
+        </span>
+        <span className="text-cyan-400 text-xs font-bold">
+          {unit}
+          {minState.toLocaleString()} – {unit}
+          {maxState.toLocaleString()}
+        </span>
+      </div>
+
+      <div className="relative h-1.5 rounded-full bg-slate-800/80">
+        <div
+          ref={range}
+          className="absolute h-1.5 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400"
+        />
+      </div>
+
+      <div className="relative mt-2 h-4">
+        {/* min */}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={minState}
+          onChange={(e) => handleMinChange(Number(e.target.value))}
+          className="absolute w-full h-4 appearance-none bg-transparent pointer-events-auto"
+        />
+        {/* max */}
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={maxState}
+          onChange={(e) => handleMaxChange(Number(e.target.value))}
+          className="absolute w-full h-4 appearance-none bg-transparent pointer-events-auto"
+        />
+      </div>
+
+      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+        <span>
+          {unit}
+          {min.toLocaleString()}
+        </span>
+        <span>
+          {unit}
+          {max.toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface SearchPageFiltersProps {
+  initialFilters: FilterState;
+  loading: boolean;
+  onApply: (filters: FilterState) => void;
+  onReset: () => void;
+}
+
+function SearchPageFilters({
+  initialFilters,
+  loading,
+  onApply,
+  onReset,
+}: SearchPageFiltersProps) {
+  const [filters, setFilters] = useState<FilterState>(initialFilters);
+
+  const [expandedSection, setExpandedSection] = useState<string | null>("sort");
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSection((prev) => (prev === sectionId ? null : sectionId));
+  };
+
+  const SectionHeader = ({
+    title,
+    id,
+  }: {
+    title: string;
+    id: string;
+  }) => (
+    <div
+      className="flex items-center justify-between py-4 md:py-2 cursor-pointer md:cursor-default group"
+      onClick={() => toggleSection(id)}
+    >
+      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-[0.18em] group-hover:text-white transition-colors">
+        {title}
+      </h3>
+      <span className="md:hidden text-slate-500">
+        {expandedSection === id ? (
+          <ChevronUp size={16} />
+        ) : (
+          <ChevronDown size={16} />
+        )}
+      </span>
+    </div>
+  );
+
+
+
+  // SearchPage 側の state 変更と同期
+  useEffect(() => {
+    setFilters(initialFilters);
+  }, [initialFilters]);
+
+  const toggleGenre = (genre: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      genre: prev.genre === genre ? "" : genre,
+    }));
+  };
+
+  const toggleAiTag = (tag: string) => {
+    setFilters((prev) => ({
+      ...prev,
+      aiTags: prev.aiTags.includes(tag)
+        ? prev.aiTags.filter((t) => t !== tag)
+        : [...prev.aiTags, tag],
+    }));
+  };
+
+  const handleApply = () => {
+    onApply(filters);
+  };
+
+  const handleReset = () => {
+    onReset();
+  };
+
+  return (
+    <section
+      id="detail-filters"
+      className="relative bg-slate-900/60 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl px-4 py-4 md:px-6 md:py-6 space-y-5"
+    >
+      {/* 背景のグロー（index.tsx と同じ雰囲気） */}
+      <div className="pointer-events-none absolute top-0 right-0 w-64 h-64 rounded-full bg-cyan-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-0 w-64 h-64 rounded-full bg-purple-500/10 blur-3xl" />
+
+
+      {/* Body */}
+      <div className="grid grid-cols-1 gap-5 md:gap-6">
+        {/* 左カラム：Sort / Genre / AI Tags */}
+        <div className="space-y-4">
+
+          {/* 左カラム：Sort / Genre / AI Tags */}
+          <div className="space-y-4">
+            {/* Sort */}
+            <div className="border-b border-white/5 pb-4 md:pb-6">
+              <SectionHeader title="Sort By" id="sort" />
+
+              <div
+                className={`${expandedSection === "sort" ? "block" : "hidden"
+                  } md:block mt-2`}
+              >
+                <div className="flex flex-wrap gap-3">
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          sort: opt.value as SortOptionKey,
+                        }))
+                      }
+                      className={[
+                        "px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all",
+                        filters.sort === opt.value
+                          ? "bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-900 shadow-[0_0_25px_rgba(34,211,238,0.7)]"
+                          : "bg-slate-800/80 text-slate-300 border border-slate-600 hover:border-cyan-400/60 hover:text-white",
+                      ].join(" ")}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+
+            {/* Genre */}
+            <div className="border-b border-white/5 pb-4 md:pb-5">
+              <SectionHeader title="Genres" id="genres" />
+
+              <div
+                className={`${expandedSection === "genres" ? "block" : "hidden"
+                  } md:block mt-1`}
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {GENRE_OPTIONS.map((genre) => (
+                    <Chip
+                      key={genre}
+                      label={genre}
+                      active={filters.genre === genre}
+                      onClick={() => toggleGenre(genre)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+
+            {/* AI Tags */}
+            <div className="border-b border-white/5 pb-4 md:pb-5">
+              <SectionHeader title="AI Tags" id="aiTags" />
+
+              <div
+                className={`${expandedSection === "aiTags" ? "block" : "hidden"
+                  } md:block mt-1`}
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {AI_TAG_OPTIONS.map((tag) => (
+                    <Chip
+                      key={tag}
+                      label={`#${tag}`}
+                      active={filters.aiTags.includes(tag)}
+                      onClick={() => toggleAiTag(tag)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+
+            {/* Range + Exclusions （1枚カードに統合） */}
+            <div className="rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-4 md:px-6 md:py-6 shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
+              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6">
+                {/* 左：Range */}
+                <div className="border-b border-white/5 pb-4 md:pb-0 md:border-b-0 md:pr-4 md:border-r md:border-slate-700/60">
+
+                  <SectionHeader title="Range" id="range" />
+
+                  <div
+                    className={`${expandedSection === "range" ? "block" : "hidden"
+                      } md:block mt-1 space-y-4`}
+                  >
+                    <DualRangeSlider
+                      label="Price"
+                      unit="$"
+                      min={0}
+                      max={MAX_PRICE_SLIDER}
+                      minVal={filters.priceMin}
+                      maxVal={filters.priceMax}
+                      onChange={(min, max) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          priceMin: min,
+                          priceMax: max,
+                        }))
+                      }
+                    />
+                    <DualRangeSlider
+                      label="Reviews"
+                      min={0}
+                      max={10000}
+                      minVal={filters.reviewCountMin}
+                      maxVal={filters.reviewCountMax}
+                      onChange={(min, max) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          reviewCountMin: min,
+                          reviewCountMax: max,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                {/* 右：Exclusions */}
+                <div className="pt-4 md:pt-0 md:pl-6">
+                  <SectionHeader title="Exclusions" id="exclusions" />
+
+                  <div
+                    className={`${expandedSection === "exclusions" ? "block" : "hidden"
+                      } md:block space-y-3`}
+                  >
+                    {/* Exclude Early Access */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          excludeEarlyAccess: !prev.excludeEarlyAccess,
+                        }))
+                      }
+                      className="flex items-center justify-between w-full py-2"
+                    >
+                      <span className="text-sm text-slate-300">
+                        Exclude Early Access
+                      </span>
+                      <span
+                        className={[
+                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                          filters.excludeEarlyAccess
+                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                            : "bg-slate-700",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
+                            filters.excludeEarlyAccess ? "translate-x-5" : "translate-x-1",
+                          ].join(" ")}
+                        />
+                      </span>
+                    </button>
+
+                    {/* Exclude Multiplayer Only */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          excludeMultiplayerOnly: !prev.excludeMultiplayerOnly,
+                        }))
+                      }
+                      className="flex items-center justify-between w-full py-2"
+                    >
+                      <span className="text-sm text-slate-300">
+                        Exclude Multiplayer Only
+                      </span>
+                      <span
+                        className={[
+                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                          filters.excludeMultiplayerOnly
+                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                            : "bg-slate-700",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
+                            filters.excludeMultiplayerOnly
+                              ? "translate-x-5"
+                              : "translate-x-1",
+                          ].join(" ")}
+                        />
+                      </span>
+                    </button>
+
+                    {/* Exclude Horror */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          excludeHorror: !prev.excludeHorror,
+                        }))
+                      }
+                      className="flex items-center justify-between w-full py-2"
+                    >
+                      <span className="text-sm text-slate-300">
+                        Exclude Horror
+                      </span>
+                      <span
+                        className={[
+                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                          filters.excludeHorror
+                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                            : "bg-slate-700",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
+                            filters.excludeHorror ? "translate-x-5" : "translate-x-1",
+                          ].join(" ")}
+                        />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          {/* Footer: RESET / APPLY FILTERS */}
+          <div className="mt-5 md:mt-6 flex flex-col md:flex-row items-center justify-between gap-3 border-t border-white/10 pt-4 md:pt-5">
+            {/* RESET */}
+            <button
+              type="button"
+              onClick={handleReset}
+              className="inline-flex items-center gap-2 text-xs md:text-sm text-slate-300 hover:text-white transition-colors"
+            >
+              <RefreshCw size={16} />
+              <span>RESET</span>
+            </button>
+
+            {/* APPLY FILTERS */}
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-6 py-2.5 text-xs md:text-sm font-semibold text-slate-950 shadow-[0_0_22px_rgba(34,211,238,0.8)] hover:bg-cyan-400 transition-transform duration-150 active:scale-95 disabled:opacity-60"
+            >
+              <Check size={18} strokeWidth={3} />
+              <span>{loading ? "Searching..." : "APPLY FILTERS"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+function ToggleCheckbox({ label, checked, onChange }: ToggleCheckboxProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="w-full flex items-center justify-between gap-2 rounded-2xl border border-white/12 bg-slate-900/50 px-3 py-2 text-[11px] text-left hover:bg-slate-800/80 transition"
+    >
+      <span className="text-slate-100 text-[11px] leading-snug flex-1 mr-2">
+        {label}
+      </span>
+      <span
+        className={[
+          "inline-flex h-4 w-7 items-center rounded-full p-[2px] transition",
+          checked ? "bg-sky-400" : "bg-slate-700/80",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "h-3 w-3 rounded-full bg-white shadow-sm transform transition-transform",
+            checked ? "translate-x-3" : "translate-x-0",
+          ].join(" ")}
+        />
+      </span>
+    </button>
+  );
+}

@@ -1,5 +1,5 @@
 // src/pages/Index.tsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -8,7 +8,6 @@ import {
   BookOpen,
   Crosshair,
   Timer,
-  Star,
   ArrowRight,
   Gamepad2,
 } from "lucide-react";
@@ -121,17 +120,6 @@ const VIBES: VibeData[] = [
 ];
 
 
-// Sub Vibes は「今日の気分の追加意図」として 7 種類に統一
-const SUB_VIBES = [
-  { id: "cozy", label: "Cozy" },         // ほっこり・落ち着いた
-  { id: "emotional", label: "Emotional" },    // 泣ける・感情を揺さぶる
-  { id: "difficult", label: "Difficult" },    // 歯ごたえ・挑戦
-  { id: "puzzle-lite", label: "Puzzle-lite" },  // 軽いパズル感
-  { id: "atmospheric", label: "Atmospheric" },  // 雰囲気・世界観重視
-  { id: "humor", label: "Humor" },        // 軽い笑い・ゆるさ
-  { id: "strategic", label: "Strategic" },    // 戦略性・計画性
-];
-
 // --- Experience Classes per Vibe ---
 
 type ExperienceClassOption = {
@@ -141,42 +129,44 @@ type ExperienceClassOption = {
 
 const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
   Chill: [
-    { id: "cozy-relaxation", label: "Cozy Relaxation" },
-    { id: "build-craft", label: "Build & Craft" },
-    { id: "puzzle-light", label: "Puzzle / Light" },
-    { id: "exploration", label: "Calm Exploration" },
+    { id: "cozy-life", label: "Cozy Life & Crafting" },
+    { id: "gentle-exploration", label: "Gentle Exploration" },
+    { id: "light-puzzle", label: "Light Puzzle" },
+    { id: "relaxed-building", label: "Relaxed Building / Townmaking" },
     { id: "any", label: "Any" },
   ],
   Focus: [
-    { id: "tactical-strategy", label: "Tactical Strategy" },
-    { id: "puzzle-deep", label: "Deep Puzzle" },
-    { id: "grand-strategy", label: "Grand Strategy (Light)" },
-    { id: "efficiency-build", label: "Efficiency Build" },
+    { id: "tactics", label: "Turn-Based Tactics" },
+    { id: "rts", label: "Real-Time Strategy" },
+    { id: "deckbuilding", label: "Deckbuilding Strategy" },
+    { id: "grand-strategy", label: "Grand Strategy" },
+    { id: "hard-puzzle", label: "Hard Puzzle / Logic" },
     { id: "any", label: "Any" },
   ],
   Story: [
-    { id: "narrative-adventure", label: "Narrative Adventure" },
-    { id: "immersive-exploration", label: "Immersive Exploration" },
-    { id: "story-puzzle", label: "Story Puzzle" },
-    { id: "cozy-story", label: "Cozy Story" },
+    { id: "story-driven", label: "Story-Driven" },
+    { id: "character-drama", label: "Character Drama" },
+    { id: "mystery-investigation", label: "Mystery & Investigation" },
+    { id: "emotional-journey", label: "Emotional Journey" },
     { id: "any", label: "Any" },
   ],
   Speed: [
     { id: "action-combat", label: "Action Combat" },
-    { id: "shooter-aim", label: "Shooter / Aim" },
-    { id: "racing", label: "Racing" },
-    { id: "roguelike-fast", label: "Fast Roguelike" },
+    { id: "precision-shooter", label: "Precision Shooter" },
+    { id: "rhythm-music", label: "Rhythm / Music Action" },
+    { id: "sports-arena", label: "Competitive Sports & Arena" },
+    { id: "high-intensity-rogue", label: "High-Intensity Roguelike" },
     { id: "any", label: "Any" },
   ],
   Short: [
-    { id: "run-based", label: "Run-based Roguelike" },
-    { id: "short-action", label: "Short Action Stages" },
+    { id: "run-rogue", label: "Run-Based Roguelike" },
+    { id: "arcade-action", label: "Arcade Action" },
     { id: "arcade-shooter", label: "Arcade Shooter" },
     { id: "short-puzzle", label: "Short Puzzle" },
+    { id: "mini-games", label: "Mini Games" },
     { id: "any", label: "Any" },
   ],
 };
-
 
 
 // --- Utilities ---
@@ -185,6 +175,36 @@ const wrap = (min: number, max: number, v: number) => {
   const rangeSize = max - min;
   return ((((v - min) % rangeSize) + rangeSize) % rangeSize) + min;
 };
+
+/**
+ * 画面幅ベースで「モバイルかどうか」を判定するフック
+ * max-width: 768px をモバイル扱い
+ */
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mq = window.matchMedia("(max-width: 768px)");
+
+    // 初期値
+    setIsMobile(mq.matches);
+
+    // 変更イベント
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    mq.addEventListener("change", handleChange);
+    return () => {
+      mq.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  return isMobile;
+};
+
 
 // --- Animations ---
 
@@ -235,14 +255,24 @@ const swipeVariants = {
 // --- Components ---
 
 const FloatingParticles = ({ color }: { color: string }) => {
-  const particles = Array.from({ length: 20 }).map((_, i) => ({
-    id: i,
-    x: Math.random() * 100,
-    y: Math.random() * 100,
-    size: Math.random() * 20 + 5,
-    duration: Math.random() * 10 + 10,
-    type: i % 3
-  }));
+  const isMobile = useIsMobile();
+
+  // モバイル時は粒をかなり減らす（例: 5個）
+  const particleCount = isMobile ? 5 : 15;
+
+  // 再レンダーごとにランダム生成し直さないよう useMemo で固定
+  const particles = useMemo(
+    () =>
+      Array.from({ length: particleCount }).map((_, i) => ({
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: Math.random() * 20 + 5,
+        duration: Math.random() * 10 + 10,
+        type: i % 3,
+      })),
+    [particleCount]
+  );
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -256,14 +286,17 @@ const FloatingParticles = ({ color }: { color: string }) => {
             width: p.size,
             height: p.size,
             backgroundColor: color,
-            borderRadius: p.type === 0 ? '50%' : p.type === 1 ? '4px' : '0',
-            clipPath: p.type === 2 ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none'
+            borderRadius: p.type === 0 ? "50%" : p.type === 1 ? "4px" : "0",
+            clipPath:
+              p.type === 2
+                ? "polygon(50% 0%, 0% 100%, 100% 100%)"
+                : "none",
           }}
           animate={{
             y: [0, -100, 0],
             rotate: [0, 180, 360],
             scale: [1, 1.5, 1],
-            opacity: [0.1, 0.4, 0.1]
+            opacity: [0.1, 0.4, 0.1],
           }}
           transition={{ duration: p.duration, repeat: Infinity, ease: "linear" }}
         />
@@ -271,6 +304,7 @@ const FloatingParticles = ({ color }: { color: string }) => {
     </div>
   );
 };
+
 
 const Background = ({ activeVibe }: { activeVibe: VibeData }) => {
   return (
@@ -456,112 +490,75 @@ const ExperienceClassSelector = ({
 }) => {
   const options = EXPERIENCE_CLASSES[activeVibe.id];
 
-  // activeVibe が変わったときに以前の選択が外れていたら、先頭をデフォルトとする
   const effectiveSelectedId =
     selectedId && options.some((o) => o.id === selectedId)
       ? selectedId
       : options[0].id;
 
   return (
-    <div className="relative z-30 flex flex-col items-center mt-6 w-full max-w-2xl px-6">
-      {/* ヘッダー行 */}
-      <div className="flex w-full items-baseline justify-between mb-2 px-1">
-        <span className="text-[10px] tracking-[0.25em] uppercase text-white/70">
-          EXPERIENCE FOCUS
-        </span>
-        <span className="text-[10px] text-white/50">
-          Tune what &quot;{activeVibe.title}&quot; means
-        </span>
-      </div>
+    <div className="relative z-30 w-full max-w-md px-6 mt-6">
+      <div className="w-full rounded-full bg-[#040618]/95 border border-white/15 px-4 py-2.5 flex flex-col gap-2 backdrop-blur-xl shadow-[0_14px_40px_rgba(0,0,0,0.7)]">
+        {/* ヘッダー行 */}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[10px] tracking-[0.26em] uppercase text-white/75">
+            EXPERIENCE FOCUS
+          </span>
+          <span className="text-[10px] text-white/55 truncate">
+            Choose how you want this {activeVibe.title.toLowerCase()}
+          </span>
+        </div>
 
-      {/* ピルレール */}
-      <div className="flex w-full gap-2 overflow-x-auto py-1">
-        {options.map((opt) => {
-          const isActive = opt.id === effectiveSelectedId;
-          return (
-            <motion.button
-              key={opt.id}
-              type="button"
-              onClick={() => onSelect(opt.id)}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              className={`inline-flex items-center justify-center px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${isActive
-                ? "shadow-lg"
-                : "bg-black/40 border-white/15 text-white/60 hover:bg-white/10 hover:text-white"
-                }`}
-              style={
-                isActive
-                  ? {
-                    background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.95))`,
-                    borderColor: activeVibe.colors.primary,
-                    color: "#fff",
-                    boxShadow: `0 0 22px -6px ${activeVibe.colors.primary}`,
-                  }
-                  : undefined
-              }
-            >
-              {opt.label}
-            </motion.button>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+        {/* グリッド（横スクロールなし） */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
+          {options.map((opt) => {
+            const isActive = opt.id === effectiveSelectedId;
+            const isGhost = opt.id === "any";
 
-
-const SubVibeSelector = ({
-  activeVibe,
-  selectedTags,
-  onToggleTag
-}: {
-  activeVibe: VibeData;
-  selectedTags: string[];
-  onToggleTag: (tagId: string) => void;
-}) => {
-  return (
-    <div className="relative z-30 flex flex-col items-center mt-8 w-full max-w-2xl px-6">
-      {/* Apple風の短い説明文 */}
-      <p className="text-[11px] text-white/40 tracking-wide mb-4 text-center max-w-xs">
-        Add a touch of today’s mood — subtle nuances that shape how the experience feels.
-      </p>
-
-      <div className="flex flex-wrap justify-center gap-3">
-        {SUB_VIBES.map((tag) => {
-          const isSelected = selectedTags.includes(tag.id);
-
-          return (
-            <motion.button
-              key={tag.id}
-              onClick={() => onToggleTag(tag.id)}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`inline-flex items-center justify-center px-4 py-2 text-sm font-bold transition-all duration-200 rounded-full border-2 ${isSelected
-                ? "text-black shadow-lg"
-                : "bg-black/30 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
-                }`}
-              style={{
-                backgroundColor: isSelected ? activeVibe.colors.primary : undefined,
-                borderColor: isSelected ? activeVibe.colors.primary : undefined,
-                boxShadow: isSelected ? `0 0 20px -5px ${activeVibe.colors.primary}` : undefined,
-              }}
-            >
-              <span className="inline-flex items-center justify-center gap-1">
-                <span className="text-center">{tag.label}</span>
-                {/* ★ は常に描画しておき、選択時だけ表示 */}
-                <Star
-                  className={`w-3 h-3 transition-opacity duration-150 ${isSelected ? "opacity-100 fill-current" : "opacity-0"
-                    }`}
-                />
-              </span>
-            </motion.button>
-
-          );
-        })}
+            return (
+              <motion.button
+                key={opt.id}
+                type="button"
+                onClick={() => onSelect(opt.id)}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
+                className={[
+                  "w-full inline-flex items-center justify-center px-3 py-2 rounded-full text-[11px] font-bold",
+                  "whitespace-nowrap overflow-hidden text-ellipsis border transition-all duration-200",
+                  isActive
+                    ? "text-white shadow-lg"
+                    : "bg-black/40 border-white/15 text-white/60 hover:bg-white/10 hover:text-white",
+                  isGhost && !isActive ? "border-dashed" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                style={
+                  isActive
+                    ? {
+                      background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.96))`,
+                      borderColor: activeVibe.colors.primary,
+                      color: "#fff",
+                      boxShadow: `0 0 18px ${activeVibe.colors.primary}99`,
+                    }
+                    : isGhost
+                      ? {
+                        borderColor: "rgba(190,200,245,0.9)",
+                        color: "rgba(215,225,255,0.98)",
+                        backgroundColor: "transparent",
+                      }
+                      : undefined
+                }
+              >
+                <span className="truncate">{opt.label}</span>
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 };
+
+
 
 const Dock = ({
   vibes,
@@ -614,7 +611,6 @@ const Index: React.FC = () => {
   const [selectedExperienceClass, setSelectedExperienceClass] =
     useState<string | null>(null);
 
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // 後述の navigate 用
   const navigate = useNavigate();
@@ -652,27 +648,7 @@ const Index: React.FC = () => {
     setPage([page + diff, diff > 0 ? 1 : -1]);
   };
 
-  const MAX_SUB_VIBES = 3;
 
-  const toggleTag = (tagId: string) => {
-    setSelectedTags((prev) => {
-      // すでに選択されている → 解除（トグル OFF）
-      if (prev.includes(tagId)) {
-        return prev.filter((id) => id !== tagId);
-      }
-
-      // まだ選ばれていない → 上限チェック
-      if (prev.length < MAX_SUB_VIBES) {
-        // 上限未満ならそのまま追加
-        return [...prev, tagId];
-      }
-
-      // ここに来たら prev.length === MAX_SUB_VIBES
-      // 一番古いもの（先頭）を押し出して、新しいタグを末尾に追加
-      const [, ...rest] = prev; // 先頭を捨てて残りを取得
-      return [...rest, tagId];
-    });
-  };
 
   return (
     <div className="min-h-screen relative flex flex-col font-inter selection:bg-white/30 overflow-hidden text-white">
@@ -691,11 +667,6 @@ const Index: React.FC = () => {
       </header>
 
       <main className="mt-6 flex-grow flex flex-col items-center justify-center relative z-10 px-4 pt-10 pb-32">
-        <ExperienceClassSelector
-          activeVibe={activeVibe}
-          selectedId={effectiveExperienceId}
-          onSelect={setSelectedExperienceClass}
-        />
         <div className="relative flex items-center justify-center w-full max-w-6xl h-[520px] shrink-0 touch-pan-y md:touch-none">
           {/* Back Cards (Static Visuals) */}
           <div className="absolute left-[5%] xl:left-[20%] hidden md:block opacity-40 scale-90 pointer-events-none z-0">
@@ -734,10 +705,10 @@ const Index: React.FC = () => {
           </div>
         </div>
 
-        <SubVibeSelector
+        <ExperienceClassSelector
           activeVibe={activeVibe}
-          selectedTags={selectedTags}
-          onToggleTag={toggleTag}
+          selectedId={effectiveExperienceId}
+          onSelect={setSelectedExperienceClass}
         />
 
         {/* CTA Button */}
@@ -755,7 +726,7 @@ const Index: React.FC = () => {
               navigate("/search", {
                 state: {
                   primaryVibePreset: activeVibe.id,
-                  subVibes: selectedTags,
+                  subVibes: [],
                   experienceClass: selectedExperienceClass ?? "any",
                 },
               })
