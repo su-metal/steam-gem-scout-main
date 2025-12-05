@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useNavigate } from "react-router-dom";
+import { Calendar } from "lucide-react";
 
 
 // Returns the tags that should be displayed on the card
@@ -421,160 +421,104 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="relative bg-card/50 border-primary/20 hover:border-primary/40 transition-all hover:bg-card/70 cursor-pointer overflow-hidden rounded-lg shadow-sm hover:shadow-md h-full flex flex-col"
+      className="group relative h-full overflow-hidden rounded-[26px] border border-white/10 bg-[#0b1224] shadow-xl transition-all duration-300 hover:border-cyan-500/40 hover:shadow-[0_25px_50px_rgba(6,182,212,0.25)]"
       onClick={handleClick}
     >
-
-      <div className="flex flex-col gap-4 p-4 h-full">
-        {/* Left: Header Image */}
-        <div className="w-full relative">
-          <img
-            src={headerImageUrl}
-            className="w-full aspect-video object-cover rounded-lg"
-          />
-          {normalizedMoodScore !== null && (
-            <div className="absolute bottom-3 right-3">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-purple-400 bg-black/70 backdrop-blur-sm shadow-lg flex items-center justify-center">
-                <div className="flex flex-col items-center leading-tight">
-                  <span className="text-[10px] sm:text-xs text-purple-200 font-medium">
-                    Match
-                  </span>
-                  <span className="text-lg sm:text-xl font-bold text-purple-50">
-                    {Math.round(normalizedMoodScore * 100)}%
-                  </span>
-                </div>
+      <div className="relative h-48 md:h-56 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+        <img
+          src={headerImageUrl}
+          alt={title}
+          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+        />
+        {normalizedMoodScore !== null && (
+          <div className="absolute right-4 top-[8.5rem] z-30 w-20 h-20 rounded-full bg-[#0b1224] p-0.5 shadow-lg md:top-[10.5rem]">
+            <div
+              className="relative flex h-full w-full flex-col items-center justify-center rounded-full border-[3px] border-transparent bg-gradient-to-r from-purple-500 to-pink-500"
+              style={{
+                backgroundClip: "content-box, border-box",
+                backgroundOrigin: "border-box",
+              }}
+            >
+              <div className="absolute inset-[2px] flex flex-col items-center justify-center rounded-full bg-[#0b1224]">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400">
+                  Match
+                </span>
+                <span className="text-lg font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                  {Math.round(normalizedMoodScore * 100)}%
+                </span>
               </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col gap-4 p-5 pt-6">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-extrabold text-white transition-colors group-hover:text-cyan-400 line-clamp-1">
+            {title}
+          </h3>
+          {reviewScoreDesc && (
+            <div
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
+            >
+              {metaScore != null && (
+                <span className="leading-none">{metaScore}</span>
+              )}
+              <span className="uppercase tracking-wide leading-none">
+                MC
+              </span>
             </div>
           )}
         </div>
 
-        {/* Middle: Title, Metascore, Summary, Tags */}
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-2 flex-wrap mt-1">
-            <h3 className="font-semibold text-lg line-clamp-1">{title}</h3>
+        <p className="text-sm text-slate-300/70 leading-relaxed line-clamp-2">
+          {safeSummary}
+        </p>
 
-            {/* メタスコアバッジ */}
-            {reviewScoreDesc && (
-              <div
-                className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
+        {displayTags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {displayTags.map((label, i) => (
+              <span
+                key={`${label}-${i}`}
+                className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-200 shadow-[0_0_10px_rgba(15,23,42,0.3)]"
               >
-                {metaScore != null && (
-                  <span className="leading-none">{metaScore}</span>
-                )}
-                <span className="uppercase tracking-wide leading-none">
-                  MC
-                </span>
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-auto flex items-end justify-between border-t border-white/5 pt-4">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold tracking-[0.3em] text-slate-500">
+              Release
+            </span>
+            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-300">
+              <Calendar size={14} />
+              {releaseDisplay}
+            </div>
+          </div>
+
+          <div className="flex overflow-hidden rounded-2xl border border-white/10 shadow-lg">
+            {hasDiscount && (
+              <div className="bg-emerald-600 px-3 py-0 text-sm font-bold uppercase tracking-wide text-white flex items-center justify-center">
+                -{discountPercentDisplay}%
               </div>
             )}
-          </div>
-
-
-          <p className="text-sm text-muted-foreground line-clamp-3">
-            {safeSummary}
-          </p>
-
-          {displayTags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {displayTags.map((label, i) => (
-                <Badge
-                  key={`${label}-${i}`}
-                  variant="secondary"
-                  className="text-xs px-2 py-0.5 rounded-full"
-                >
-                  {label}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {(audienceBadges.length > 0 || normalizedMoodScore !== null) && (
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {/* {audienceBadges.map((badge, i) => (
-                <Badge
-                  key={`${badge.id ?? badge.label}-${i}`}
-                  variant="outline"
-                  className="text-[11px] px-2 py-0.5 rounded-full border-primary/40 text-primary/90 bg-primary/5"
-                >
-                  {badge.label}
-                </Badge>
-              ))} */}
-            </div>
-          )}
-
-          {/* 可変スコア軸（このゲームの強み 〜 Hidden / Quality / Comeback / Niche / Innovation） */}
-          {/* {highlightedScoreBadges.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {highlightedScoreBadges.map((axis) => (
-                <span
-                  key={axis.key}
-                  className={getScoreAxisBadgeClass(axis.key, axis.value)}
-                >
-                  <span className="mr-1">{axis.label}</span>
-                  <span className="font-semibold">
-                    {axis.score10}/10
-                  </span>
+            <div className="flex flex-col justify-center bg-slate-900 px-4 py-0 text-right text-xs font-semibold text-cyan-400 transition-colors group-hover:bg-slate-800">
+              {hasDiscount && (
+                <span className="text-[10px] text-slate-500 line-through">
+                  {priceOriginalDisplay}
                 </span>
-              ))}
-            </div>
-          )} */}
-
-        </div>
-
-
-        <div className="grid grid-cols-2 gap-3 text-xs items-center">
-          {/* Release（ラベル + 日付の縦並び） */}
-          <div className="px-3 py-2">
-            <div className="flex flex-col">
-              <span className="text-[11px] text-muted-foreground">
-                Release
-              </span>
-              <span className="text-xs font-semibold text-slate-50 leading-tight">
-                {releaseDisplay}
-              </span>
-            </div>
-          </div>
-
-
-          {/* Price — Pattern E: Steam風ディスカウントリボン（右寄せ） */}
-          <div className="px-3 py-2">
-            {/* ★ ここで justify-end を付与 */}
-            <div className="flex items-center h-full justify-end">
-              {hasDiscount ? (
-                // 割引あり：Steam風リボン
-                <div className="flex overflow-hidden rounded-md shadow-md">
-                  <div className="px-2 py-3 bg-lime-500 flex items-center justify-center">
-                    <span className="text-[16px] font-extrabold text-slate-900">
-                      -{discountPercentDisplay}%
-                    </span>
-                  </div>
-                  <div className="px-2 py-1 bg-blue-600/80 flex flex-col justify-center items-end">
-                    <span className="text-[10px] text-slate-200/80 line-through leading-none">
-                      {priceOriginalDisplay}
-                    </span>
-                    <span className="text-lg font-bold text-blue-50 leading-none">
-                      {priceDisplay}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                // ★ 割引なし：Pattern E の通常価格版
-                <div className="flex justify-end">
-                  <div className="flex overflow-hidden rounded-md shadow-md bg-blue-600/80 px-4 py-2">
-                    <span className="text-base font-bold text-blue-50 leading-[1]">
-                      {priceDisplay}
-                    </span>
-                  </div>
-                </div>
               )}
+              <span className="text-lg tracking-tight">{priceDisplay}</span>
             </div>
           </div>
-
         </div>
-
-
-
       </div>
     </Card>
   );
 };
+
 
