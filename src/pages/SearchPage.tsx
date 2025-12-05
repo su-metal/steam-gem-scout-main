@@ -976,7 +976,7 @@ function SearchPageFilters({
 }: SearchPageFiltersProps) {
   const [filters, setFilters] = useState<FilterState>(initialFilters);
 
-  const [expandedSection, setExpandedSection] = useState<string | null>("sort");
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
   const toggleSection = (sectionId: string) => {
     setExpandedSection((prev) => (prev === sectionId ? null : sectionId));
@@ -1132,152 +1132,152 @@ function SearchPageFilters({
             </div>
 
 
-            {/* Range + Exclusions （1枚カードに統合） */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/90 px-4 py-4 md:px-6 md:py-6 shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
-              <div className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr] gap-6">
-                {/* 左：Range */}
-                <div className="border-b border-white/5 pb-4 md:pb-0 md:border-b-0 md:pr-4 md:border-r md:border-slate-700/60">
+            {/* Range + Exclusions */}
+            <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-[1.2fr_1fr] md:gap-6 md:rounded-2xl md:border md:border-white/10 md:bg-slate-900/90 md:px-6 md:py-6 md:shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
+              {/* Range section */}
+              <div className="border-b border-white/5 pb-4 md:border-0 md:pb-0 md:pr-6 md:border-r md:border-slate-700/60">
+                <SectionHeader title="Range" id="range" />
 
-                  <SectionHeader title="Range" id="range" />
-
-                  <div
-                    className={`${expandedSection === "range" ? "block" : "hidden"
-                      } md:block mt-1 space-y-4`}
-                  >
-                    <DualRangeSlider
-                      label="Price"
-                      unit="$"
-                      min={0}
-                      max={MAX_PRICE_SLIDER}
-                      minVal={filters.priceMin}
-                      maxVal={filters.priceMax}
-                      onChange={(min, max) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          priceMin: min,
-                          priceMax: max,
-                        }))
-                      }
-                    />
-                    <DualRangeSlider
-                      label="Reviews"
-                      min={0}
-                      max={10000}
-                      minVal={filters.reviewCountMin}
-                      maxVal={filters.reviewCountMax}
-                      onChange={(min, max) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          reviewCountMin: min,
-                          reviewCountMax: max,
-                        }))
-                      }
-                    />
-                  </div>
+                <div
+                  className={`${expandedSection === "range" ? "block" : "hidden"
+                    } md:block mt-1 space-y-4`}
+                >
+                  <DualRangeSlider
+                    label="Price"
+                    unit="$"
+                    min={0}
+                    max={MAX_PRICE_SLIDER}
+                    minVal={filters.priceMin}
+                    maxVal={filters.priceMax}
+                    onChange={(min, max) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        priceMin: min,
+                        priceMax: max,
+                      }))
+                    }
+                  />
+                  <DualRangeSlider
+                    label="Reviews"
+                    min={0}
+                    max={10000}
+                    minVal={filters.reviewCountMin}
+                    maxVal={filters.reviewCountMax}
+                    onChange={(min, max) =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        reviewCountMin: min,
+                        reviewCountMax: max,
+                      }))
+                    }
+                  />
                 </div>
-                {/* 右：Exclusions */}
-                <div className="pt-4 md:pt-0 md:pl-6">
-                  <SectionHeader title="Exclusions" id="exclusions" />
+              </div>
 
-                  <div
-                    className={`${expandedSection === "exclusions" ? "block" : "hidden"
-                      } md:block space-y-3`}
+              {/* Exclusions section */}
+              <div className="border-b border-white/5 pb-4 md:border-0 md:pb-0 md:pl-6">
+                <SectionHeader title="Exclusions" id="exclusions" />
+
+                <div
+                  className={`${expandedSection === "exclusions" ? "block" : "hidden"
+                    } md:block mt-1 space-y-3`}
+                >
+                  {/* Exclude Early Access */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        excludeEarlyAccess: !prev.excludeEarlyAccess,
+                      }))
+                    }
+                    className="flex items-center justify-between w-full py-2"
                   >
-                    {/* Exclude Early Access */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          excludeEarlyAccess: !prev.excludeEarlyAccess,
-                        }))
-                      }
-                      className="flex items-center justify-between w-full py-2"
+                    <span className="text-sm text-slate-300">
+                      Exclude Early Access
+                    </span>
+                    <span
+                      className={[
+                        "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                        filters.excludeEarlyAccess
+                          ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                          : "bg-slate-700",
+                      ].join(" ")}
                     >
-                      <span className="text-sm text-slate-300">
-                        Exclude Early Access
-                      </span>
                       <span
                         className={[
-                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                          "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
                           filters.excludeEarlyAccess
-                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
-                            : "bg-slate-700",
+                            ? "translate-x-5"
+                            : "translate-x-1",
                         ].join(" ")}
-                      >
-                        <span
-                          className={[
-                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
-                            filters.excludeEarlyAccess ? "translate-x-5" : "translate-x-1",
-                          ].join(" ")}
-                        />
-                      </span>
-                    </button>
+                      />
+                    </span>
+                  </button>
 
-                    {/* Exclude Multiplayer Only */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          excludeMultiplayerOnly: !prev.excludeMultiplayerOnly,
-                        }))
-                      }
-                      className="flex items-center justify-between w-full py-2"
+                  {/* Exclude Multiplayer Only */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        excludeMultiplayerOnly: !prev.excludeMultiplayerOnly,
+                      }))
+                    }
+                    className="flex items-center justify-between w-full py-2"
+                  >
+                    <span className="text-sm text-slate-300">
+                      Exclude Multiplayer Only
+                    </span>
+                    <span
+                      className={[
+                        "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                        filters.excludeMultiplayerOnly
+                          ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                          : "bg-slate-700",
+                      ].join(" ")}
                     >
-                      <span className="text-sm text-slate-300">
-                        Exclude Multiplayer Only
-                      </span>
                       <span
                         className={[
-                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                          "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
                           filters.excludeMultiplayerOnly
-                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
-                            : "bg-slate-700",
+                            ? "translate-x-5"
+                            : "translate-x-1",
                         ].join(" ")}
-                      >
-                        <span
-                          className={[
-                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
-                            filters.excludeMultiplayerOnly
-                              ? "translate-x-5"
-                              : "translate-x-1",
-                          ].join(" ")}
-                        />
-                      </span>
-                    </button>
+                      />
+                    </span>
+                  </button>
 
-                    {/* Exclude Horror */}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          excludeHorror: !prev.excludeHorror,
-                        }))
-                      }
-                      className="flex items-center justify-between w-full py-2"
+                  {/* Exclude Horror */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        excludeHorror: !prev.excludeHorror,
+                      }))
+                    }
+                    className="flex items-center justify-between w-full py-2"
+                  >
+                    <span className="text-sm text-slate-300">
+                      Exclude Horror
+                    </span>
+                    <span
+                      className={[
+                        "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
+                        filters.excludeHorror
+                          ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
+                          : "bg-slate-700",
+                      ].join(" ")}
                     >
-                      <span className="text-sm text-slate-300">
-                        Exclude Horror
-                      </span>
                       <span
                         className={[
-                          "relative inline-flex w-11 h-6 items-center rounded-full transition-colors duration-200",
-                          filters.excludeHorror
-                            ? "bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.6)]"
-                            : "bg-slate-700",
+                          "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
+                          filters.excludeHorror ? "translate-x-5" : "translate-x-1",
                         ].join(" ")}
-                      >
-                        <span
-                          className={[
-                            "inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200",
-                            filters.excludeHorror ? "translate-x-5" : "translate-x-1",
-                          ].join(" ")}
-                        />
-                      </span>
-                    </button>
-                  </div>
+                      />
+                    </span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1285,7 +1285,7 @@ function SearchPageFilters({
 
           {/* Footer */}
           {/* Footer: RESET / APPLY FILTERS */}
-          <div className="mt-5 md:mt-6 flex flex-col md:flex-row items-center justify-between gap-3 border-t border-white/10 pt-4 md:pt-5">
+          <div className="mt-5 md:mt-6 flex flex-row flex-nowrap items-center justify-between gap-3 border-t border-white/10 pt-4 md:pt-5">
             {/* RESET */}
             <button
               type="button"
