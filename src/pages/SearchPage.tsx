@@ -1133,9 +1133,9 @@ function SearchPageFilters({
 
 
             {/* Range + Exclusions */}
-            <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-[1.2fr_1fr] md:gap-6 md:rounded-2xl md:border md:border-white/10 md:bg-slate-900/90 md:px-6 md:py-6 md:shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
+            <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-[1.1fr_1fr] md:gap-6 md:rounded-2xl md:border md:border-white/10 md:bg-slate-900/90 md:px-6 md:py-6 md:shadow-[0_18px_45px_rgba(15,23,42,0.9)]">
               {/* Range section */}
-              <div className="border-b border-white/5 pb-4 md:border-0 md:pb-0 md:pr-6 md:border-r md:border-slate-700/60">
+              <div className="border-b border-white/5 pb-4 md:border-0 md:pb-0 md:pr-12 md:border-r md:border-slate-700/60">
                 <SectionHeader title="Range" id="range" />
 
                 <div
@@ -1285,7 +1285,8 @@ function SearchPageFilters({
 
           {/* Footer */}
           {/* Footer: RESET / APPLY FILTERS */}
-          <div className="mt-5 md:mt-6 flex flex-row flex-nowrap items-center justify-between gap-3 border-t border-white/10 pt-4 md:pt-5">
+          <div className="mt-5 md:mt-6 flex flex-row flex-nowrap items-center justify-between gap-3 md:border-t md:border-white/10 py-2 md:pt-5">
+
             {/* RESET */}
             <button
               type="button"
