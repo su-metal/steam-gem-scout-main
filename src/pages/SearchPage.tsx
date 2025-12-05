@@ -525,7 +525,7 @@ export default function SearchPage() {
 
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#1f163a_0,_#050509_50%,_#020008_100%)] text-slate-50">
+    <div className="min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 opacity-80 text-slate-50">
       <div className="max-w-7xl mx-auto px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-32 space-y-8">
         {/* === Page Header ======================================= */}
         <div className="flex items-center justify-between gap-4">
