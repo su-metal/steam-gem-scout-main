@@ -419,105 +419,115 @@ export const SearchResultCard = ({
   }
 
 
+  const cardMatchScore = normalizedMoodScore != null ? Math.round(normalizedMoodScore * 100) : 0;
+
   return (
     <Card
-      className="group relative w-full overflow-hidden rounded-[28px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.65)] transition-all duration-300 hover:shadow-[0_0_40px_rgba(6,182,212,0.35)]"
+      className="group relative w-full bg-[#050505] cursor-pointer overflow-hidden selection:bg-cyan-500/30 font-sans border border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-2xl flex flex-col "
       onClick={handleClick}
     >
-      <div className="relative h-52 w-full overflow-hidden rounded-t-[26px] border-b border-white/10 bg-slate-900">
+      <div
+        className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+        style={{
+          backgroundImage:
+            "linear-gradient(#1a1a1a 1px, transparent 1px), linear-gradient(90deg, #1a1a1a 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+
+      <div className="relative w-full overflow-hidden z-10 border-b border-white/10 group-hover:border-cyan-500/50 transition-colors duration-300 aspect-[21/9]">
+        <div className="absolute inset-0 bg-cyan-900/20 mix-blend-overlay z-20 group-hover:opacity-0 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-20 mix-blend-overlay" />
+        <div className="absolute inset-0 z-30 opacity-10 pointer-events-none bg-[linear-gradient(transparent_50%,rgba(0,0,0,1)_50%)] bg-[length:100%_4px]" />
         <img
           src={headerImageUrl}
           alt={title}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700 ease-out"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/90 via-[#020617]/60 to-transparent" />
-        {normalizedMoodScore !== null && (
-          <div className="absolute right-5 top-5 z-20 w-20 h-20 rounded-full bg-[#0a0f1f] border border-white/10 flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.6)]">
-            <div className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500 p-[3px]">
-              <div className="absolute inset-[3px] flex flex-col items-center justify-center rounded-full bg-[#0a0f1f]">
-                <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">
-                  Match
-                </span>
-                <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-400">
-                  {Math.round(normalizedMoodScore * 100)}%
-                </span>
-              </div>
+        <div className="absolute inset-0 bg-cyan-500/10 opacity-0 group-hover:opacity-100 mix-blend-color-dodge transition-opacity duration-100" />
+
+        <div className="absolute top-4 right-4 z-40 flex flex-col items-end">
+          <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-500/80 uppercase tracking-widest">
+            <div
+              className={`w-2 h-2 rounded-sm ${cardMatchScore > 80 ? "bg-cyan-400" : "bg-yellow-400"}`}
+            />
+            <span>Sys.Match</span>
+          </div>
+          <div className="text-4xl font-black text-white leading-none tracking-tighter tabular-nums relative drop-shadow-lg">
+            {cardMatchScore}
+            <span className="text-lg text-white/40">%</span>
+            <div className="absolute -bottom-1 right-0 w-full h-[2px] bg-cyan-500/50" />
+          </div>
+        </div>
+
+        <div className="absolute top-4 left-4 z-40">
+          <div className="px-2 py-1 bg-black/60 backdrop-blur-md border border-cyan-500/30 text-white text-[10px] font-bold font-mono uppercase tracking-widest flex items-center gap-2">
+            <span className="text-cyan-400 text-lg">■</span>
+            Unit-MC
+          </div>
+        </div>
+
+        {hasDiscount && (
+          <div className="absolute bottom-6 right-0 z-40 transform translate-x-4">
+            <div className="bg-yellow-400 text-black font-black text-xl px-6 py-1 transform -rotate-12 shadow-[4px_4px_0px_rgba(0,0,0,1)] border border-black">
+              -{discountPercentDisplay}%
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 p-5 bg-[#03061b]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h3 className="text-2xl font-black text-white tracking-tight line-clamp-1">
-                {title}
-              </h3>
-              <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300 tracking-[0.4em]">
-                MC
-              </span>
-            </div>
-            {reviewScoreDesc && (
-              <div
-                className={`flex items-center gap-1 rounded-full px-3 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
-              >
-                {metaScore != null && (
-                  <span className="leading-none">{metaScore}</span>
-                )}
-                <span className="uppercase tracking-widest leading-none">
-                  MC
-                </span>
-              </div>
-            )}
-          </div>
+      <div className="relative bg-[#0a0a0a] z-30 flex flex-col p-5 shrink-0 border-t border-white/5">
+        <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-500/30" />
+
+        <div className="mb-4">
+          <h3 className="text-2xl font-black text-white uppercase leading-none tracking-tighter mb-1 group-hover:text-cyan-400 transition-colors line-clamp-2">
+            {title}
+          </h3>
+          <div className="h-0.5 w-12 bg-white/20 group-hover:w-full group-hover:bg-cyan-500 transition-all duration-500 ease-out" />
         </div>
 
-        <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">
-          {safeSummary}
-        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
+          {displayTags.slice(0, 3).map((label, i) => (
+            <div key={`${label}-${i}`} className="flex items-center gap-1 text-[10px] text-slate-500 font-mono uppercase">
+              <span className="text-cyan-600">0{i + 1} //</span>
+              <span className="group-hover:text-slate-300 transition-colors">{label}</span>
+            </div>
+          ))}
+        </div>
 
-        {displayTags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {displayTags.map((label, i) => (
-              <span
-                key={`${label}-${i}`}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between border-t border-white/10 pt-4 mt-auto text-sm font-semibold text-slate-200">
-          <div className="flex items-center gap-2 text-xs text-slate-300">
-            <Calendar size={14} />
-            {releaseDisplay}
-          </div>
-          <div className="flex items-center gap-2">
-            {hasDiscount && (
-              <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
-                -{discountPercentDisplay}%
-              </span>
-            )}
-            <span
-              className={`text-lg font-bold tracking-tight text-cyan-300 ${
-                hasDiscount ? "line-through" : ""
-              }`}
-            >
-              {hasDiscount ? priceOriginalDisplay : priceDisplay}
+        <div className="flex justify-between items-end border-t border-white/10 pt-3 mt-auto">
+          <div>
+            <span className="text-[9px] text-slate-600 font-mono uppercase mb-0.5 block">
+              Release.Date
             </span>
-            {hasDiscount && (
-              <span className="text-lg font-bold tracking-tight text-cyan-400">
-                {priceDisplay}
-              </span>
+            <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
+              <Calendar size={10} className="text-slate-500" />
+              {releaseDisplay}
+            </span>
+          </div>
+          <div className="text-right">
+            {priceOriginalDisplay ? (
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-slate-500 line-through font-mono decoration-red-500/50">
+                  {priceOriginalDisplay}
+                </span>
+                <div className="flex items-center gap-1 text-cyan-400 font-black text-xl leading-none">
+                  <span className="text-sm font-normal text-slate-500 mr-1">$</span>
+                  {priceDisplay.replace("$", "")}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-white font-black text-xl leading-none">
+                <span className="text-sm font-normal text-slate-500 mr-1">$</span>
+                {priceDisplay.replace("$", "")}
+              </div>
             )}
           </div>
         </div>
       </div>
     </Card>
   );
+
 };
 
 
