@@ -423,7 +423,7 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none rounded-none p-1 transition-all duration-200"
+      className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none rounded-none p-2 transition-all duration-200"
       onClick={handleClick}
     >
       {/* Glass Container（ホバー対応版） */}
@@ -476,7 +476,7 @@ export const SearchResultCard = ({
           <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 group-hover:from-cyan-300 group-hover:to-purple-300 transition-all duration-300 mb-2 line-clamp-1">
             {title}
           </h3>
-          <p className="text-xs text-slate-300/80 line-clamp-2 mb-1 font-light leading-relaxed">
+          <p className="text-xs text-slate-300 line-clamp-2 mb-1 font-light leading-relaxed">
             {safeSummary}
           </p>
           <div className="mt-2 pt-3 border-t border-white/10 flex items-end justify-between">
