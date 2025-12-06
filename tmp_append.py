@@ -1,0 +1,1 @@
+from pathlib import Path\npath = Path('src/components/SearchResultCard.tsx')\ntext = path.read_text(encoding='utf-8')\nif not text.endswith('\n};\n'):\n    path.write_text(text + '\n};\n', encoding='utf-8')\n

@@ -1,6 +1,5 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { Calendar } from "lucide-react";
 
 
 // Returns the tags that should be displayed on the card
@@ -423,76 +422,100 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none rounded-none p-2 transition-all duration-200"
+      className="group relative w-full cursor-pointer bg-transparent border-none p-0"
       onClick={handleClick}
     >
-      {/* Glass Container（ホバー対応版） */}
-      <div
-        className="absolute inset-0 z-10
-              bg-white/5 backdrop-blur-xl rounded-[32px] border border-white/10
-              group-hover:bg-white/10 transition-colors duration-500
-              shadow-[0_10px_30px_rgba(0,0,0,0.2)]
-              group-hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]"
-      />
-      {/* Aurora Glow（ホバー対応版） */}
-      <div
-        className="absolute -inset-1 z-0
-              rounded-[34px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500
-              opacity-0 group-hover:opacity-30
-              blur-xl transition-opacity duration-700"
-      />
-      {/* ▶ 中身はほぼ透明にしてガラス越し感を出す */}
-      <div className="relative z-20 flex flex-col h-full rounded-[20px] overflow-hidden bg-white/0">
-        <div className="relative aspect-[21/9] m-3 rounded-[24px] overflow-hidden shadow-lg group-hover:shadow-2xl transition-all duration-500 group-hover:scale-[1.02]">
-          <img src={headerImageUrl} alt={title} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-40" />
-          <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform duration-500 z-20">
-            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 to-purple-300 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)] leading-none">
-              {cardMatchScore}
-            </span>
-            <span className="text-[8px] font-bold text-white/70 uppercase tracking-widest mt-0.5">Match</span>
+      <div className="relative overflow-hidden rounded-[34px] border border-white/5 bg-[#02030a] shadow-[0_25px_55px_rgba(2,3,20,0.95)]">
+        <div className="pointer-events-none absolute inset-0 rounded-[34px] border border-cyan-500/30 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        <div className="relative z-10 flex flex-col">
+          <div className="flex items-center justify-between px-5 pt-5 text-[9px] uppercase tracking-[0.4em] text-slate-300">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse" />
+              <span className="text-[11px] font-black text-emerald-300 tracking-[0.3em]">SYS.READY</span>
+            </div>
+            <div className="h-1 w-12 rounded-full bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 shadow-[0_0_12px_rgba(59,130,246,0.8)]" />
           </div>
-          {hasDiscount && (
-            <div className="absolute top-3 left-3 z-20">
-              <div className="px-3 py-1.5 rounded-full bg-pink-500/20 backdrop-blur-md border border-pink-500/30 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)] animate-pulse">
-                <span className="text-xs font-black tracking-wider">-{discountPercentDisplay}%</span>
+
+          <div className="px-5 pt-4 pb-6">
+            <div className="relative aspect-[21/9] overflow-hidden rounded-[24px] border border-white/10 bg-slate-900 shadow-[0_25px_60px_rgba(2,3,20,0.95)] transition-transform duration-500 group-hover:scale-[1.01]">
+              <img src={headerImageUrl} alt={title} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
+              <div className="absolute inset-0 flex flex-col justify-between p-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-wrap gap-1 max-w-[60%]">
+                    {displayTags.slice(0, 4).map((label, i) => (
+                      <div
+                        key={`${label}-${i}`}
+                        className="px-2 py-1 rounded-full bg-black/50 border border-white/20 text-[9px] text-white font-bold uppercase tracking-widest backdrop-blur-md"
+                      >
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span className="text-2xl font-black text-white drop-shadow-[0_0_18px_rgba(255,255,255,0.45)] leading-tight">
+                      {cardMatchScore}%
+                    </span>
+                    <span className="text-[8px] uppercase tracking-[0.4em] text-white/70">Mood Match</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  {hasDiscount && (
+                    <div className="px-3 py-1.5 rounded-full bg-pink-500/20 border border-pink-500/40 text-[10px] font-bold uppercase tracking-[0.3em] text-white shadow-[0_0_15px_rgba(236,72,153,0.35)]">
+                      Savings {discountPercentDisplay}%
+                    </div>
+                  )}
+                  <div className="h-1 w-20 rounded-full bg-gradient-to-r from-cyan-500/80 to-transparent opacity-60" />
+                </div>
               </div>
             </div>
-          )}
-
-          <div className="absolute bottom-3 left-3 z-20 flex flex-wrap gap-0 max-w-[260px]">
-            {displayTags.slice(0, 4).map((label, i) => (
-              <div
-                key={`${label}-${i}`}
-                className="px-2 py-1 rounded-full bg-black/50 border border-white/20 text-[9px] text-white font-bold uppercase tracking-widest backdrop-blur-md"
-              >
-                {label}
-              </div>
-            ))}
           </div>
-        </div>
 
-        <div className="px-5 pb-5 pt-2 flex flex-col flex-1">
-          <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 group-hover:from-cyan-300 group-hover:to-purple-300 transition-all duration-300 mb-2 line-clamp-1">
-            {title}
-          </h3>
-          <p className="text-xs text-slate-300 line-clamp-2 mb-1 font-light leading-relaxed">
-            {safeSummary}
-          </p>
-          <div className="mt-2 pt-3 border-t border-white/10 flex items-end justify-between">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-cyan-500/70 uppercase tracking-wider mb-0.5">Release</span>
-              <span className="text-xs font-bold text-slate-200">{releaseDisplay}</span>
+          <div className="px-5 pb-6 flex flex-col gap-3">
+            <div className="flex items-center justify-between text-[8px] uppercase tracking-[0.4em] text-slate-400">
+              <span>Release</span>
+              <span className="text-white/50">{releaseDisplay}</span>
             </div>
-            <div className="flex flex-col items-end">
-              {hasDiscount && (
-                <span className="text-[10px] text-slate-500 line-through decoration-slate-500/50">
-                  {priceOriginalDisplay}
-                </span>
-              )}
-              <span className="text-lg font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                {priceDisplay}
-              </span>
+            <h3 className="text-xl font-bold uppercase leading-tight tracking-tight text-white line-clamp-2">
+              {title}
+            </h3>
+            <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">{safeSummary}</p>
+
+            {audienceBadges.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {audienceBadges.map((badge) => (
+                  <span
+                    key={badge.id ?? badge.label}
+                    className="px-3 py-1 rounded-full border border-white/10 bg-black/40 text-[10px] font-semibold text-white/80 uppercase tracking-wider"
+                  >
+                    {badge.label}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-2 flex items-end justify-between">
+              <div>
+                <p className="text-[8px] uppercase tracking-[0.4em] text-slate-500">Reviews</p>
+                <p className="text-sm font-semibold text-emerald-200">
+                  {positiveDisplay}% positive
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {typeof totalReviews === "number" && Number.isFinite(totalReviews)
+                    ? `${totalReviews.toLocaleString()} reviews`
+                    : "Reviews unknown"}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-[8px] uppercase tracking-[0.4em] text-slate-500">Price</p>
+                <p className="text-2xl font-black text-white">{priceDisplay}</p>
+                {hasDiscount && (
+                  <p className="text-[10px] text-pink-300 uppercase tracking-[0.3em]">
+                    Original {priceOriginalDisplay}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -500,3 +523,4 @@ export const SearchResultCard = ({
     </Card>
   );
 };
+
