@@ -423,7 +423,7 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="group relative w-full bg-[#050505] cursor-pointer overflow-hidden selection:bg-cyan-500/30 font-sans border border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-2xl flex flex-col "
+      className="group relative w-full h-full bg-[#050505] cursor-pointer overflow-hidden selection:bg-cyan-500/30 font-sans border border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-2xl flex flex-col"
       onClick={handleClick}
     >
       <div
@@ -506,7 +506,7 @@ export const SearchResultCard = ({
             </span>
           </div>
           <div className="text-right">
-            {priceOriginalDisplay ? (
+            {hasDiscount ? (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-slate-500 line-through font-mono decoration-red-500/50">
                   {priceOriginalDisplay}
