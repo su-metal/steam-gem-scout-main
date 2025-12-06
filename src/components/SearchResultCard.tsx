@@ -421,30 +421,24 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="group relative h-full overflow-hidden rounded-[26px] border border-white/10 bg-[#0b1224] shadow-xl transition-all duration-300 hover:border-cyan-500/40 hover:shadow-[0_25px_50px_rgba(6,182,212,0.25)]"
+      className="group relative w-full overflow-hidden rounded-[28px] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.65)] transition-all duration-300 hover:shadow-[0_0_40px_rgba(6,182,212,0.35)]"
       onClick={handleClick}
     >
-      <div className="relative h-48 md:h-56 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+      <div className="relative h-52 w-full overflow-hidden rounded-t-[26px] border-b border-white/10 bg-slate-900">
         <img
           src={headerImageUrl}
           alt={title}
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#020617]/90 via-[#020617]/60 to-transparent" />
         {normalizedMoodScore !== null && (
-          <div className="absolute right-4 top-[6.5rem] z-30 w-20 h-20 rounded-full bg-[#0b1224] p-0.5 shadow-lg md:top-[8.5rem]">
-            <div
-              className="relative flex h-full w-full flex-col items-center justify-center rounded-full border-[3px] border-transparent bg-gradient-to-r from-purple-500 to-pink-500"
-              style={{
-                backgroundClip: "content-box, border-box",
-                backgroundOrigin: "border-box",
-              }}
-            >
-              <div className="absolute inset-[2px] flex flex-col items-center justify-center rounded-full bg-[#0b1224]">
-                <span className="text-[10px] uppercase tracking-wider text-slate-400">
+          <div className="absolute right-5 top-5 z-20 w-20 h-20 rounded-full bg-[#0a0f1f] border border-white/10 flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.6)]">
+            <div className="relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-r from-purple-500 to-pink-500 p-[3px]">
+              <div className="absolute inset-[3px] flex flex-col items-center justify-center rounded-full bg-[#0a0f1f]">
+                <span className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">
                   Match
                 </span>
-                <span className="text-lg font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-400">
                   {Math.round(normalizedMoodScore * 100)}%
                 </span>
               </div>
@@ -453,26 +447,33 @@ export const SearchResultCard = ({
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-5 pt-6">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-extrabold text-white transition-colors group-hover:text-cyan-400 line-clamp-1">
-            {title}
-          </h3>
-          {reviewScoreDesc && (
-            <div
-              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
-            >
-              {metaScore != null && (
-                <span className="leading-none">{metaScore}</span>
-              )}
-              <span className="uppercase tracking-wide leading-none">
+      <div className="flex flex-1 flex-col gap-3 p-5 bg-[#03061b]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-2xl font-black text-white tracking-tight line-clamp-1">
+                {title}
+              </h3>
+              <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300 tracking-[0.4em]">
                 MC
               </span>
             </div>
-          )}
+            {reviewScoreDesc && (
+              <div
+                className={`flex items-center gap-1 rounded-full px-3 py-0.5 text-[11px] font-semibold ${metaBadgeClass}`}
+              >
+                {metaScore != null && (
+                  <span className="leading-none">{metaScore}</span>
+                )}
+                <span className="uppercase tracking-widest leading-none">
+                  MC
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <p className="text-sm text-slate-300/70 leading-relaxed line-clamp-2">
+        <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">
           {safeSummary}
         </p>
 
@@ -481,7 +482,7 @@ export const SearchResultCard = ({
             {displayTags.map((label, i) => (
               <span
                 key={`${label}-${i}`}
-                className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1 text-xs font-medium uppercase tracking-wide text-slate-200 shadow-[0_0_10px_rgba(15,23,42,0.3)]"
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-300"
               >
                 {label}
               </span>
@@ -489,31 +490,29 @@ export const SearchResultCard = ({
           </div>
         )}
 
-        <div className="mt-auto flex items-end justify-between border-t border-white/5 pt-4">
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold tracking-[0.3em] text-slate-500">
-              Release
-            </span>
-            <div className="flex items-center gap-1.5 text-sm font-medium text-slate-300">
-              <Calendar size={14} />
-              {releaseDisplay}
-            </div>
+        <div className="flex items-center justify-between border-t border-white/10 pt-4 mt-auto text-sm font-semibold text-slate-200">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <Calendar size={14} />
+            {releaseDisplay}
           </div>
-
-          <div className="flex overflow-hidden rounded-2xl border border-white/10 shadow-lg">
+          <div className="flex items-center gap-2">
             {hasDiscount && (
-              <div className="bg-emerald-600 px-3 py-0 text-sm font-bold uppercase tracking-wide text-white flex items-center justify-center">
+              <span className="rounded-full bg-emerald-600 px-3 py-1 text-xs font-bold text-white">
                 -{discountPercentDisplay}%
-              </div>
+              </span>
             )}
-            <div className="flex flex-col justify-center bg-slate-900 px-4 py-0 text-right text-xs font-semibold text-cyan-400 transition-colors group-hover:bg-slate-800">
-              {hasDiscount && (
-                <span className="text-[10px] text-slate-500 line-through">
-                  {priceOriginalDisplay}
-                </span>
-              )}
-              <span className="text-lg tracking-tight">{priceDisplay}</span>
-            </div>
+            <span
+              className={`text-lg font-bold tracking-tight text-cyan-300 ${
+                hasDiscount ? "line-through" : ""
+              }`}
+            >
+              {hasDiscount ? priceOriginalDisplay : priceDisplay}
+            </span>
+            {hasDiscount && (
+              <span className="text-lg font-bold tracking-tight text-cyan-400">
+                {priceDisplay}
+              </span>
+            )}
           </div>
         </div>
       </div>
