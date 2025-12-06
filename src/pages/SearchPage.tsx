@@ -551,25 +551,24 @@ export default function SearchPage() {
       </div>
       <div className="relative z-10 max-w-7xl mx-auto px-4 pt-6 pb-28 md:px-8 md:pt-10 md:pb-32 space-y-8">
         {/* === Page Header ======================================= */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-              Hidden Gems / Search
-            </p>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
-              Find Your Next Steam Gem
-            </h1>
-            <p className="text-xs md:text-sm text-slate-300/90">
-              ジャンル・期間・価格などを組み合わせて、
-              <span className="font-semibold text-sky-300">
-                「まだバズっていない良作」
-              </span>
-              を絞り込みます。
-            </p>
+        <div className="mb-10 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/10 bg-white/5 backdrop-blur-md mb-6 animate-fade-in">
+            <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+              Vibe Search Active
+            </span>
           </div>
-
-          {/* Right side: navigation buttons */}
-          <div className="flex items-center gap-2">
+          <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight mb-4 drop-shadow-[0_0_30px_rgba(6,182,212,0.5)]">
+            FIND YOUR{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+              VIBE
+            </span>
+          </h1>
+          <p className="text-slate-400 max-w-lg mx-auto leading-relaxed">
+            Refine your discovery with our deep-dive filters. Adjust the sliders
+            to match your exact mood today.
+          </p>
+          <div className="mt-6 flex justify-center">
             <Button
               variant="outline"
               asChild
