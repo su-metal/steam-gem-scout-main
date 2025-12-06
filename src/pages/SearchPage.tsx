@@ -747,7 +747,7 @@ export default function SearchPage() {
 
         {/* === Results ============================================ */}
         {loading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton
                 key={i}
@@ -756,7 +756,7 @@ export default function SearchPage() {
             ))}
           </div>
                 ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => (
               <div key={game.appId} className="relative h-full">
                 {/* 1つ目のファイルと同じロジック：SearchResultCard に丸投げ */}

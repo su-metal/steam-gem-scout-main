@@ -423,111 +423,80 @@ export const SearchResultCard = ({
 
   return (
     <Card
-      className="group relative w-full h-full bg-[#050505] cursor-pointer overflow-hidden selection:bg-cyan-500/30 font-sans border border-white/10 hover:border-cyan-500/50 transition-all duration-300 shadow-2xl flex flex-col"
+      className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none rounded-none p-1 transition-all duration-200"
       onClick={handleClick}
     >
+      {/* Glass Container（ホバー対応版） */}
       <div
-        className="absolute inset-0 z-0 opacity-20 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(#1a1a1a 1px, transparent 1px), linear-gradient(90deg, #1a1a1a 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-        }}
+        className="absolute inset-0 z-10
+              bg-white/5 backdrop-blur-xl rounded-[32px] border border-white/10
+              group-hover:bg-white/10 transition-colors duration-500
+              shadow-[0_10px_30px_rgba(0,0,0,0.2)]
+              group-hover:shadow-[0_0_30px_rgba(168,85,247,0.3)]"
       />
-
-      <div className="relative w-full overflow-hidden z-10 border-b border-white/10 group-hover:border-cyan-500/50 transition-colors duration-300 aspect-[21/9]">
-        <div className="absolute inset-0 bg-cyan-900/20 mix-blend-overlay z-20 group-hover:opacity-0 transition-opacity duration-300" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 z-20 mix-blend-overlay" />
-        <div className="absolute inset-0 z-30 opacity-10 pointer-events-none bg-[linear-gradient(transparent_50%,rgba(0,0,0,1)_50%)] bg-[length:100%_4px]" />
-        <img
-          src={headerImageUrl}
-          alt={title}
-          className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700 ease-out"
-        />
-        <div className="absolute inset-0 bg-cyan-500/10 opacity-0 group-hover:opacity-100 mix-blend-color-dodge transition-opacity duration-100" />
-
-        <div className="absolute top-4 right-4 z-40 flex flex-col items-end">
-          <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-500/80 uppercase tracking-widest">
-            <div
-              className={`w-2 h-2 rounded-sm ${cardMatchScore > 80 ? "bg-cyan-400" : "bg-yellow-400"}`}
-            />
-            <span>Sys.Match</span>
+      {/* Aurora Glow（ホバー対応版） */}
+      <div
+        className="absolute -inset-1 z-0
+              rounded-[34px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500
+              opacity-0 group-hover:opacity-30
+              blur-xl transition-opacity duration-700"
+      />
+      {/* ▶ 中身はほぼ透明にしてガラス越し感を出す */}
+      <div className="relative z-20 flex flex-col h-full rounded-[20px] overflow-hidden bg-white/0">
+        <div className="relative aspect-[21/9] m-3 rounded-[24px] overflow-hidden shadow-lg group-hover:shadow-2xl transition-all duration-500 group-hover:scale-[1.02]">
+          <img src={headerImageUrl} alt={title} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-40" />
+          <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform duration-500 z-20">
+            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 to-purple-300 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)] leading-none">
+              {cardMatchScore}
+            </span>
+            <span className="text-[8px] font-bold text-white/70 uppercase tracking-widest mt-0.5">Match</span>
           </div>
-          <div className="text-4xl font-black text-white leading-none tracking-tighter tabular-nums relative drop-shadow-lg">
-            {cardMatchScore}
-            <span className="text-lg text-white/40">%</span>
-            <div className="absolute -bottom-1 right-0 w-full h-[2px] bg-cyan-500/50" />
-          </div>
-        </div>
-
-        <div className="absolute top-4 left-4 z-40">
-          <div className="px-2 py-1 bg-black/60 backdrop-blur-md border border-cyan-500/30 text-white text-[10px] font-bold font-mono uppercase tracking-widest flex items-center gap-2">
-            <span className="text-cyan-400 text-lg">■</span>
-            Unit-MC
-          </div>
-        </div>
-
-        {hasDiscount && (
-          <div className="absolute bottom-6 right-0 z-40 transform translate-x-4">
-            <div className="bg-yellow-400 text-black font-black text-xl px-6 py-1 transform -rotate-12 shadow-[4px_4px_0px_rgba(0,0,0,1)] border border-black">
-              -{discountPercentDisplay}%
+          {hasDiscount && (
+            <div className="absolute top-3 left-3 z-20">
+              <div className="px-3 py-1.5 rounded-full bg-pink-500/20 backdrop-blur-md border border-pink-500/30 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)] animate-pulse">
+                <span className="text-xs font-black tracking-wider">-{discountPercentDisplay}%</span>
+              </div>
             </div>
+          )}
+
+          <div className="absolute bottom-3 left-3 z-20 flex flex-wrap gap-0 max-w-[260px]">
+            {displayTags.slice(0, 4).map((label, i) => (
+              <div
+                key={`${label}-${i}`}
+                className="px-2 py-1 rounded-full bg-black/50 border border-white/20 text-[9px] text-white font-bold uppercase tracking-widest backdrop-blur-md"
+              >
+                {label}
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
 
-      <div className="relative bg-[#0a0a0a] z-30 flex flex-col p-5 shrink-0 border-t border-white/5">
-        <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-cyan-500/30" />
-
-        <div className="mb-4">
-          <h3 className="text-2xl font-black text-white uppercase leading-none tracking-tighter mb-1 group-hover:text-cyan-400 transition-colors line-clamp-2">
+        <div className="px-5 pb-5 pt-2 flex flex-col flex-1">
+          <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400 group-hover:from-cyan-300 group-hover:to-purple-300 transition-all duration-300 mb-2 line-clamp-1">
             {title}
           </h3>
-          <div className="h-0.5 w-12 bg-white/20 group-hover:w-full group-hover:bg-cyan-500 transition-all duration-500 ease-out" />
-        </div>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
-          {displayTags.slice(0, 3).map((label, i) => (
-            <div key={`${label}-${i}`} className="flex items-center gap-1 text-[10px] text-slate-500 font-mono uppercase">
-              <span className="text-cyan-600">0{i + 1} //</span>
-              <span className="group-hover:text-slate-300 transition-colors">{label}</span>
+          <p className="text-xs text-slate-300/80 line-clamp-2 mb-1 font-light leading-relaxed">
+            {safeSummary}
+          </p>
+          <div className="mt-2 pt-3 border-t border-white/10 flex items-end justify-between">
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-cyan-500/70 uppercase tracking-wider mb-0.5">Release</span>
+              <span className="text-xs font-bold text-slate-200">{releaseDisplay}</span>
             </div>
-          ))}
-        </div>
-
-        <div className="flex justify-between items-end border-t border-white/10 pt-3 mt-auto">
-          <div>
-            <span className="text-[9px] text-slate-600 font-mono uppercase mb-0.5 block">
-              Release.Date
-            </span>
-            <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
-              <Calendar size={10} className="text-slate-500" />
-              {releaseDisplay}
-            </span>
-          </div>
-          <div className="text-right">
-            {hasDiscount ? (
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-slate-500 line-through font-mono decoration-red-500/50">
+            <div className="flex flex-col items-end">
+              {hasDiscount && (
+                <span className="text-[10px] text-slate-500 line-through decoration-slate-500/50">
                   {priceOriginalDisplay}
                 </span>
-                <div className="flex items-center gap-1 text-cyan-400 font-black text-xl leading-none">
-                  <span className="text-sm font-normal text-slate-500 mr-1">$</span>
-                  {priceDisplay.replace("$", "")}
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 text-white font-black text-xl leading-none">
-                <span className="text-sm font-normal text-slate-500 mr-1">$</span>
-                {priceDisplay.replace("$", "")}
-              </div>
-            )}
+              )}
+              <span className="text-lg font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                {priceDisplay}
+              </span>
+            </div>
           </div>
         </div>
       </div>
     </Card>
   );
-
 };
-
-
