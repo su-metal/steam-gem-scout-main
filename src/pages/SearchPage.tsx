@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, type Location, useNavigate } from "react-router-dom";
+import {
+  useLocation,
+  type Location,
+  useNavigate,
+  useNavigationType,
+} from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +64,17 @@ interface RankingGame {
     thumbnail?: string;
   }[];
 }
+
+// ランダム順生成（将来スコアロジックと組み合わせる前提で分離）
+const shuffleGames = (list: RankingGame[]): RankingGame[] => {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
 
 interface SearchPageNavigationState {
   primaryVibePreset?: string;
@@ -233,6 +249,19 @@ const computeDesiredMood = (
 
 const MAX_PRICE_SLIDER = 60;
 
+// ★ SearchPage の結果スナップショット（Back で戻る用）
+type SearchSnapshot = {
+  games: RankingGame[];
+  visibleOffset: number;
+  scrollY: number;
+};
+
+let lastSearchSnapshot: SearchSnapshot | null = null;
+
+// ★ モバイルで 1 回に表示する件数
+const MOBILE_BATCH_SIZE = 12;
+
+
 // フィルター状態保存用の localStorage キー
 const STORAGE_KEYS = {
   genre: "rankings_selectedGenre",
@@ -242,11 +271,13 @@ const STORAGE_KEYS = {
   minReviews: "rankings_minReviews",
 } as const;
 
+
 // -----------------------------------------
 // SearchPage
 // -----------------------------------------
 export default function SearchPage() {
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
   const navMoodOverride = computeDesiredMood(
@@ -256,6 +287,28 @@ export default function SearchPage() {
 
   const [games, setGames] = useState<RankingGame[]>([]);
   const [loading, setLoading] = useState(true);
+
+
+  const [visibleOffset, setVisibleOffset] = useState(0);
+
+  // ★ モバイルかどうか（幅 < 768px）
+  const [isMobile, setIsMobile] = useState(false);
+
+  const resultsTopRef = useRef<HTMLDivElement | null>(null);
+
+
+  // モバイル判定（幅 768px 未満をモバイル扱い）
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkIsMobile();
+    window.addEventListener("resize", checkIsMobile);
+    return () => window.removeEventListener("resize", checkIsMobile);
+  }, []);
 
   // ★ カードデザイン切り替え用（"hud" or "simple"）
   const [cardVariant, setCardVariant] = useState<CardVariant>("hud");
@@ -330,9 +383,31 @@ export default function SearchPage() {
 
   const { toast } = useToast();
 
-  // 初回ロード
+  // 初回ロード：
+  //  - 履歴戻り（POP）＋スナップショットあり → その状態を復元
+  //  - それ以外（初回 / 別ページからの新規遷移など） → 常に新しく検索
   useEffect(() => {
-    fetchRankings();
+    if (navigationType === "POP" && lastSearchSnapshot) {
+      // 🔙 GameDetail から戻ってきたケース：前回の並び・ページ・スクロールを復元
+      setGames(lastSearchSnapshot.games);
+      setVisibleOffset(lastSearchSnapshot.visibleOffset);
+      setLoading(false);
+
+      if (typeof window !== "undefined") {
+        window.scrollTo({
+          top: lastSearchSnapshot.scrollY,
+          behavior: "auto",
+        });
+      }
+
+      // 一度使ったスナップショットはクリア（次の遷移用にリセット）
+      lastSearchSnapshot = null;
+    } else {
+      // 新規検索として扱う：古いスナップショットは捨てる
+      lastSearchSnapshot = null;
+      fetchRankings();
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -408,24 +483,32 @@ export default function SearchPage() {
         `After client filters (price<=${maxPrice}, reviews>=${minReviews}): ${filtered.length} games`
       );
 
+      // 「Mood Match」時もマッチ度スコアでは並べ替えず、
+      // フロント側でランダム表示（シャッフル）を行う前提。
+      // if (selectedSort === "recommended") { ... } でのスコアソートは行わない。
       // Mood Match ソート（その他はサーバ側の並びを採用）
-      if (selectedSort === "recommended") {
-        filtered = [...filtered].sort((a, b) => {
-          const scoreA =
-            a.moodScore ??
-            a.finalScore ??
-            a.analysis?.statGemScore ??
-            Number.NEGATIVE_INFINITY;
-          const scoreB =
-            b.moodScore ??
-            b.finalScore ??
-            b.analysis?.statGemScore ??
-            Number.NEGATIVE_INFINITY;
-          return scoreB - scoreA;
-        });
-      }
+      // if (selectedSort === "recommended") {
+      //   filtered = [...filtered].sort((a, b) => {
+      //     const scoreA =
+      //       a.moodScore ??
+      //       a.finalScore ??
+      //       a.analysis?.statGemScore ??
+      //       Number.NEGATIVE_INFINITY;
+      //     const scoreB =
+      //       b.moodScore ??
+      //       b.finalScore ??
+      //       b.analysis?.statGemScore ??
+      //       Number.NEGATIVE_INFINITY;
+      //     return scoreB - scoreA;
+      //   });
+      // }
 
-      setGames(filtered);
+      // ★ 新しい検索では一度だけランダムシャッフルしてから保持
+      const randomized = shuffleGames(filtered);
+
+      setGames(randomized);
+      setVisibleOffset(0);
+
     } catch (err) {
       console.error("Exception fetching rankings:", err);
       toast({
@@ -437,6 +520,26 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  // SearchPage を離れるたびに「今の並び・ページ位置・スクロール位置」をスナップショット保存
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    return () => {
+      if (games.length === 0) {
+        lastSearchSnapshot = null;
+        return;
+      }
+
+      lastSearchSnapshot = {
+        games,
+        visibleOffset,
+        scrollY: window.scrollY,
+      };
+    };
+  }, [games, visibleOffset]);
+
+
 
   const clearAllFilters = () => {
     setSelectedGenre("");
@@ -532,11 +635,44 @@ export default function SearchPage() {
     fetchRankings();
   };
 
+  // ★ モバイルでの「結果入れ替え」ボタン
+  //    - まだ表示していないタイトルから次の 12 件を切り出す
+  //    - 一巡したら再シャッフルして先頭から
+  const handleShuffleNext = () => {
+    if (games.length === 0) return;
+
+    setVisibleOffset((prev) => {
+      const total = games.length;
+      if (total <= MOBILE_BATCH_SIZE) return 0;
+
+      const next = (prev + MOBILE_BATCH_SIZE) % total;
+      return next;
+    });
+
+    if (resultsTopRef.current) {
+      const rect = resultsTopRef.current.getBoundingClientRect();
+
+      // 上に残したい余白（px）
+      const offset = 24; // 好みで 64〜120 の間で調整してOK
+
+      const targetY = window.scrollY + rect.top - offset;
+
+      window.scrollTo({
+        top: targetY,
+        behavior: "smooth",
+      });
+    }
+  }
+
   // フィルター用フルスクリーンシートの開閉
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
+  // ★ 実際にレンダリングするゲーム一覧
+  const visibleGames = isMobile
+    ? games.slice(visibleOffset, visibleOffset + MOBILE_BATCH_SIZE)
+    : games;
 
-
+  
   return (
     <div className="relative min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
       {/* --- Background Effects (Matching VIBE Screenshot) --- */}
@@ -762,6 +898,7 @@ export default function SearchPage() {
         </div> */}
 
         {/* === Results ============================================ */}
+        <div ref={resultsTopRef} />
         {loading ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -773,7 +910,7 @@ export default function SearchPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
-            {games.map((game) => (
+            {visibleGames.map((game) => (
               <div key={game.appId} className="relative h-full">
                 {/* 1つ目のファイルと同じロジック：SearchResultCard に丸投げ */}
                 <SearchResultCard
@@ -848,7 +985,7 @@ export default function SearchPage() {
         </div>
       )}
 
-            {/* === フッターナビ（ピル型） === */}
+      {/* === フッターナビ（ピル型） === */}
       <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center pointer-events-none">
         <div
           className="
@@ -888,6 +1025,22 @@ export default function SearchPage() {
             aria-label="Detail Filters"
           >
             <Filter size={18} />
+          </button>
+
+          {/* ★ 表示結果の入れ替え（モバイルのみ表示） */}
+          <button
+            type="button"
+            onClick={handleShuffleNext}
+            className="
+              inline-flex h-10 w-10 items-center justify-center
+              rounded-full bg-transparent
+              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
+              transition-all duration-200
+              md:hidden
+            "
+            aria-label="Shuffle Results"
+          >
+            <RefreshCw size={18} />
           </button>
 
           {/* 再度 Vibe 選び直す */}
@@ -942,6 +1095,8 @@ function Chip({ label, active, onClick }: ChipProps) {
     </button>
   );
 }
+
+
 
 
 interface ToggleProps {
@@ -1041,6 +1196,8 @@ function DualRangeSlider({
     maxValRef.current = clamped;
     onChange(minState, clamped);
   };
+
+
 
   return (
     <div className="w-full py-3">
