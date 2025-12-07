@@ -1,4 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type MutableRefObject,
+} from "react";
 import {
   useLocation,
   type Location,
@@ -159,6 +165,13 @@ const DEFAULT_MOOD: Record<MoodSliderId, number> = {
 
 const MOOD_STORAGE_KEY = "rankings_userMood" as const;
 const MOOD_SLIDER_MAX = 4;
+const MOOD_AXES: MoodSliderId[] = [
+  "operation",
+  "session",
+  "tension",
+  "story",
+  "brain",
+];
 
 // プリセットからの userMood 計算用（VIBE / Experience Focus 用）
 const PRESET_MOOD_BASE: Record<
@@ -251,6 +264,8 @@ const MAX_PRICE_SLIDER = 60;
 
 // ★ SearchPage の結果スナップショット（Back で戻る用）
 type SearchSnapshot = {
+  searchKey: string | null;
+  anchorAppId: number | null;
   games: RankingGame[];
   visibleOffset: number;
   scrollY: number;
@@ -273,6 +288,149 @@ const STORAGE_KEYS = {
 
 
 // -----------------------------------------
+type SearchSessionRecord = {
+  orderedAppIds: number[];
+  mobileCycleOrder: number[];
+};
+
+const searchSessionCache = new Map<string, SearchSessionRecord>();
+
+const shuffleIndexes = (length: number) => {
+  const arr: number[] = [];
+  for (let i = 0; i < length; i++) {
+    arr.push(i);
+  }
+
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+
+  return arr;
+};
+
+const applyMobileCycleOrder = (
+  key: string,
+  order: number[],
+  mobileCycleRef: MutableRefObject<number[]>
+) => {
+  mobileCycleRef.current = order;
+  if (!key) return;
+  const session = searchSessionCache.get(key);
+  if (session) {
+    session.mobileCycleOrder = order;
+  } else {
+    searchSessionCache.set(key, {
+      orderedAppIds: [],
+      mobileCycleOrder: order,
+    });
+  }
+};
+
+const buildSearchKey = (
+  filters: {
+    genre: string;
+    period: string;
+    sort: SortOptionKey;
+    priceMax: number;
+    reviewCountMin: number;
+    aiTags: string[];
+    excludeEarlyAccess: boolean;
+    excludeMultiplayerOnly: boolean;
+    excludeHorror: boolean;
+  },
+  userMood: Record<MoodSliderId, number>
+) => {
+  const sortedAiTags = [...filters.aiTags].sort().join(",");
+  const moodKey = MOOD_AXES.map((axis) => {
+    const value = userMood[axis] ?? DEFAULT_MOOD[axis];
+    return `${axis}:${value.toFixed(4)}`;
+  }).join("|");
+  return [
+    filters.sort,
+    filters.genre,
+    filters.period,
+    filters.priceMax,
+    filters.reviewCountMin,
+    sortedAiTags,
+    filters.excludeEarlyAccess ? "1" : "0",
+    filters.excludeMultiplayerOnly ? "1" : "0",
+    filters.excludeHorror ? "1" : "0",
+    moodKey,
+  ].join("||");
+};
+
+const orderGamesForSession = (
+  filtered: RankingGame[],
+  searchKey: string,
+  forceShuffle: boolean,
+  mobileCycleRef: MutableRefObject<number[]>
+): RankingGame[] => {
+  const key = searchKey ?? "";
+  let session = searchSessionCache.get(key);
+  if (!session) {
+    session = { orderedAppIds: [], mobileCycleOrder: [] };
+    searchSessionCache.set(key, session);
+  }
+
+  if (forceShuffle || session.orderedAppIds.length === 0) {
+    const shuffled = shuffleGames(filtered);
+    session.orderedAppIds = shuffled.map((game) => game.appId);
+    session.mobileCycleOrder = shuffleIndexes(shuffled.length);
+    applyMobileCycleOrder(key, session.mobileCycleOrder, mobileCycleRef);
+    return shuffled;
+  }
+
+  const gameMap = new Map(filtered.map((game) => [game.appId, game]));
+  const ordered: RankingGame[] = [];
+  const seen = new Set<number>();
+
+  session.orderedAppIds.forEach((appId) => {
+    const game = gameMap.get(appId);
+    if (game) {
+      ordered.push(game);
+      seen.add(appId);
+    }
+  });
+
+  const remaining = filtered.filter((game) => !seen.has(game.appId));
+  if (remaining.length > 0) {
+    const extras = shuffleGames(remaining);
+    extras.forEach((game) => ordered.push(game));
+  }
+
+  session.orderedAppIds = ordered.map((game) => game.appId);
+  if (session.mobileCycleOrder.length !== ordered.length) {
+    session.mobileCycleOrder = shuffleIndexes(ordered.length);
+  }
+
+  applyMobileCycleOrder(key, session.mobileCycleOrder, mobileCycleRef);
+  return ordered;
+};
+
+const restoreSessionFromSnapshot = (
+  snapshot: SearchSnapshot,
+  mobileCycleRef: MutableRefObject<number[]>
+) => {
+  const key = snapshot.searchKey ?? "";
+  const orderedIds = snapshot.games.map((game) => game.appId);
+  let session = searchSessionCache.get(key);
+  if (!session) {
+    const cycle = shuffleIndexes(snapshot.games.length);
+    session = {
+      orderedAppIds: orderedIds,
+      mobileCycleOrder: cycle,
+    };
+    searchSessionCache.set(key, session);
+  } else {
+    session.orderedAppIds = orderedIds;
+    if (session.mobileCycleOrder.length !== snapshot.games.length) {
+      session.mobileCycleOrder = shuffleIndexes(snapshot.games.length);
+    }
+  }
+  applyMobileCycleOrder(key, session.mobileCycleOrder, mobileCycleRef);
+};
+
 // SearchPage
 // -----------------------------------------
 export default function SearchPage() {
@@ -295,6 +453,19 @@ export default function SearchPage() {
   const [isMobile, setIsMobile] = useState(false);
 
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
+  const mobileCycleOrderRef = useRef<number[]>([]);
+  const currentSearchKeyRef = useRef<string>("");
+  const lastClickedAppIdRef = useRef<number | null>(null);
+  const [pendingScrollAppId, setPendingScrollAppId] = useState<number | null>(null);
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const attachCardRef =
+    (appId: number) => (el: HTMLDivElement | null) => {
+      if (el) {
+        cardRefs.current[appId] = el;
+      } else {
+        delete cardRefs.current[appId];
+      }
+    };
 
 
   // モバイル判定（幅 768px 未満をモバイル扱い）
@@ -391,6 +562,9 @@ export default function SearchPage() {
       // 🔙 GameDetail から戻ってきたケース：前回の並び・ページ・スクロールを復元
       setGames(lastSearchSnapshot.games);
       setVisibleOffset(lastSearchSnapshot.visibleOffset);
+      setPendingScrollAppId(lastSearchSnapshot.anchorAppId ?? null);
+      currentSearchKeyRef.current = lastSearchSnapshot.searchKey ?? "";
+      restoreSessionFromSnapshot(lastSearchSnapshot, mobileCycleOrderRef);
       setLoading(false);
 
       if (typeof window !== "undefined") {
@@ -405,6 +579,7 @@ export default function SearchPage() {
     } else {
       // 新規検索として扱う：古いスナップショットは捨てる
       lastSearchSnapshot = null;
+      setPendingScrollAppId(null);
       fetchRankings();
     }
 
@@ -413,6 +588,8 @@ export default function SearchPage() {
 
   const fetchRankings = async () => {
     setLoading(true);
+    lastClickedAppIdRef.current = null;
+    setPendingScrollAppId(null);
     try {
       console.log("Searching hidden gems with filters:", {
         genre: selectedGenre || "all",
@@ -504,10 +681,29 @@ export default function SearchPage() {
       // }
 
       // ★ 新しい検索では一度だけランダムシャッフルしてから保持
-      const randomized = shuffleGames(filtered);
-
-      setGames(randomized);
+      const searchKey = buildSearchKey(
+        {
+          genre: selectedGenre,
+          period: selectedPeriod,
+          sort: selectedSort as SortOptionKey,
+          priceMax: maxPrice,
+          reviewCountMin: minReviews,
+          aiTags,
+          excludeEarlyAccess,
+          excludeMultiplayerOnly,
+          excludeHorror,
+        },
+        userMood
+      );
+      const orderedGames = orderGamesForSession(
+        filtered,
+        searchKey,
+        currentSearchKeyRef.current !== searchKey,
+        mobileCycleOrderRef
+      );
+      setGames(orderedGames);
       setVisibleOffset(0);
+      currentSearchKeyRef.current = searchKey;
 
     } catch (err) {
       console.error("Exception fetching rankings:", err);
@@ -532,6 +728,8 @@ export default function SearchPage() {
       }
 
       lastSearchSnapshot = {
+        searchKey: currentSearchKeyRef.current ?? "",
+        anchorAppId: lastClickedAppIdRef.current ?? null,
         games,
         visibleOffset,
         scrollY: window.scrollY,
@@ -639,13 +837,21 @@ export default function SearchPage() {
   //    - まだ表示していないタイトルから次の 12 件を切り出す
   //    - 一巡したら再シャッフルして先頭から
   const handleShuffleNext = () => {
-    if (games.length === 0) return;
+    if (!isMobile || games.length === 0) return;
+    const cycleLength = mobileCycleOrderRef.current.length;
+    if (cycleLength === 0) return;
 
     setVisibleOffset((prev) => {
-      const total = games.length;
-      if (total <= MOBILE_BATCH_SIZE) return 0;
-
-      const next = (prev + MOBILE_BATCH_SIZE) % total;
+      const next = prev + MOBILE_BATCH_SIZE;
+      if (next >= cycleLength) {
+        const nextCycle = shuffleIndexes(cycleLength);
+        applyMobileCycleOrder(
+          currentSearchKeyRef.current ?? "",
+          nextCycle,
+          mobileCycleOrderRef
+        );
+        return 0;
+      }
       return next;
     });
 
@@ -664,13 +870,44 @@ export default function SearchPage() {
     }
   }
 
+  const handleCardSelect = (appId: number) => {
+    lastClickedAppIdRef.current = appId;
+  };
+
   // フィルター用フルスクリーンシートの開閉
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
+  const getMobileVisibleGames = () => {
+    if (games.length === 0) return [];
+    const order = mobileCycleOrderRef.current;
+    if (order.length === 0) {
+      return games.slice(0, MOBILE_BATCH_SIZE);
+    }
+    const start = Math.min(Math.max(visibleOffset, 0), Math.max(order.length - 1, 0));
+    const end = Math.min(order.length, start + MOBILE_BATCH_SIZE);
+    const batch = order.slice(start, end);
+    return batch.map((index) => games[index]).filter(Boolean);
+  };
+
   // ★ 実際にレンダリングするゲーム一覧
-  const visibleGames = isMobile
-    ? games.slice(visibleOffset, visibleOffset + MOBILE_BATCH_SIZE)
-    : games;
+  const visibleGames = isMobile ? getMobileVisibleGames() : games;
+
+  useLayoutEffect(() => {
+    if (!pendingScrollAppId || typeof window === "undefined") return;
+    const target = cardRefs.current[pendingScrollAppId];
+    if (!target) return;
+
+    const rect = target.getBoundingClientRect();
+    const offset = 24;
+    const targetY = Math.max(0, window.scrollY + rect.top - offset);
+
+    window.scrollTo({
+      top: targetY,
+      behavior: "auto",
+    });
+
+    setPendingScrollAppId(null);
+  }, [pendingScrollAppId, visibleGames.length, visibleOffset, isMobile]);
 
   
   return (
@@ -911,7 +1148,11 @@ export default function SearchPage() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {visibleGames.map((game) => (
-              <div key={game.appId} className="relative h-full">
+              <div
+                key={game.appId}
+                className="relative h-full"
+                ref={attachCardRef(game.appId)}
+              >
                 {/* 1つ目のファイルと同じロジック：SearchResultCard に丸投げ */}
                 <SearchResultCard
                   appId={game.appId}
@@ -927,6 +1168,7 @@ export default function SearchPage() {
                   screenshots={game.screenshots}
                   // ★ ここでデザインを切り替え
                   variant={cardVariant}
+                  onSelect={handleCardSelect}
                 />
               </div>
             ))}

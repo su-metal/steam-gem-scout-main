@@ -39,6 +39,7 @@ interface SearchResultCardProps {
   priceOriginal?: number | null;
   discountPercent?: number | null;
   variant?: CardVariant; // "hud" = 今のデザイン, "simple" = 別デザイン
+  onSelect?: (appId: number) => void;
 }
 
 // スコア軸のキー
@@ -121,11 +122,13 @@ export const SearchResultCard = ({
   moodScore,
   // ★ 追加（デフォルトは既存デザイン）
   variant = "hud",
+  onSelect,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
 
   const handleClick = () => {
+    onSelect?.(Number(appId));
     navigate(`/game/${appId}`, {
       state: gameData && analysisData ? { gameData, analysisData } : undefined,
     });
