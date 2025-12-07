@@ -435,12 +435,12 @@ export const SearchResultCard = ({
         className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
         onClick={handleClick}
       >
-        <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[32px] border-none transition-all duration-300">
+        <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-lg border-none transition-all duration-300">
           {/* Animated Border Glow (Behind) */}
           {/* 1st glow */}
           <div
             className="
-           pointer-events-none absolute -inset-[1px] rounded-[32px] 
+           pointer-events-none absolute -inset-[1px] rounded-lg
            bg-gradient-to-b from-cyan-500/40 via-purple-500/40 to-pink-500/40
            opacity-100           /* モバイル: 常時 hover 状態 */
            md:opacity-20         /* md 以上: 通常は薄く */
@@ -452,7 +452,7 @@ export const SearchResultCard = ({
           {/* 2nd glow */}
           <div
             className="
-           pointer-events-none absolute -inset-[2px] rounded-[32px] 
+           pointer-events-none absolute -inset-[2px] rounded-lg
            bg-cyan-400/20
            opacity-50           /* モバイル: 常時 hover 状態 */
            md:opacity-0         /* md 以上: 通常は非表示 */
@@ -463,9 +463,9 @@ export const SearchResultCard = ({
           />
 
           {/* Main Chassis */}
-          <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[32px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
+          <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-lg overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
             {/* Tech Header (HUD) */}
-            <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
+            <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-3">
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
                 <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
@@ -578,7 +578,7 @@ export const SearchResultCard = ({
                     <span
                       key={i}
                       className="
-    text-[10px] font-mono px-1.5 py-0.5 bg-black/40 rounded-lg
+    text-[10px] font-mono px-1.5 py-0.5 bg-black/40
     /* === Mobile (always hover state) === */
     text-cyan-200 border border-cyan-200
     /* === Desktop (default) === */
@@ -611,7 +611,7 @@ export const SearchResultCard = ({
                     </div>
                   </div>
 
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                  <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
                     <ArrowUpRight size={16} />
                   </span>
                 </div>
@@ -622,34 +622,8 @@ export const SearchResultCard = ({
           {/* Corner Brackets */}
           <div className="absolute top-6 left-0 w-1 h-3 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
           <div className="absolute top-6 right-0 w-1 h-3 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
-
-          {/* Bottom curved accents */}
-          <div
-            className="
-            absolute
-            bottom-[10px] left-[26px]     /* 角丸(32px)のカーブに沿う位置に調整 */
-            h-[3px] w-[56px]              /* 少し長めのライン */
-            rounded-full
-            bg-gradient-to-r from-cyan-400/0 via-cyan-400 to-cyan-400/0
-            opacity-90 md:opacity-50
-            md:group-hover:opacity-100
-            transition-all duration-300
-            z-20
-          "
-          />
-          <div
-            className="
-            absolute
-            bottom-[10px] right-[26px]    /* 右側も同じだけ内側に */
-            h-[3px] w-[56px]
-            rounded-full
-            bg-gradient-to-l from-purple-400/0 via-purple-400 to-purple-400/0
-            opacity-90 md:opacity-50
-            md:group-hover:opacity-100
-            transition-all duration-300
-            z-20
-          "
-          />
+          <div className="absolute bottom-0 left-0 w-3 h-1 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
+          <div className="absolute bottom-0 right-0 w-3 h-1 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
         </div>
       </Card>
     );
@@ -660,12 +634,12 @@ export const SearchResultCard = ({
       className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
       onClick={handleClick}
     >
-      <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-lg border-none transition-all duration-300">
+      <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[32px] border-none transition-all duration-300">
         {/* Animated Border Glow (Behind) */}
         {/* 1st glow */}
         <div
           className="
-           pointer-events-none absolute -inset-[1px] rounded-lg
+           pointer-events-none absolute -inset-[1px] rounded-[32px] 
            bg-gradient-to-b from-cyan-500/40 via-purple-500/40 to-pink-500/40
            opacity-100           /* モバイル: 常時 hover 状態 */
            md:opacity-20         /* md 以上: 通常は薄く */
@@ -677,7 +651,7 @@ export const SearchResultCard = ({
         {/* 2nd glow */}
         <div
           className="
-           pointer-events-none absolute -inset-[2px] rounded-lg
+           pointer-events-none absolute -inset-[2px] rounded-[32px] 
            bg-cyan-400/20
            opacity-50           /* モバイル: 常時 hover 状態 */
            md:opacity-0         /* md 以上: 通常は非表示 */
@@ -688,9 +662,9 @@ export const SearchResultCard = ({
         />
 
         {/* Main Chassis */}
-        <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-lg overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
+        <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[32px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
           {/* Tech Header (HUD) */}
-          <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-3">
+          <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
               <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
@@ -789,12 +763,9 @@ export const SearchResultCard = ({
                 {safeSummary}
               </p>
 
-              {/* Review stats */}
-              <p className="text-[9px] text-slate-500 font-mono mb-3">
-                {positiveDisplay > 0 ? `${positiveDisplay}% positive` : "一定の好評"}
-                {typeof totalReviews === "number" && Number.isFinite(totalReviews)
-                  ? ` · ${totalReviews.toLocaleString()} reviews`
-                  : ""}
+              {/* Release date */}
+              <p className="text-[10px] text-slate-500 font-mono mb-3">
+                RELEASE: {releaseDisplay}
               </p>
 
               {/* Tags */}
@@ -803,7 +774,7 @@ export const SearchResultCard = ({
                   <span
                     key={i}
                     className="
-    text-[10px] font-mono px-1.5 py-0.5 bg-black/40
+    text-[10px] font-mono px-1.5 py-0.5 bg-black/40 rounded-lg
     /* === Mobile (always hover state) === */
     text-cyan-200 border border-cyan-200
     /* === Desktop (default) === */
@@ -819,7 +790,7 @@ export const SearchResultCard = ({
               </div>
 
               {/* Bottom: price + CTA */}
-              <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
+              <div className="mt-auto flex items-center justify-between border-t border-white/20 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
                 <div className="flex flex-col">
                   <span className="text-[8px] text-slate-500 font-mono mb-0.5">
                     CREDITS_REQ
@@ -836,7 +807,7 @@ export const SearchResultCard = ({
                   </div>
                 </div>
 
-                <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
                   <ArrowUpRight size={16} />
                 </span>
               </div>
@@ -847,8 +818,34 @@ export const SearchResultCard = ({
         {/* Corner Brackets */}
         <div className="absolute top-6 left-0 w-1 h-3 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
         <div className="absolute top-6 right-0 w-1 h-3 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
-        <div className="absolute bottom-0 left-0 w-3 h-1 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
-        <div className="absolute bottom-0 right-0 w-3 h-1 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
+
+        {/* Bottom corner highlights: 枠の角丸にぴったり重なる装飾 */}
+        <div
+          className="
+              pointer-events-none
+              absolute -bottom-[1px] -left-[1px]
+              h-24 w-24
+              rounded-[32px]
+              border-b-1 border-l-2 border-transparent
+              border-b-cyan-400 border-l-cyan-400
+              opacity-60 md:opacity-40
+              md:group-hover:opacity-100
+              transition-opacity duration-300
+            "
+        />
+        <div
+          className="
+              pointer-events-none
+              absolute -bottom-[1px] -right-[1px]
+              h-24 w-24
+              rounded-[32px]
+              border-b-1 border-r-2 border-transparent
+              border-b-purple-400 border-r-purple-400
+              opacity-60 md:opacity-40
+              md:group-hover:opacity-100
+              transition-opacity duration-300
+            "
+        />
       </div>
     </Card>
   );

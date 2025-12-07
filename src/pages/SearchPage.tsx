@@ -16,6 +16,7 @@ import {
   Check,
   Filter,
   Calendar,
+  Wind,
 } from "lucide-react";
 
 
@@ -256,7 +257,7 @@ export default function SearchPage() {
   const [games, setGames] = useState<RankingGame[]>([]);
   const [loading, setLoading] = useState(true);
 
-   // ★ カードデザイン切り替え用（"hud" or "simple"）
+  // ★ カードデザイン切り替え用（"hud" or "simple"）
   const [cardVariant, setCardVariant] = useState<CardVariant>("hud");
 
   // ---- フィルター state（localStorage から復元） ----
@@ -531,6 +532,10 @@ export default function SearchPage() {
     fetchRankings();
   };
 
+  // フィルター用フルスクリーンシートの開閉
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+
+
 
   return (
     <div className="relative min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
@@ -573,18 +578,6 @@ export default function SearchPage() {
             Refine your discovery with our deep-dive filters. Adjust the sliders
             to match your exact mood today.
           </p>
-          <div className="mt-6 flex justify-center">
-            <Button
-              variant="outline"
-              asChild
-              className="rounded-full border-white/25 bg-black/30 text-slate-100 hover:bg-black/70 hover:border-white/60"
-            >
-              <a href="/">
-                <Home className="w-4 h-4 mr-2" />
-                Home
-              </a>
-            </Button>
-          </div>
         </div>
 
         {/* === Active Filter Chips ================================ */}
@@ -739,18 +732,8 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* === Detail Filters Panel（インライン / 新デザイン） === */}
-        {/* === Detail Filters Panel（インライン / 新デザイン） === */}
-
-        <SearchPageFilters
-          initialFilters={currentFilters}
-          loading={loading}
-          onApply={handleApplyFilters}
-          onReset={handleResetFilters}
-        />
-
- {/* ★ カードデザイン切り替えトグル */}
-        <div className="mt-4 mb-2 flex items-center justify-end gap-2 text-xs text-slate-400">
+        {/* ★ カードデザイン切り替えトグル */}
+        {/* <div className="mt-4 mb-2 flex items-center justify-end gap-2 text-xs text-slate-400">
           <span className="mr-1 hidden md:inline">CARD STYLE</span>
           <button
             type="button"
@@ -776,7 +759,7 @@ export default function SearchPage() {
           >
             SIMPLE
           </button>
-        </div>
+        </div> */}
 
         {/* === Results ============================================ */}
         {loading ? (
@@ -788,7 +771,7 @@ export default function SearchPage() {
               />
             ))}
           </div>
-                ) : (
+        ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {games.map((game) => (
               <div key={game.appId} className="relative h-full">
@@ -830,6 +813,99 @@ export default function SearchPage() {
           userMood: {JSON.stringify(userMood)}
         </pre>
       </div>
+
+      {/* === 詳細フィルター：フルスクリーンシート === */}
+      {isFilterSheetOpen && (
+        <div className="fixed inset-0 z-40 flex flex-col bg-black/80 backdrop-blur-xl">
+          {/* シート上部ヘッダー */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.2em] uppercase text-slate-200">
+              <Filter size={16} className="text-cyan-400" />
+              <span>DETAIL FILTERS</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsFilterSheetOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-white/5 hover:bg-white/10"
+              aria-label="Close filters"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* フィルター内容（スクロール） */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
+            <SearchPageFilters
+              initialFilters={currentFilters}
+              loading={loading}
+              onApply={(next) => {
+                handleApplyFilters(next);
+                setIsFilterSheetOpen(false); // APPLY で閉じる
+              }}
+              onReset={handleResetFilters}
+            />
+          </div>
+        </div>
+      )}
+
+            {/* === フッターナビ（ピル型） === */}
+      <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center pointer-events-none">
+        <div
+          className="
+            pointer-events-auto inline-flex items-center gap-4
+            rounded-full border border-white/10 bg-slate-900/90
+            px-4 py-2 shadow-[0_18px_45px_rgba(0,0,0,0.7)]
+            backdrop-blur-xl
+          "
+        >
+          {/* Home */}
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="
+              inline-flex h-10 w-10 items-center justify-center
+              rounded-full bg-transparent
+              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
+              transition-all duration-200
+            "
+            aria-label="Home"
+          >
+            <Home size={18} />
+          </button>
+
+          {/* 詳細フィルター（常にアクティブ風に強調） */}
+          <button
+            type="button"
+            onClick={() => setIsFilterSheetOpen(true)}
+            className="
+              inline-flex h-10 w-10 items-center justify-center
+              rounded-full
+              bg-emerald-400 text-slate-950
+              shadow-[0_0_18px_rgba(52,211,153,0.9)]
+              hover:shadow-[0_0_24px_rgba(52,211,153,1)]
+              transition-all duration-200
+            "
+            aria-label="Detail Filters"
+          >
+            <Filter size={18} />
+          </button>
+
+          {/* 再度 Vibe 選び直す */}
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="
+              inline-flex h-10 w-10 items-center justify-center
+              rounded-full bg-transparent
+              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
+              transition-all duration-200
+            "
+            aria-label="Change Vibe"
+          >
+            <Wind size={18} />
+          </button>
+        </div>
+      </nav>
     </div >
   );
 }
@@ -1037,7 +1113,7 @@ function SearchPageFilters({
   const [filters, setFilters] = useState<FilterState>(initialFilters);
 
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(true);
 
   const toggleFiltersOpen = () => {
     setIsFiltersOpen((prev) => !prev);
