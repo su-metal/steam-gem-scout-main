@@ -113,6 +113,8 @@ const SORT_OPTIONS = [
 
 type SortOptionKey = "recommended" | "positive-ratio" | "most-reviews" | "newest";
 
+type CardVariant = "hud" | "simple";
+
 interface FilterState {
   sort: SortOptionKey;
   genre: string;
@@ -253,6 +255,9 @@ export default function SearchPage() {
 
   const [games, setGames] = useState<RankingGame[]>([]);
   const [loading, setLoading] = useState(true);
+
+   // ★ カードデザイン切り替え用（"hud" or "simple"）
+  const [cardVariant, setCardVariant] = useState<CardVariant>("hud");
 
   // ---- フィルター state（localStorage から復元） ----
   const [selectedGenre, setSelectedGenre] = useState<string>(() => {
@@ -744,6 +749,34 @@ export default function SearchPage() {
           onReset={handleResetFilters}
         />
 
+ {/* ★ カードデザイン切り替えトグル */}
+        <div className="mt-4 mb-2 flex items-center justify-end gap-2 text-xs text-slate-400">
+          <span className="mr-1 hidden md:inline">CARD STYLE</span>
+          <button
+            type="button"
+            onClick={() => setCardVariant("hud")}
+            className={`
+              px-3 py-1.5 rounded-full border
+              ${cardVariant === "hud"
+                ? "border-cyan-400 text-cyan-200 bg-cyan-500/10"
+                : "border-slate-600 text-slate-400 bg-transparent"}
+            `}
+          >
+            HUD
+          </button>
+          <button
+            type="button"
+            onClick={() => setCardVariant("simple")}
+            className={`
+              px-3 py-1.5 rounded-full border
+              ${cardVariant === "simple"
+                ? "border-cyan-400 text-cyan-200 bg-cyan-500/10"
+                : "border-slate-600 text-slate-400 bg-transparent"}
+            `}
+          >
+            SIMPLE
+          </button>
+        </div>
 
         {/* === Results ============================================ */}
         {loading ? (
@@ -772,6 +805,8 @@ export default function SearchPage() {
                   gameData={game}
                   analysisData={game.analysis}
                   screenshots={game.screenshots}
+                  // ★ ここでデザインを切り替え
+                  variant={cardVariant}
                 />
               </div>
             ))}

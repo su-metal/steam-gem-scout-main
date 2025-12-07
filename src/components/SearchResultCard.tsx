@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { ArrowUpRight, Activity, Terminal } from "lucide-react";
 
 
 // Returns the tags that should be displayed on the card
@@ -37,10 +38,14 @@ interface SearchResultCardProps {
   finalScore?: number;
   priceOriginal?: number | null;
   discountPercent?: number | null;
+  variant?: CardVariant; // "hud" = 今のデザイン, "simple" = 別デザイン
 }
 
 // スコア軸のキー
 type ScoreAxisKey = "hidden" | "quality" | "comeback" | "niche" | "innovation";
+
+// ★ カードデザインのバリアント
+type CardVariant = "hud" | "simple";
 
 // スコア軸の表示ラベル
 const SCORE_AXIS_LABELS: Record<ScoreAxisKey, string> = {
@@ -114,6 +119,8 @@ export const SearchResultCard = ({
   screenshots,
   headerImage,
   moodScore,
+  // ★ 追加（デフォルトは既存デザイン）
+  variant = "hud",
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
@@ -418,109 +425,337 @@ export const SearchResultCard = ({
   }
 
 
-  const cardMatchScore = normalizedMoodScore != null ? Math.round(normalizedMoodScore * 100) : 0;
+  const cardMatchScore =
+    normalizedMoodScore != null ? Math.round(normalizedMoodScore * 100) : 0;
 
-  return (
-    <Card
-      className="group relative w-full cursor-pointer bg-transparent border-none p-0"
-      onClick={handleClick}
-    >
-      <div className="relative overflow-hidden rounded-[34px] border border-white/5 bg-[#02030a] shadow-[0_25px_55px_rgba(2,3,20,0.95)]">
-        <div className="pointer-events-none absolute inset-0 rounded-[34px] border border-cyan-500/30 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-        <div className="relative z-10 flex flex-col">
-          <div className="flex items-center justify-between px-5 pt-5 text-[9px] uppercase tracking-[0.4em] text-slate-300">
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)] animate-pulse" />
-              <span className="text-[11px] font-black text-emerald-300 tracking-[0.3em]">SYS.READY</span>
-            </div>
-            <div className="h-1 w-12 rounded-full bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 shadow-[0_0_12px_rgba(59,130,246,0.8)]" />
-          </div>
+  // ★ ここから simple バリアント
+  if (variant === "simple") {
+    return (
+      <Card
+        className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none p-0"
+        onClick={handleClick}
+      >
 
-          <div className="px-5 pt-4 pb-6">
-            <div className="relative aspect-[21/9] overflow-hidden rounded-[24px] border border-white/10 bg-slate-900 shadow-[0_25px_60px_rgba(2,3,20,0.95)] transition-transform duration-500 group-hover:scale-[1.01]">
-              <img src={headerImageUrl} alt={title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent" />
-              <div className="absolute inset-0 flex flex-col justify-between p-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-wrap gap-1 max-w-[60%]">
-                    {displayTags.slice(0, 4).map((label, i) => (
-                      <div
-                        key={`${label}-${i}`}
-                        className="px-2 py-1 rounded-full bg-black/50 border border-white/20 text-[9px] text-white font-bold uppercase tracking-widest backdrop-blur-md"
-                      >
-                        {label}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-2xl font-black text-white drop-shadow-[0_0_18px_rgba(255,255,255,0.45)] leading-tight">
-                      {cardMatchScore}%
+        {/* 外側パディング付きコンテナ */}
+        <div className="relative flex flex-col w-full h-full">
+          {/* Glass Container */}
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-xl rounded-[32px] border border-white/20 group-hover:bg-white/15 transition-colors duration-500 shadow-[0_10px_30px_rgba(0,0,0,0.2)] group-hover:shadow-[0_0_40px_rgba(168,85,247,0.4)]" />
+
+          {/* Aurora Glow */}
+          <div className="absolute -inset-1 rounded-[34px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-30 blur-xl transition-opacity duration-700" />
+
+          {/* Content Body */}
+          <div className="relative z-10 flex flex-col h-full rounded-[24px] overflow-hidden">
+            {/* Floating Image */}
+            <div
+              className="
+    relative
+    aspect-[21/9]
+    rounded-t-[24px]               /* 親コンテナと同じ上側の角丸に */
+    overflow-hidden
+    shadow-lg
+    group-hover:shadow-2xl
+    transition-all duration-500
+    group-hover:scale-[1.02]
+  "
+            >
+              <img
+                src={headerImageUrl}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
+
+
+              {/* Score Orb (Large) */}
+              {cardMatchScore > 0 && (
+                <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform duration-500 z-20">
+                  <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 to-purple-300 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)] leading-none">
+                    {cardMatchScore}
+                  </span>
+                  <span className="text-[8px] font-bold text-white/70 uppercase tracking-widest mt-0.5">
+                    MATCH
+                  </span>
+                </div>
+              )}
+
+              {/* Discount Badge */}
+              {hasDiscount && (
+                <div className="absolute top-3 left-3 z-20">
+                  <div className="px-3 py-1.5 rounded-full bg-pink-500/20 backdrop-blur-md border border-pink-500/30 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]">
+                    <span className="text-xs font-black tracking-wider">
+                      -{discountPercentDisplay}%
                     </span>
-                    <span className="text-[8px] uppercase tracking-[0.4em] text-white/70">Mood Match</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  {hasDiscount && (
-                    <div className="px-3 py-1.5 rounded-full bg-pink-500/20 border border-pink-500/40 text-[10px] font-bold uppercase tracking-[0.3em] text-white shadow-[0_0_15px_rgba(236,72,153,0.35)]">
-                      Savings {discountPercentDisplay}%
-                    </div>
-                  )}
-                  <div className="h-1 w-20 rounded-full bg-gradient-to-r from-cyan-500/80 to-transparent opacity-60" />
-                </div>
-              </div>
+              )}
             </div>
-          </div>
 
-          <div className="px-5 pb-6 flex flex-col gap-3">
-            <div className="flex items-center justify-between text-[8px] uppercase tracking-[0.4em] text-slate-400">
-              <span>Release</span>
-              <span className="text-white/50">{releaseDisplay}</span>
-            </div>
-            <h3 className="text-xl font-bold uppercase leading-tight tracking-tight text-white line-clamp-2">
-              {title}
-            </h3>
-            <p className="text-sm text-slate-300 leading-relaxed line-clamp-3">{safeSummary}</p>
+            {/* Info */}
+            <div className="px-5 pb-5 pt-1 flex flex-col flex-1">
+              <h3
+                className="
+                    text-lg font-bold mt-2 uppercase tracking-tight max-w-[80%] line-clamp-1
+                    text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400
+                    md:text-white md:bg-none
+                    md:group-hover:text-transparent md:group-hover:bg-clip-text md:group-hover:bg-gradient-to-r md:group-hover:from-cyan-400 md:group-hover:to-purple-400
+                    transition-all duration-300
+                  "
+              >
+                {title}
+              </h3>
 
-            {audienceBadges.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {audienceBadges.map((badge) => (
+              <p className="text-xs text-slate-400/80 line-clamp-2 mb-3 leading-relaxed">
+                {safeSummary}
+              </p>
+
+              {/* Tags */}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {displayTags.slice(0, 5).map((tag, i) => (
                   <span
-                    key={badge.id ?? badge.label}
-                    className="px-3 py-1 rounded-full border border-white/10 bg-black/40 text-[10px] font-semibold text-white/80 uppercase tracking-wider"
+                    key={i}
+                    className="
+    text-[10px] font-mono px-1.5 py-0.5 rounded-lg bg-black/40
+    /* === Mobile (always hover state) === */
+    text-cyan-200 border border-cyan-200
+    /* === Desktop (default) === */
+    md:text-slate-300 md:border md:border-white/10
+    /* === Desktop hover === */
+    md:group-hover:text-cyan-200 md:group-hover:border-cyan-200
+    transition-colors
+  "
                   >
-                    {badge.label}
+                    {tag.toUpperCase()}
                   </span>
                 ))}
               </div>
-            )}
 
-            <div className="mt-2 flex items-end justify-between">
-              <div>
-                <p className="text-[8px] uppercase tracking-[0.4em] text-slate-500">Reviews</p>
-                <p className="text-sm font-semibold text-emerald-200">
-                  {positiveDisplay}% positive
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  {typeof totalReviews === "number" && Number.isFinite(totalReviews)
-                    ? `${totalReviews.toLocaleString()} reviews`
-                    : "Reviews unknown"}
-                </p>
-              </div>
+              {/* Release & Price */}
+              <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-4">
+                <div className="flex flex-col">
+                  <span className="text-[9px] font-bold text-cyan-400/80 uppercase tracking-widest mb-0.5">
+                    Release
+                  </span>
+                  <span className="text-xs font-semibold text-slate-200">
+                    {releaseDisplay}
+                  </span>
+                </div>
 
-              <div className="text-right">
-                <p className="text-[8px] uppercase tracking-[0.4em] text-slate-500">Price</p>
-                <p className="text-2xl font-black text-white">{priceDisplay}</p>
-                {hasDiscount && (
-                  <p className="text-[10px] text-pink-300 uppercase tracking-[0.3em]">
-                    Original {priceOriginalDisplay}
-                  </p>
-                )}
+                <div className="flex flex-col items-end">
+                  {hasDiscount && (
+                    <span className="text-[10px] text-slate-400 line-through decoration-slate-500/60">
+                      {priceOriginalDisplay}
+                    </span>
+                  )}
+                  <span className="text-lg font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
+                    {priceDisplay}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      </Card>
+    );
+  }
+
+
+  return (
+    <Card
+      className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
+      onClick={handleClick}
+    >
+      <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-lg border-none transition-all duration-300">
+        {/* Animated Border Glow (Behind) */}
+        {/* 1st glow */}
+        <div
+          className="
+           pointer-events-none absolute -inset-[1px] rounded-lg
+           bg-gradient-to-b from-cyan-500/40 via-purple-500/40 to-pink-500/40
+           opacity-100           /* モバイル: 常時 hover 状態 */
+           md:opacity-20         /* md 以上: 通常は薄く */
+           blur-[2px]
+           transition-opacity duration-300
+           md:group-hover:opacity-100 md:group-hover:duration-200
+         "
+        />
+        {/* 2nd glow */}
+        <div
+          className="
+           pointer-events-none absolute -inset-[2px] rounded-lg
+           bg-cyan-400/20
+           opacity-50           /* モバイル: 常時 hover 状態 */
+           md:opacity-0         /* md 以上: 通常は非表示 */
+           blur-xl
+           transition-opacity duration-500
+           md:group-hover:opacity-50
+         "
+        />
+
+        {/* Main Chassis */}
+        <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-lg overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
+          {/* Tech Header (HUD) */}
+          <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-3">
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
+              <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
+                SYS.READY
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="h-1 w-8 rounded-full bg-cyan-500/50 md:bg-white/10 md:group-hover:bg-cyan-500/50 transition-colors" />
+              <span className="h-1 w-2 rounded-full bg-purple-500/50 md:bg-white/10 md:group-hover:bg-purple-500/50 transition-colors" />
+            </div>
+          </div>
+
+          {/* Image Area with Scanlines */}
+          <div className="relative aspect-[21/9] overflow-hidden group">
+            {/* Image + chromatic glitch */}
+            <div className="absolute inset-0 z-0">
+              <img
+                src={headerImageUrl}
+                alt={title}
+                className="w-full h-full object-cover opacity-100 md:opacity-80 md:group-hover:opacity-100 transition-opacity duration-200"
+              />
+              <img
+                src={headerImageUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-0 md:opacity-0 md:group-hover:opacity-40 mix-blend-screen translate-x-1 transition-all duration-100"
+                style={{ filter: "hue-rotate(90deg)" }}
+              />
+              <img
+                src={headerImageUrl}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover opacity-0 md:opacity-0 md:group-hover:opacity-40 mix-blend-screen -translate-x-1 transition-all duration-100"
+                style={{ filter: "hue-rotate(-90deg)" }}
+              />
+            </div>
+
+            {/* Scanlines */}
+            <div className="absolute inset-0 bg-scanlines opacity-30 pointer-events-none" />
+
+            {/* Flash overlay */}
+            <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
+
+            {/* Match Score Badge (top-right) */}
+            <div className="absolute top-0 right-0 p-2">
+              <div className="bg-black/70 backdrop-blur border border-cyan-500/40 flex items-center gap-2 px-2 py-1 transform skew-x-[-10deg]">
+                <Activity size={12} className="text-cyan-400" />
+                <span className="text-xs font-black text-white transform skew-x-[10deg]">
+                  {cardMatchScore}%
+                </span>
+              </div>
+            </div>
+
+            {/* Discount Badge (bottom-right) */}
+            {hasDiscount && (
+              <div className="absolute bottom-0 right-0">
+                <div className="bg-pink-600/90 text-white text-[10px] font-bold px-3 py-1 clip-path-slant-left">
+                  SAVINGS: {discountPercentDisplay}%
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Content Deck */}
+          <div className="relative flex-1 p-4 bg-gradient-to-b from-[#050505] to-[#0a0a0a]">
+            {/* Decorative Grid Background */}
+            <div
+              className="pointer-events-none absolute inset-0 opacity-10"
+              style={{
+                backgroundImage:
+                  "linear-gradient(#1a1a1a 1px, transparent 1px), linear-gradient(90deg, #1a1a1a 1px, transparent 1px)",
+                backgroundSize: "20px 20px",
+              }}
+            />
+
+            <div className="relative z-10 flex flex-col h-full">
+              {/* Title + tiny HUD icon */}
+              <div className="flex justify-between items-start mb-2">
+                <h3
+                  className="
+                    text-lg font-bold uppercase tracking-tight max-w-[80%] line-clamp-1
+                    text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400
+                    md:text-white md:bg-none
+                    md:group-hover:text-transparent md:group-hover:bg-clip-text md:group-hover:bg-gradient-to-r md:group-hover:from-cyan-400 md:group-hover:to-purple-400
+                    transition-all duration-300
+                  "
+                >
+                  {title}
+                </h3>
+                <Terminal
+                  size={12}
+                  className="text-cyan-400 md:text-slate-600 md:group-hover:text-cyan-400 transition-colors"
+                />
+              </div>
+
+              {/* Description */}
+              <p className="text-[12px] text-slate-400/80 font-mono leading-relaxed line-clamp-2 mb-1 min-h-[1.5rem]">
+                {safeSummary}
+              </p>
+
+              {/* Review stats */}
+              <p className="text-[9px] text-slate-500 font-mono mb-3">
+                {positiveDisplay > 0 ? `${positiveDisplay}% positive` : "一定の好評"}
+                {typeof totalReviews === "number" && Number.isFinite(totalReviews)
+                  ? ` · ${totalReviews.toLocaleString()} reviews`
+                  : ""}
+              </p>
+
+              {/* Tags */}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {displayTags.slice(0, 5).map((tag, i) => (
+                  <span
+                    key={i}
+                    className="
+    text-[10px] font-mono px-1.5 py-0.5 bg-black/40
+    /* === Mobile (always hover state) === */
+    text-cyan-200 border border-cyan-200
+    /* === Desktop (default) === */
+    md:text-slate-300 md:border md:border-white/10
+    /* === Desktop hover === */
+    md:group-hover:text-cyan-200 md:group-hover:border-cyan-200
+    transition-colors
+  "
+                  >
+                    {tag.toUpperCase()}
+                  </span>
+                ))}
+              </div>
+
+              {/* Bottom: price + CTA */}
+              <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
+                <div className="flex flex-col">
+                  <span className="text-[8px] text-slate-500 font-mono mb-0.5">
+                    CREDITS_REQ
+                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-bold text-cyan-300 md:text-white md:group-hover:text-cyan-300 transition-colors font-mono">
+                      {priceDisplay}
+                    </span>
+                    {hasDiscount && (
+                      <span className="text-[10px] text-slate-600 line-through font-mono">
+                        {priceOriginalDisplay}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                  <ArrowUpRight size={16} />
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Corner Brackets */}
+        <div className="absolute top-6 left-0 w-1 h-3 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
+        <div className="absolute top-6 right-0 w-1 h-3 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
+        <div className="absolute bottom-0 left-0 w-3 h-1 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
+        <div className="absolute bottom-0 right-0 w-3 h-1 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
       </div>
     </Card>
   );
-};
 
+};
