@@ -432,90 +432,153 @@ export const SearchResultCard = ({
   if (variant === "simple") {
     return (
       <Card
-        className="group relative flex flex-col w-full h-full cursor-pointer bg-transparent border-none shadow-none p-0"
+        className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
         onClick={handleClick}
       >
+        <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[32px] border-none transition-all duration-300">
+          {/* Animated Border Glow (Behind) */}
+          {/* 1st glow */}
+          <div
+            className="
+           pointer-events-none absolute -inset-[1px] rounded-[32px] 
+           bg-gradient-to-b from-cyan-500/40 via-purple-500/40 to-pink-500/40
+           opacity-100           /* モバイル: 常時 hover 状態 */
+           md:opacity-20         /* md 以上: 通常は薄く */
+           blur-[2px]
+           transition-opacity duration-300
+           md:group-hover:opacity-100 md:group-hover:duration-200
+         "
+          />
+          {/* 2nd glow */}
+          <div
+            className="
+           pointer-events-none absolute -inset-[2px] rounded-[32px] 
+           bg-cyan-400/20
+           opacity-50           /* モバイル: 常時 hover 状態 */
+           md:opacity-0         /* md 以上: 通常は非表示 */
+           blur-xl
+           transition-opacity duration-500
+           md:group-hover:opacity-50
+         "
+          />
 
-        {/* 外側パディング付きコンテナ */}
-        <div className="relative flex flex-col w-full h-full">
-          {/* Glass Container */}
-          <div className="absolute inset-0 bg-white/10 backdrop-blur-xl rounded-[32px] border border-white/20 group-hover:bg-white/15 transition-colors duration-500 shadow-[0_10px_30px_rgba(0,0,0,0.2)] group-hover:shadow-[0_0_40px_rgba(168,85,247,0.4)]" />
+          {/* Main Chassis */}
+          <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[32px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
+            {/* Tech Header (HUD) */}
+            <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
+                <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
+                  SYS.READY
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="h-1 w-8 rounded-full bg-cyan-500/50 md:bg-white/10 md:group-hover:bg-cyan-500/50 transition-colors" />
+                <span className="h-1 w-2 rounded-full bg-purple-500/50 md:bg-white/10 md:group-hover:bg-purple-500/50 transition-colors" />
+              </div>
+            </div>
 
-          {/* Aurora Glow */}
-          <div className="absolute -inset-1 rounded-[34px] bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-30 blur-xl transition-opacity duration-700" />
+            {/* Image Area with Scanlines */}
+            <div className="relative aspect-[21/9] overflow-hidden group">
+              {/* Image + chromatic glitch */}
+              <div className="absolute inset-0 z-0">
+                <img
+                  src={headerImageUrl}
+                  alt={title}
+                  className="w-full h-full object-cover opacity-100 md:opacity-80 md:group-hover:opacity-100 transition-opacity duration-200"
+                />
+                <img
+                  src={headerImageUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover opacity-0 md:opacity-0 md:group-hover:opacity-40 mix-blend-screen translate-x-1 transition-all duration-100"
+                  style={{ filter: "hue-rotate(90deg)" }}
+                />
+                <img
+                  src={headerImageUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover opacity-0 md:opacity-0 md:group-hover:opacity-40 mix-blend-screen -translate-x-1 transition-all duration-100"
+                  style={{ filter: "hue-rotate(-90deg)" }}
+                />
+              </div>
 
-          {/* Content Body */}
-          <div className="relative z-10 flex flex-col h-full rounded-[24px] overflow-hidden">
-            {/* Floating Image */}
-            <div
-              className="
-    relative
-    aspect-[21/9]
-    rounded-t-[24px]               /* 親コンテナと同じ上側の角丸に */
-    overflow-hidden
-    shadow-lg
-    group-hover:shadow-2xl
-    transition-all duration-500
-    group-hover:scale-[1.02]
-  "
-            >
-              <img
-                src={headerImageUrl}
-                alt={title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
+              {/* Scanlines */}
+              <div className="absolute inset-0 bg-scanlines opacity-30 pointer-events-none" />
 
+              {/* Flash overlay */}
+              <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
 
-              {/* Score Orb (Large) */}
-              {cardMatchScore > 0 && (
-                <div className="absolute top-3 right-3 w-16 h-16 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 flex flex-col items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.2)] group-hover:scale-110 transition-transform duration-500 z-20">
-                  <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 to-purple-300 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)] leading-none">
-                    {cardMatchScore}
-                  </span>
-                  <span className="text-[8px] font-bold text-white/70 uppercase tracking-widest mt-0.5">
-                    MATCH
+              {/* Match Score Badge (top-right) */}
+              <div className="absolute top-0 right-0 p-2">
+                <div className="bg-black/70 backdrop-blur border border-cyan-500/40 flex items-center gap-2 px-2 py-1 transform skew-x-[-10deg]">
+                  <Activity size={12} className="text-cyan-400" />
+                  <span className="text-xs font-black text-white transform skew-x-[10deg]">
+                    {cardMatchScore}%
                   </span>
                 </div>
-              )}
+              </div>
 
-              {/* Discount Badge */}
+              {/* Discount Badge (bottom-right) */}
               {hasDiscount && (
-                <div className="absolute top-3 left-3 z-20">
-                  <div className="px-3 py-1.5 rounded-full bg-pink-500/20 backdrop-blur-md border border-pink-500/30 text-white shadow-[0_0_15px_rgba(236,72,153,0.4)]">
-                    <span className="text-xs font-black tracking-wider">
-                      -{discountPercentDisplay}%
-                    </span>
+                <div className="absolute bottom-0 right-0">
+                  <div className="bg-pink-600/90 text-white text-[10px] font-bold px-3 py-1 clip-path-slant-left">
+                    SAVINGS: {discountPercentDisplay}%
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Info */}
-            <div className="px-5 pb-5 pt-1 flex flex-col flex-1">
-              <h3
-                className="
-                    text-lg font-bold mt-2 uppercase tracking-tight max-w-[80%] line-clamp-1
+            {/* Content Deck */}
+            <div className="relative flex-1 p-4 bg-gradient-to-b from-[#050505] to-[#0a0a0a]">
+              {/* Decorative Grid Background */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-10"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(#1a1a1a 1px, transparent 1px), linear-gradient(90deg, #1a1a1a 1px, transparent 1px)",
+                  backgroundSize: "20px 20px",
+                }}
+              />
+
+              <div className="relative z-10 flex flex-col h-full">
+                {/* Title + tiny HUD icon */}
+                <div className="flex justify-between items-start mb-2">
+                  <h3
+                    className="
+                    text-lg font-bold uppercase tracking-tight max-w-[80%] line-clamp-1
                     text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400
                     md:text-white md:bg-none
                     md:group-hover:text-transparent md:group-hover:bg-clip-text md:group-hover:bg-gradient-to-r md:group-hover:from-cyan-400 md:group-hover:to-purple-400
                     transition-all duration-300
                   "
-              >
-                {title}
-              </h3>
+                  >
+                    {title}
+                  </h3>
+                  <Terminal
+                    size={12}
+                    className="text-cyan-400 md:text-slate-600 md:group-hover:text-cyan-400 transition-colors"
+                  />
+                </div>
 
-              <p className="text-xs text-slate-400/80 line-clamp-2 mb-3 leading-relaxed">
-                {safeSummary}
-              </p>
+                {/* Description */}
+                <p className="text-[12px] text-slate-400/80 font-mono leading-relaxed line-clamp-2 mb-1 min-h-[1.5rem]">
+                  {safeSummary}
+                </p>
 
-              {/* Tags */}
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {displayTags.slice(0, 5).map((tag, i) => (
-                  <span
-                    key={i}
-                    className="
-    text-[10px] font-mono px-1.5 py-0.5 rounded-lg bg-black/40
+                {/* Review stats */}
+                <p className="text-[9px] text-slate-500 font-mono mb-3">
+                  {positiveDisplay > 0 ? `${positiveDisplay}% positive` : "一定の好評"}
+                  {typeof totalReviews === "number" && Number.isFinite(totalReviews)
+                    ? ` · ${totalReviews.toLocaleString()} reviews`
+                    : ""}
+                </p>
+
+                {/* Tags */}
+                <div className="flex flex-wrap gap-1.5 mb-4">
+                  {displayTags.slice(0, 5).map((tag, i) => (
+                    <span
+                      key={i}
+                      className="
+    text-[10px] font-mono px-1.5 py-0.5 bg-black/40 rounded-lg
     /* === Mobile (always hover state) === */
     text-cyan-200 border border-cyan-200
     /* === Desktop (default) === */
@@ -524,41 +587,73 @@ export const SearchResultCard = ({
     md:group-hover:text-cyan-200 md:group-hover:border-cyan-200
     transition-colors
   "
-                  >
-                    {tag.toUpperCase()}
-                  </span>
-                ))}
-              </div>
-
-              {/* Release & Price */}
-              <div className="mt-auto flex items-end justify-between border-t border-white/10 pt-4">
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-bold text-cyan-400/80 uppercase tracking-widest mb-0.5">
-                    Release
-                  </span>
-                  <span className="text-xs font-semibold text-slate-200">
-                    {releaseDisplay}
-                  </span>
+                    >
+                      {tag.toUpperCase()}
+                    </span>
+                  ))}
                 </div>
 
-                <div className="flex flex-col items-end">
-                  {hasDiscount && (
-                    <span className="text-[10px] text-slate-400 line-through decoration-slate-500/60">
-                      {priceOriginalDisplay}
+                {/* Bottom: price + CTA */}
+                <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
+                  <div className="flex flex-col">
+                    <span className="text-[8px] text-slate-500 font-mono mb-0.5">
+                      CREDITS_REQ
                     </span>
-                  )}
-                  <span className="text-lg font-bold text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
-                    {priceDisplay}
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-lg font-bold text-cyan-300 md:text-white md:group-hover:text-cyan-300 transition-colors font-mono">
+                        {priceDisplay}
+                      </span>
+                      {hasDiscount && (
+                        <span className="text-[10px] text-slate-600 line-through font-mono">
+                          {priceOriginalDisplay}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                    <ArrowUpRight size={16} />
                   </span>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Corner Brackets */}
+          <div className="absolute top-6 left-0 w-1 h-3 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
+          <div className="absolute top-6 right-0 w-1 h-3 bg-purple-500 md:bg-cyan-500/0 md:group-hover:bg-purple-500 transition-colors duration-300" />
+
+          {/* Bottom curved accents */}
+          <div
+            className="
+            absolute
+            bottom-[10px] left-[26px]     /* 角丸(32px)のカーブに沿う位置に調整 */
+            h-[3px] w-[56px]              /* 少し長めのライン */
+            rounded-full
+            bg-gradient-to-r from-cyan-400/0 via-cyan-400 to-cyan-400/0
+            opacity-90 md:opacity-50
+            md:group-hover:opacity-100
+            transition-all duration-300
+            z-20
+          "
+          />
+          <div
+            className="
+            absolute
+            bottom-[10px] right-[26px]    /* 右側も同じだけ内側に */
+            h-[3px] w-[56px]
+            rounded-full
+            bg-gradient-to-l from-purple-400/0 via-purple-400 to-purple-400/0
+            opacity-90 md:opacity-50
+            md:group-hover:opacity-100
+            transition-all duration-300
+            z-20
+          "
+          />
         </div>
       </Card>
     );
   }
-
 
   return (
     <Card
