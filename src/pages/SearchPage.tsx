@@ -11,6 +11,7 @@ import {
   useNavigate,
   useNavigationType,
 } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -85,6 +86,9 @@ const shuffleGames = (list: RankingGame[]): RankingGame[] => {
 interface SearchPageNavigationState {
   primaryVibePreset?: string;
   subVibes?: string[];
+  primaryVibeTitle?: string;
+  experienceClass?: string;
+  experienceClassLabel?: string;
 }
 
 // -----------------------------
@@ -262,6 +266,72 @@ const computeDesiredMood = (
 
 const MAX_PRICE_SLIDER = 60;
 
+// ▼ 追加：Vibe ごとの背景テーマ
+type PrimaryVibeId = keyof typeof PRESET_MOOD_BASE | "default";
+
+const VIBE_BG_THEME: Record<
+  PrimaryVibeId,
+  {
+    pageBg: string;   // 最外枠の背景
+    radial: string;   // 中央のラジアルグラデ
+    blob1: string;    // 左上あたりのぼんやりグロー
+    blob2: string;    // 右下あたりのぼんやりグロー
+  }
+> = {
+  default: {
+    pageBg: "bg-[#02040a]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#1e1b4b_0%,_#020617_60%)]",
+    blob1: "bg-cyan-900/20",
+    blob2: "bg-purple-900/10",
+  },
+  Chill: {
+    pageBg: "bg-[#020617]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#0f172a_0%,_#022c22_60%)]",
+    blob1: "bg-emerald-500/20",
+    blob2: "bg-sky-500/16",
+  },
+  Focus: {
+    pageBg: "bg-[#020617]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#0b1120_0%,_#020617_60%)]",
+    blob1: "bg-indigo-500/18",
+    blob2: "bg-sky-500/18",
+  },
+  Story: {
+    pageBg: "bg-[#050017]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#3b0764_0%,_#020617_60%)]",
+    blob1: "bg-fuchsia-500/22",
+    blob2: "bg-amber-400/14",
+  },
+  Speed: {
+    pageBg: "bg-[#020308]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#7c2d12_0%,_#020617_60%)]",
+    blob1: "bg-orange-500/24",
+    blob2: "bg-rose-500/18",
+  },
+  Short: {
+    pageBg: "bg-[#020617]",
+    radial:
+      "bg-[radial-gradient(circle_at_50%_0%,_#1e293b_0%,_#020617_60%)]",
+    blob1: "bg-sky-500/20",
+    blob2: "bg-lime-400/16",
+  },
+};
+
+// ▼ 追加：Vibeごとのヘッダーテキストカラー
+const VIBE_HEADER_TEXT_CLASS: Record<PrimaryVibeId, string> = {
+  default: "text-emerald-500",
+  Chill: "text-emerald-400",
+  Focus: "text-sky-400",
+  Story: "text-fuchsia-400",
+  Speed: "text-rose-400",
+  Short: "text-amber-300",
+};
+
 // ★ SearchPage の結果スナップショット（Back で戻る用）
 type SearchSnapshot = {
   searchKey: string | null;
@@ -274,7 +344,7 @@ type SearchSnapshot = {
 let lastSearchSnapshot: SearchSnapshot | null = null;
 
 // ★ モバイルで 1 回に表示する件数
-const MOBILE_BATCH_SIZE = 12;
+const MOBILE_BATCH_SIZE = 15;
 
 
 // フィルター状態保存用の localStorage キー
@@ -285,7 +355,6 @@ const STORAGE_KEYS = {
   maxPrice: "rankings_maxPrice",
   minReviews: "rankings_minReviews",
 } as const;
-
 
 // -----------------------------------------
 type SearchSessionRecord = {
@@ -438,10 +507,50 @@ export default function SearchPage() {
   const navigationType = useNavigationType();
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
+
+  // VIBE / Experience Focus の表示用ラベル
+  const currentVibeLabel =
+    navigationState?.primaryVibeTitle ??
+    navigationState?.primaryVibePreset ??
+    null;
+
+  const currentExperienceFocusLabel =
+    navigationState?.experienceClassLabel ??
+    (navigationState?.subVibes && navigationState.subVibes.length > 0
+      ? navigationState.subVibes[0]
+      : null);
+
+  // ▼ 選択されている Vibe ID（なければ default）
+  const primaryVibeId =
+    (navigationState?.primaryVibePreset as PrimaryVibeId | undefined) ?? null;
+
+  // ▼ ヘッダー用テキストカラー（Vibe に応じて）
+  const vibeHeaderTextClass =
+    VIBE_HEADER_TEXT_CLASS[primaryVibeId ?? "default"];
+
+
+  // ▼ 現在のテーマ（Vibe がなければ default）
+  const [vibeTheme, setVibeTheme] = useState(
+    VIBE_BG_THEME[
+    ((navigationState?.primaryVibePreset as PrimaryVibeId | undefined) ??
+      "default") as PrimaryVibeId
+    ]
+  );
+
+
+  // primaryVibePreset が変わったときにテーマを更新
+  useEffect(() => {
+    const primaryVibeId =
+      (navigationState?.primaryVibePreset as PrimaryVibeId | undefined) ??
+      null;
+    setVibeTheme(VIBE_BG_THEME[primaryVibeId ?? "default"]);
+  }, [navigationState?.primaryVibePreset]);
+
   const navMoodOverride = computeDesiredMood(
     navigationState?.primaryVibePreset,
     navigationState?.subVibes ?? []
   );
+
 
   const [games, setGames] = useState<RankingGame[]>([]);
   const [loading, setLoading] = useState(true);
@@ -841,9 +950,11 @@ export default function SearchPage() {
     const cycleLength = mobileCycleOrderRef.current.length;
     if (cycleLength === 0) return;
 
+    // ▶ スクロールは一切行わず、表示バッチだけ進める
     setVisibleOffset((prev) => {
       const next = prev + MOBILE_BATCH_SIZE;
       if (next >= cycleLength) {
+        // 一巡したら順番を再シャッフルして先頭から
         const nextCycle = shuffleIndexes(cycleLength);
         applyMobileCycleOrder(
           currentSearchKeyRef.current ?? "",
@@ -854,24 +965,19 @@ export default function SearchPage() {
       }
       return next;
     });
+  };
 
-    if (resultsTopRef.current) {
-      const rect = resultsTopRef.current.getBoundingClientRect();
-
-      // 上に残したい余白（px）
-      const offset = 24; // 好みで 64〜120 の間で調整してOK
-
-      const targetY = window.scrollY + rect.top - offset;
-
-      window.scrollTo({
-        top: targetY,
-        behavior: "smooth",
-      });
-    }
-  }
 
   const handleCardSelect = (appId: number) => {
     lastClickedAppIdRef.current = appId;
+  };
+
+  // ★ 再度 Vibe 選び直す：トップページへ遷移＆スクロールを最上部に
+  const handleChangeVibe = () => {
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+    navigate("/"); // トップページのパスが違うならここを合わせる
   };
 
   // フィルター用フルスクリーンシートの開閉
@@ -909,20 +1015,29 @@ export default function SearchPage() {
     setPendingScrollAppId(null);
   }, [pendingScrollAppId, visibleGames.length, visibleOffset, isMobile]);
 
-  
+
   return (
-    <div className="relative min-h-screen bg-[#02040a] text-slate-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden">
+    <div
+      className={`relative min-h-screen ${vibeTheme.pageBg} text-slate-100 font-sans selection:bg-cyan-500/30 overflow-x-hidden`}
+    >
       {/* --- Background Effects (Matching VIBE Screenshot) --- */}
       <div className="fixed inset-0 pointer-events-none z-0">
         {/* Deep gradient base */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_#1e1b4b_0%,_#020617_60%)] opacity-80" />
+        <div
+          className={`absolute inset-0 ${vibeTheme.radial} opacity-80`}
+        />
 
         {/* Dot pattern */}
         <div className="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] opacity-30" />
 
         {/* Floating Shapes */}
-        <div className="absolute top-[15%] left-[10%] w-64 h-64 bg-cyan-900/20 rounded-full blur-[80px]" />
-        <div className="absolute bottom-[20%] right-[5%] w-96 h-96 bg-purple-900/10 rounded-full blur-[100px]" />
+        <div
+          className={`absolute top-[15%] left-[10%] w-64 h-64 rounded-full blur-[80px] ${vibeTheme.blob1}`}
+        />
+        <div
+          className={`absolute bottom-[20%] right-[5%] w-96 h-96 rounded-full blur-[100px] ${vibeTheme.blob2}`}
+        />
+
 
         {/* Geometric Decor elements */}
         <div className="absolute top-[20%] left-[5%] opacity-10">
@@ -1135,8 +1250,11 @@ export default function SearchPage() {
         </div> */}
 
         {/* === Results ============================================ */}
+        {/* === Results ============================================ */}
         <div ref={resultsTopRef} />
+
         {loading ? (
+          // ローディング時はそのまま（アニメーション不要でもOK）
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton
@@ -1146,42 +1264,58 @@ export default function SearchPage() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5">
-            {visibleGames.map((game) => (
-              <div
-                key={game.appId}
-                className="relative h-full"
-                ref={attachCardRef(game.appId)}
-              >
-                {/* 1つ目のファイルと同じロジック：SearchResultCard に丸投げ */}
-                <SearchResultCard
-                  appId={game.appId}
-                  title={game.title}
-                  summary={game.analysis.summary}
-                  labels={game.analysis.labels}
-                  positiveRatio={game.positiveRatio}
-                  totalReviews={game.totalReviews}
-                  price={game.price}
-                  averagePlaytime={game.averagePlaytime}
-                  gameData={game}
-                  analysisData={game.analysis}
-                  screenshots={game.screenshots}
-                  // ★ ここでデザインを切り替え
-                  variant={cardVariant}
-                  onSelect={handleCardSelect}
-                />
-              </div>
-            ))}
+          // ▶ 結果グリッドを Framer Motion でアニメーション
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={isMobile ? `batch-${visibleOffset}` : "desktop-all"}
+              className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3 md:gap-5"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+            >
+              {visibleGames.map((game) => (
+                <motion.div
+                  key={game.appId}
+                  className="relative h-full"
+                  layout
+                  ref={attachCardRef(game.appId)}
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <SearchResultCard
+                    appId={game.appId}
+                    title={game.title}
+                    summary={game.analysis.summary}
+                    labels={game.analysis.labels}
+                    positiveRatio={game.positiveRatio}
+                    totalReviews={game.totalReviews}
+                    price={game.price}
+                    averagePlaytime={game.averagePlaytime}
+                    gameData={game}
+                    analysisData={game.analysis}
+                    screenshots={game.screenshots}
+                    variant={cardVariant}
+                    vibeLabel={currentVibeLabel}
+                    experienceFocusLabel={currentExperienceFocusLabel}
+                    vibeAccentTextClass={vibeHeaderTextClass}
+                    onSelect={handleCardSelect}
+                  />
+                </motion.div>
+              ))}
 
-            {games.length === 0 && (
-              <div className="py-20 text-center">
-                <p className="text-sm text-slate-400">
-                  条件に合うゲームが見つかりませんでした。
-                  フィルターを少しゆるめてみてください。
-                </p>
-              </div>
-            )}
-          </div>
+              {games.length === 0 && (
+                <div className="py-20 text-center">
+                  <p className="text-sm text-slate-400">
+                    条件に合うゲームが見つかりませんでした。
+                    フィルターを少しゆるめてみてください。
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
 
 
@@ -1231,76 +1365,76 @@ export default function SearchPage() {
       <nav className="fixed inset-x-0 bottom-8 z-30 flex justify-center pointer-events-none">
         <div
           className="
-            pointer-events-auto inline-flex items-center gap-4
+            pointer-events-auto inline-flex items-center gap-6
             rounded-full border border-white/10 bg-slate-900/90
-            px-4 py-2 shadow-[0_18px_45px_rgba(0,0,0,0.7)]
+            px-5 py-2.5 shadow-[0_18px_45px_rgba(0,0,0,0.7)]
             backdrop-blur-xl
           "
         >
-          {/* Home */}
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            className="
-              inline-flex h-10 w-10 items-center justify-center
-              rounded-full bg-transparent
-              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
-              transition-all duration-200
-            "
-            aria-label="Home"
-          >
-            <Home size={18} />
-          </button>
-
-          {/* 詳細フィルター（常にアクティブ風に強調） */}
-          <button
-            type="button"
-            onClick={() => setIsFilterSheetOpen(true)}
-            className="
-              inline-flex h-10 w-10 items-center justify-center
-              rounded-full
-              bg-emerald-400 text-slate-950
-              shadow-[0_0_18px_rgba(52,211,153,0.9)]
-              hover:shadow-[0_0_24px_rgba(52,211,153,1)]
-              transition-all duration-200
-            "
-            aria-label="Detail Filters"
-          >
-            <Filter size={18} />
-          </button>
-
-          {/* ★ 表示結果の入れ替え（モバイルのみ表示） */}
-          <button
-            type="button"
-            onClick={handleShuffleNext}
-            className="
-              inline-flex h-10 w-10 items-center justify-center
-              rounded-full bg-transparent
-              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
-              transition-all duration-200
-              md:hidden
-            "
-            aria-label="Shuffle Results"
-          >
-            <RefreshCw size={18} />
-          </button>
-
           {/* 再度 Vibe 選び直す */}
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="
-              inline-flex h-10 w-10 items-center justify-center
-              rounded-full bg-transparent
-              text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
-              transition-all duration-200
-            "
-            aria-label="Change Vibe"
-          >
-            <Wind size={18} />
-          </button>
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={handleChangeVibe}
+              className="
+                inline-flex h-10 w-10 items-center justify-center
+                rounded-full bg-transparent
+                text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
+                transition-all duration-200
+              "
+              aria-label="Change Vibe"
+            >
+              <Wind size={18} />
+            </button>
+            <span className="text-[10px] font-semibold tracking-[0.18em] uppercase text-slate-400">
+              VIBES
+            </span>
+          </div>
+
+          {/* 表示結果の入れ替え（モバイルのみ） */}
+          <div className="flex flex-col items-center gap-1 md:hidden">
+            <button
+              type="button"
+              onClick={handleShuffleNext}
+              className="
+                inline-flex h-10 w-10 items-center justify-center
+                rounded-full
+                bg-emerald-400 text-slate-950
+                shadow-[0_0_18px_rgba(52,211,153,0.9)]
+                hover:shadow-[0_0_24px_rgba(52,211,153,1)]
+                transition-all duration-200
+              "
+              aria-label="Shuffle Results"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <span className="text-[10px] font-semibold tracking-[0.18em] uppercase text-slate-400">
+              SHUFFLE
+            </span>
+          </div>
+
+          {/* 詳細フィルター */}
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsFilterSheetOpen(true)}
+              className="
+                 inline-flex h-10 w-10 items-center justify-center
+                rounded-full bg-transparent
+                text-slate-400 hover:text-slate-100 hover:bg-slate-800/80
+                transition-all duration-200
+              "
+              aria-label="Detail Filters"
+            >
+              <Filter size={18} />
+            </button>
+            <span className="text-[10px] font-semibold tracking-[0.18em] uppercase text-slate-400">
+              FILTERS
+            </span>
+          </div>
         </div>
       </nav>
+
     </div >
   );
 }
@@ -1337,9 +1471,6 @@ function Chip({ label, active, onClick }: ChipProps) {
     </button>
   );
 }
-
-
-
 
 interface ToggleProps {
   label: string;

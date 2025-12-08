@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, Activity, Terminal } from "lucide-react";
-
+import { ArrowUpRight, Terminal } from "lucide-react";
 
 // Returns the tags that should be displayed on the card
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
@@ -40,6 +39,9 @@ interface SearchResultCardProps {
   discountPercent?: number | null;
   variant?: CardVariant; // "hud" = 今のデザイン, "simple" = 別デザイン
   onSelect?: (appId: number) => void;
+  vibeLabel?: string;
+  experienceFocusLabel?: string;   // 追加: 選択中の Experience Focus 表示用
+  vibeAccentTextClass?: string;
 }
 
 // スコア軸のキー
@@ -123,6 +125,9 @@ export const SearchResultCard = ({
   // ★ 追加（デフォルトは既存デザイン）
   variant = "hud",
   onSelect,
+  vibeLabel,
+  experienceFocusLabel,
+  vibeAccentTextClass,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
@@ -428,9 +433,22 @@ export const SearchResultCard = ({
   }
 
 
-  const cardMatchScore =
-    normalizedMoodScore != null ? Math.round(normalizedMoodScore * 100) : 0;
+  // マッチ度を 3 段階バッジに変換
+  const vibeMatch =
+    normalizedMoodScore != null
+      ? normalizedMoodScore >= 0.7
+        ? { label: "ON VIBE", tone: "high" as const }
+        : normalizedMoodScore >= 0.4
+          ? { label: "NEAR VIBE", tone: "mid" as const }
+          : { label: "DISCOVERY", tone: "low" as const }
+      : null;
 
+
+  // ヘッダーに表示する「VIBE × Experience Focus」ラベル
+  const headerPresetLabel =
+    vibeLabel && experienceFocusLabel
+      ? `${vibeLabel} × ${experienceFocusLabel}`
+      : vibeLabel || experienceFocusLabel || "SYS.READY";
   // ★ ここから simple バリアント
   if (variant === "simple") {
     return (
@@ -470,10 +488,13 @@ export const SearchResultCard = ({
             {/* Tech Header (HUD) */}
             <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-3">
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
-                <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
-                  SYS.READY
+                <span
+                  className={`text-[8px] font-mono uppercase tracking-[0.35em] ${vibeAccentTextClass ?? "text-emerald-500"
+                    }`}
+                >
+                  {headerPresetLabel}
                 </span>
+
               </div>
               <div className="flex items-center gap-1">
                 <span className="h-1 w-8 rounded-full bg-cyan-500/50 md:bg-white/10 md:group-hover:bg-cyan-500/50 transition-colors" />
@@ -510,15 +531,31 @@ export const SearchResultCard = ({
               {/* Flash overlay */}
               <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
 
-              {/* Match Score Badge (top-right) */}
-              <div className="absolute top-0 right-0 p-2">
-                <div className="bg-black/70 backdrop-blur border border-cyan-500/40 flex items-center gap-2 px-2 py-1 transform skew-x-[-10deg]">
-                  <Activity size={12} className="text-cyan-400" />
-                  <span className="text-xs font-black text-white transform skew-x-[10deg]">
-                    {cardMatchScore}%
-                  </span>
+              {/* Vibe Match Badge (top-right) */}
+              {vibeMatch && (
+                <div className="absolute top-0 right-0 p-3">
+                  <div
+                    className={`
+        bg-black/70 backdrop-blur
+        flex items-center gap-2.5 px-3 py-1.5
+        transform skew-x-[-10deg]
+        rounded-md
+        border
+        ${vibeMatch.tone === "high"
+                        ? "border-emerald-400 text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.6)]"
+                        : vibeMatch.tone === "mid"
+                          ? "border-sky-400 text-sky-200 shadow-[0_0_16px_rgba(56,189,248,0.5)]"
+                          : "border-amber-300 text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.5)]"
+                      }
+      `}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    <span className="text-xs font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
+                      {vibeMatch.label}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Discount Badge (bottom-right) */}
               {hasDiscount && (
@@ -670,8 +707,11 @@ export const SearchResultCard = ({
           <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
-              <span className="text-[8px] font-mono text-emerald-500 uppercase tracking-[0.35em]">
-                SYS.READY
+              <span
+                className={`text-[8px] font-mono uppercase tracking-[0.35em] ${vibeAccentTextClass ?? "text-emerald-500"
+                  }`}
+              >
+                {headerPresetLabel}
               </span>
             </div>
             <div className="flex items-center gap-1">
@@ -708,16 +748,31 @@ export const SearchResultCard = ({
 
             {/* Flash overlay */}
             <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
-
-            {/* Match Score Badge (top-right) */}
-            <div className="absolute top-0 right-0 p-2">
-              <div className="bg-black/70 backdrop-blur border border-cyan-500/40 flex items-center gap-2 px-2 py-1 transform skew-x-[-10deg]">
-                <Activity size={12} className="text-cyan-400" />
-                <span className="text-xs font-black text-white transform skew-x-[10deg]">
-                  {cardMatchScore}%
-                </span>
+            {/* Vibe Match Badge (top-right) */}
+            {vibeMatch && (
+              <div className="absolute top-1 right-1 p-2">
+                <div
+                  className={`
+        bg-black/80 backdrop-blur-md
+        flex items-center gap-2.5 px-3 py-1.5
+        transform skew-x-[-10deg]
+        rounded-md scale-100
+        border
+        ${vibeMatch.tone === "high"
+                      ? "border-emerald-400 text-emerald-200 shadow-[0_0_22px_rgba(16,185,129,0.7)]"
+                      : vibeMatch.tone === "mid"
+                        ? "border-sky-400 text-sky-200 shadow-[0_0_20px_rgba(56,189,248,0.6)]"
+                        : "border-amber-300 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]"
+                    }
+      `}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  <span className="text-sm font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
+                    {vibeMatch.label}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Discount Badge (bottom-right) */}
             {hasDiscount && (

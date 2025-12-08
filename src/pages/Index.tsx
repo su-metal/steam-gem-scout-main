@@ -725,12 +725,23 @@ const Index: React.FC = () => {
             onClick={() =>
               navigate("/search", {
                 state: {
-                  primaryVibePreset: activeVibe.id,
+                  // ロジック用：従来どおり id を渡す
+                  primaryVibePreset: activeVibe.id,          // "Chill" など
+
+                  // 表示用：ユーザー向けのタイトル
+                  primaryVibeTitle: activeVibe.title,        // "Zen Mode" など
+
                   subVibes: [],
+
+                  // 絞り込みロジック用の Experience Class ID
                   experienceClass: selectedExperienceClass ?? "any",
+
+                  // 表示用の Experience Focus ラベル
+                  experienceClassLabel: activeExperienceLabel, // "Light Puzzle" など
                 },
               })
             }
+
             className="group relative px-12 py-5 font-black text-xl overflow-hidden transition-all bg-black/30 text-white/50 border border-white/5 rounded-full hover:bg-white/10 hover:text-white font-space"
             style={{
               boxShadow: `0 10px 40px -10px ${activeVibe.colors.primary}90`
