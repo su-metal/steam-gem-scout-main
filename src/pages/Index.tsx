@@ -137,11 +137,11 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
   ],
   Focus: [
     { id: "tactics", label: "Turn-Based Tactics" },
-    { id: "rts", label: "Real-Time Strategy" },
     { id: "deckbuilding", label: "Deckbuilding Strategy" },
     { id: "grand-strategy", label: "Grand Strategy" },
-    { id: "hard-puzzle", label: "Hard Puzzle / Logic" },
-    { id: "any", label: "Any" },
+    { id: "automation", label: "Automation / Factory Strategy" },
+    { id: "colony-management", label: "Colony / Management Sim" },
+    { id: "any", label: "Any" }
   ],
   Story: [
     { id: "story-driven", label: "Story-Driven" },
@@ -151,11 +151,11 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "any", label: "Any" },
   ],
   Speed: [
-    { id: "action-combat", label: "Action Combat" },
-    { id: "precision-shooter", label: "Precision Shooter" },
-    { id: "rhythm-music", label: "Rhythm / Music Action" },
-    { id: "sports-arena", label: "Competitive Sports & Arena" },
-    { id: "high-intensity-rogue", label: "High-Intensity Roguelike" },
+    { id: "action-combat", label: "Action Combat" },          // DMC系、ソウル系、高速アクション全般
+    { id: "precision-shooter", label: "Precision Shooter" },      // FPS / TPS
+    { id: "rhythm-music", label: "Rhythm / Music Action" },  // 音ゲー・リズムACT
+    { id: "sports-arena", label: "Sports & Arena" },         // スポーツ＋格闘・アリーナ対戦
+    { id: "high-intensity-rogue", label: "High-Intensity Roguelike" }, // Dead Cells, Hades系
     { id: "any", label: "Any" },
   ],
   Short: [
