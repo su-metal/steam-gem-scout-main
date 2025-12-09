@@ -2,7 +2,13 @@
 
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
+import type { FeatureLabel, Vibe } from "../_shared/feature-labels.ts";
 import { MoodSliderId, MoodVector } from "../_shared/mood.ts";
+import {
+  EXPERIENCE_FOCUS_LIST,
+  type ExperienceFocus,
+  type ExperienceFocusId,
+} from "./experience-focus.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -36,6 +42,8 @@ interface SearchBody {
   userMood?: Partial<Record<MoodSliderId, number>>;
   vibes?: Partial<Record<MoodSliderId, number>>;
   aiTags?: string[];
+  primaryVibe?: Vibe | null;
+  experienceFocusId?: ExperienceFocusId | null;
 }
 
 type CachedGameRow = {
@@ -147,6 +155,54 @@ const normalizeStringArray = (value: unknown): string[] => {
 
   return normalized;
 };
+
+function findExperienceFocusById(
+  id: ExperienceFocusId | null | undefined
+): ExperienceFocus | null {
+  if (!id) return null;
+  const focus = EXPERIENCE_FOCUS_LIST.find((f) => f.id === id);
+  return focus ?? null;
+}
+
+function computeVibeFocusMatchScore(params: {
+  primaryVibe: Vibe | null | undefined;
+  experienceFocusId: ExperienceFocusId | null | undefined;
+  featureLabels: FeatureLabel[] | null | undefined;
+}): number | null {
+  const { primaryVibe, experienceFocusId, featureLabels } = params;
+  if (
+    !primaryVibe ||
+    !experienceFocusId ||
+    !featureLabels ||
+    featureLabels.length === 0
+  ) {
+    return null;
+  }
+
+  const focus = findExperienceFocusById(experienceFocusId);
+  if (!focus) return null;
+
+  const vibeMatches = focus.vibe === primaryVibe;
+
+  const focusSet = new Set<FeatureLabel>(focus.featureLabels);
+  let overlap = 0;
+  for (const label of featureLabels) {
+    if (focusSet.has(label)) {
+      overlap += 1;
+    }
+  }
+
+  if (focus.featureLabels.length === 0) return null;
+
+  let score = overlap / focus.featureLabels.length;
+
+  if (vibeMatches && score > 0) {
+    score = Math.min(1, score + 0.15);
+  }
+
+  if (score <= 0) return null;
+  return score;
+}
 
 // --- 可変スコア軸用ヘルパー -------------------------
 
@@ -469,9 +525,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .map((row) => {
       const base = row.data ?? {};
 
-      const persistedFeatureLabels = Array.isArray(row.feature_labels)
+      const persistedFeatureLabels: FeatureLabel[] = Array.isArray(
+        row.feature_labels
+      )
         ? row.feature_labels.filter(
-            (label): label is string => typeof label === "string"
+            (label): label is FeatureLabel => typeof label === "string"
           )
         : [];
 
@@ -626,6 +684,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
           )
         : [];
 
+      const featureLabels: FeatureLabel[] = Array.isArray(
+        g.persistedFeatureLabels
+      )
+        ? g.persistedFeatureLabels
+        : [];
+
+      const vibeFocusMatchScore = computeVibeFocusMatchScore({
+        primaryVibe: body.primaryVibe ?? null,
+        experienceFocusId: body.experienceFocusId ?? null,
+        featureLabels,
+      });
+
       return {
         appId: toNumber(g.appId, 0),
         title: g.title ?? `App ${g.appId}`,
@@ -689,9 +759,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
           (g.mood_scores as MoodVector | undefined | null) ??
           (g.moodScores as MoodVector | undefined | null) ??
           null,
-        featureLabels: Array.isArray(g.persistedFeatureLabels)
-          ? g.persistedFeatureLabels
-          : [],
+        featureLabels,
+        vibeFocusMatchScore,
       };
     });
 
@@ -918,6 +987,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
         break;
       }
+      case "vibe_focus_match":
+        sorted = [...filtered].sort(
+          (a, b) =>
+            (b.vibeFocusMatchScore ?? 0) - (a.vibeFocusMatchScore ?? 0)
+        );
+        break;
 
       default:
         break;

@@ -1,10 +1,6 @@
 // Supabase Edge Functions 用の型定義。
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
-declare const Deno: any;
-
-import { mapAiTagsToFeatureLabels } from "./feature-labels.ts";
-import type { FeatureLabel, Vibe } from "../_shared/feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,7 +73,7 @@ interface AudienceSegment {
   id: string;
   label: string;
   description?: string;
-  sub?: string;
+
   // Player Match 用
   // sub?: string;
   fitScore?: number;
@@ -121,12 +117,6 @@ interface HiddenGemAnalysis {
   aiPrimaryGenre?: string | null;
 
   /**
-   * VIBE / FeatureLabel に使う内部スラッグ。
-   * aiTags とは別に扱い、常に 25 個の候補から選ぶ。
-   */
-  featureTagSlugs?: string[] | null;
-
-  /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
    * 例: true のとき「昔は微妙だったが今は良くなった」系タイトル。
    */
@@ -165,8 +155,6 @@ interface HiddenGemAnalysis {
   audienceNegative?: AudienceSegment[];
   audienceNeutral?: AudienceSegment[];
   aiError?: boolean;
-
-  featureLabels?: FeatureLabel[]; // Derived labels from aiTags
 }
 
 interface AudienceBadge {
@@ -217,8 +205,6 @@ function buildFallbackAnalysis(
     audienceBadges: [],
     aiTags: [],
     aiPrimaryGenre: null,
-    featureTagSlugs: [],
-    featureLabels: [],
     aiError: true,
   };
 }
@@ -467,7 +453,7 @@ function formatReviewBlock(
   return `${label}:\n${lines.join("\n")}`;
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: ANALYZE_GAME_CORS_HEADERS });
   }
@@ -838,105 +824,13 @@ audienceNegative が1件以上ある場合、
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
 ───────────────────────────────
-【aiTags / aiPrimaryGenre / featureTagSlugs】
-───────────────────────────────
-
-───────────────────────────────
 【aiTags / aiPrimaryGenre】
 ───────────────────────────────
 
-● aiTags について
-
-- aiTags は、そのゲームの「ジャンル・メカニクス・遊び方」を表す英語タグの配列。
-- Steam で一般的に使われる英語タグのみを使用する。
-- 文ではなく単語タグとし、類義語・重複は避ける。
-- 5〜10個程度を目安にするが、重要なメカニクスは省略してはいけない。
-
-【タグ生成の優先順位】
-
-1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。
-2. レビューで「何度も」登場する具体的なメカニクスを拾い、
-   それに対応する英語タグを必ず 1 つ以上含める。
-
-【代表的メカニクス → aiTags の対応（例）】
-
-- クラフト・素材集め・レシピ・アイテムを組み合わせる要素が何度も語られる場合
-  → aiTags に必ず "Crafting" を含める。
-
-- 建築・家や建物を建てる・拠点づくりが何度も語られる場合
-  → aiTags に "Building" や "Base-Building" を含める。
-
-- 拠点防衛・タワーディフェンス・波状攻撃を迎え撃つ要素が何度も語られる場合
-  → aiTags に "Tower Defense" や "Base Defense" など、対応する既存タグを含める。
-
-- 探索・オープンワールド・広い世界・冒険が繰り返し語られる場合
-  → "Open World" や "Exploration" や "Sandbox" など、入力に近い既存タグを含める。
-
-- ランごとのやり直し・死んでやり直す・毎回構成が変わるといった要素が何度も語られる場合
-  → "Roguelike" または "Roguelite" を含める。
-
-【禁止事項】
-
-- レビューや入力 JSON にほとんど出てこないメカニクスを、想像だけで aiTags に追加しない。
-- 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、
-  対応するタグ（"Crafting" / "Building" / "Roguelike" など）を省略することも禁止。
-
-● aiPrimaryGenre について
-
-- aiPrimaryGenre は、そのゲームの代表ジャンル 1 つだけを書く。
-- 例: "Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。
-- 文や複数ジャンルの羅列は禁止。最も代表的な 1 つだけを選ぶ。
-- 明確に判断できない場合は null にしてよい。
-
-
-● featureTagSlugs について（VIBE / FeatureLabel 用 内部スラッグ）
-
-- featureTagSlugs は、VIBE / FeatureLabel 用の **内部専用スラッグ配列** である。
-- featureTagSlugs には、必ず以下の25個のうちからのみスラッグを入れること。
-- それ以外の文字列・タグ・文章を featureTagSlugs に含めてはならない。
-
-【Chill 系（穏やかな体験・癒やし系）】
-- cozy_life_crafting        （のんびり生活・クラフト）
-- gentle_exploration        （落ち着いた探索）
-- light_puzzle              （比較的ライトなパズル要素）
-- relaxed_building          （穏やかな建築・拠点づくり）
-- ambient_experience        （雰囲気・環境音・没入重視）
-
-【Story 系（物語・ドラマ）】
-- story_driven              （物語主導の構成）
-- character_drama           （キャラクター同士のドラマ）
-- mystery_investigation     （謎解き・調査・真相究明）
-- emotional_journey         （感情を揺さぶる体験）
-- lore_worldbuilding        （世界観・設定の作り込み）
-
-【Focus 系（戦略・思考）】
-- turn_based_tactics        （ターン制タクティクス）
-- deckbuilding_strategy     （デッキ構築ストラテジー）
-- grand_strategy            （国家・大局ストラテジー）
-- automation_factory_strategy（自動化・工場系ストラテジー）
-- colony_management         （拠点・コロニー運営）
-
-【Speed 系（テンション・反応速度）】
-- action_combat             （アクション戦闘）
-- precision_shooter         （精密エイム系シューター）
-- rhythm_music_action       （リズム／音楽アクション）
-- sports_arena              （スポーツ・アリーナ系対戦）
-- high_intensity_roguelike  （高テンション系ローグライク）
-
-【Short 系（短時間・周回性）】
-- run_based_roguelike       （ラン単位のローグライク）
-- arcade_action             （アーケード調アクション）
-- arcade_shooter            （アーケード調シューター）
-- short_puzzle              （短い単位のパズル）
-- micro_progression         （細かな進行・ミクロな積み上げ）
-
-【featureTagSlugs の厳守ルール】
-- featureTagSlugs には **上記25個以外の文字列を一切含めないこと。**
-- 文や自由記述は禁止。必ずスラッグ文字列のみを使う。
-- 類義語や別表記（例:"Story Rich", "Roguelike", "Souls-like" など）は featureTagSlugs には書かない。
-- そのゲームに本質的に当てはまるスラッグだけを 0〜10 個程度選ぶ。
-- 同じスラッグを重複して入れない（配列内の各要素は一意）。
-- ゲームにまったく当てはまるスラッグがない場合（稀なケース）は、featureTagSlugs を空配列 [] としてよいが、基本的には何かしら該当するものがないか慎重に検討すること。
+- Steamで一般的に使われる英語タグのみを使用。  
+- 文ではなく単語タグとし、類義語・重複は避ける。  
+- 5?10個程度。  
+- aiPrimaryGenre は代表ジャンル1つだけ。  
 
 ================================================================
 【CARD TAG LABELS（labels 配列）】
@@ -981,13 +875,6 @@ audienceBadges は SearchResultCard の小型ピル。
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
   "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
   "aiPrimaryGenre": "Roguelike" | null,
-  "featureTagSlugs": [
-    "cozy_life_crafting" | "gentle_exploration" | "light_puzzle" | "relaxed_building" | "ambient_experience" |
-    "story_driven" | "character_drama" | "mystery_investigation" | "emotional_journey" | "lore_worldbuilding" |
-    "turn_based_tactics" | "deckbuilding_strategy" | "grand_strategy" | "automation_factory_strategy" | "colony_management" |
-    "action_combat" | "precision_shooter" | "rhythm_music_action" | "sports_arena" | "high_intensity_roguelike" |
-    "run_based_roguelike" | "arcade_action" | "arcade_shooter" | "short_puzzle" | "micro_progression"
-  ] | [],
   "audienceBadges": [
     { "id": string, "label": string }
   ],
@@ -1058,7 +945,6 @@ ${historicalReviewsText}
 IMPORTANT:
 - When the data clearly shows that the game has changed over time (for example: a very rough or buggy launch that later improved after patches), briefly describe that trajectory directly inside currentStateSummary.
 - historicalIssuesSummary is deprecated for the UI and should normally be returned as an empty string. Do not move important information into historicalIssuesSummary; instead, fold notable launch/early issues and their resolution into currentStateSummary.
-- Always include the "aiTags" field as an array of strings in the JSON response; return an empty array when no tags are available rather than omitting the field.
 `.trim();
     const controller = new AbortController();
     try {
@@ -1180,33 +1066,6 @@ IMPORTANT:
 
         const parsed = JSON.parse(raw.trim());
         analysis = normalizeAnalysisPayload(parsed);
-
-        const aiTags: string[] = Array.isArray(analysis.aiTags)
-          ? analysis.aiTags.filter(
-              (t: unknown): t is string => typeof t === "string"
-            )
-          : [];
-
-        const featureTagSlugs: string[] = Array.isArray(analysis.featureTagSlugs)
-          ? analysis.featureTagSlugs.filter(
-              (s: unknown): s is string => typeof s === "string"
-            )
-          : [];
-
-        const filteredFeatureTagSlugs = filterFeatureTagSlugsByAiTags(
-          featureTagSlugs,
-          aiTags
-        );
-
-        analysis.aiTags = aiTags;
-        analysis.featureTagSlugs = filteredFeatureTagSlugs;
-
-        const tagsForFeatureMap =
-          filteredFeatureTagSlugs.length > 0 ? filteredFeatureTagSlugs : aiTags;
-
-        const featureLabels = mapAiTagsToFeatureLabels(tagsForFeatureMap);
-
-        analysis.featureLabels = featureLabels;
 
         // -----------------------------
         // 復活フラグ / 安定評価フラグ のガード処理
@@ -1429,182 +1288,6 @@ function normalizeAiTags(raw: any): string[] {
   return deduped;
 }
 
-function enrichAiTagsWithMechanics(aiTags: string[], hints: string[]): string[] {
-  if (!Array.isArray(aiTags) || aiTags.length === 0) {
-    return [];
-  }
-
-  const base = Array.from(
-    new Set(
-      aiTags
-        .filter((t) => typeof t === "string")
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0)
-    )
-  );
-
-  if (base.length === 0) {
-    return [];
-  }
-
-  if (!Array.isArray(hints) || hints.length === 0) {
-    return base.slice(0, 10);
-  }
-
-  const lowerTags = base.map((t) => t.toLowerCase());
-
-  const text = hints
-    .filter((v) => typeof v === "string")
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0)
-    .join(" ")
-    .toLowerCase();
-
-  const hasCraftLike =
-    /クラフト|素材集め|クラフティング|レシピ|アイテム合成/.test(text) ||
-    /craft|crafting|gathering/.test(text);
-
-  const hasBuildingLike =
-    /建築|拠点づくり|家を建てる|建物を建てる|基地づくり/.test(text) ||
-    /building|base[- ]building|base building/.test(text);
-
-  const hasRoguelikeByText =
-    /ローグライク|ローグライト|ローグライク的|ローグライト的/.test(text) ||
-    /roguelike|rogue[- ]like|roguelite|rogue[- ]lite/.test(text);
-
-  const result = new Set<string>(base);
-
-  if (hasCraftLike && !lowerTags.includes("crafting")) {
-    result.add("Crafting");
-  }
-
-  if (
-    hasBuildingLike &&
-    !lowerTags.includes("building") &&
-    !lowerTags.includes("base-building")
-  ) {
-    result.add("Building");
-  }
-
-  const hasRoguelikeTag = lowerTags.some(
-    (t) => t === "roguelike" || t === "roguelite"
-  );
-
-  if (hasRoguelikeTag && !hasRoguelikeByText) {
-    for (const entry of Array.from(result)) {
-      const lt = entry.toLowerCase();
-      if (lt === "roguelike" || lt === "roguelite") {
-        result.delete(entry);
-      }
-    }
-  }
-
-  return Array.from(result).slice(0, 10);
-}
-
-function normalizeFeatureTagSlugs(raw: any): string[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const item of raw) {
-    if (typeof item !== "string") continue;
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    normalized.push(key);
-    if (normalized.length >= 25) break;
-  }
-
-  return normalized;
-}
-
-function filterFeatureTagSlugsByAiTags(
-  slugs: string[] | undefined | null,
-  aiTags: string[] | undefined | null
-): string[] {
-  if (!Array.isArray(slugs) || slugs.length === 0) return [];
-
-  const tags = (Array.isArray(aiTags) ? aiTags : [])
-    .map((t) => String(t).toLowerCase());
-
-  const hasStrategyLike = tags.some((t) =>
-    ["strategy", "tactics", "4x", "grand strategy"].some((k) => t.includes(k))
-  );
-  const hasDeckbuilding = tags.some((t) =>
-    ["deckbuilder", "deck-building", "card game", "card"].some((k) => t.includes(k))
-  );
-  const hasRoguelike = tags.some((t) =>
-    ["roguelike", "roguelite", "rogue-lite"].some((k) => t.includes(k))
-  );
-  const hasSports = tags.some((t) =>
-    ["sports", "soccer", "football", "basketball"].some((k) => t.includes(k))
-  );
-  const hasRhythm = tags.some((t) =>
-    ["rhythm", "rhythm game", "music", "music game"].some((k) => t.includes(k))
-  );
-  const hasSandboxOrBuilding = tags.some((t) =>
-    ["sandbox", "crafting", "building", "base-building"].some((k) => t.includes(k))
-  );
-
-  return slugs.filter((slug) => {
-    const s = String(slug);
-
-    if (s === "deckbuilding_strategy") {
-      if (!(hasDeckbuilding || (hasStrategyLike && hasRoguelike))) {
-        return false;
-      }
-    }
-
-    if (s === "turn_based_tactics") {
-      if (!hasStrategyLike) return false;
-    }
-
-    if (s === "grand_strategy") {
-      if (!tags.some((t) => t.includes("grand strategy"))) return false;
-    }
-
-    if (s === "automation_factory_strategy") {
-      const hasFactoryLike = tags.some((t) =>
-        ["factory", "automation", "factorio"].some((k) => t.includes(k))
-      );
-      if (!hasFactoryLike && !hasStrategyLike) return false;
-    }
-
-    if (s === "colony_management") {
-      const hasColonyLike = tags.some((t) =>
-        ["colony", "management", "sim", "builder"].some((k) => t.includes(k))
-      );
-      if (!hasColonyLike) return false;
-    }
-
-    if (s === "run_based_roguelike" || s === "high_intensity_roguelike") {
-      if (!hasRoguelike) return false;
-    }
-
-    if (s === "sports_arena") {
-      if (!hasSports) return false;
-    }
-
-    if (s === "rhythm_music_action") {
-      if (!hasRhythm) return false;
-    }
-
-    if (
-      s === "cozy_life_crafting" ||
-      s === "relaxed_building" ||
-      s === "gentle_exploration"
-    ) {
-      if (hasSandboxOrBuilding) return true;
-      return true;
-    }
-
-    return true;
-  });
-}
-
 function clampInt(value: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return min;
@@ -1699,58 +1382,7 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   }
 
   const aiTags = normalizeAiTags(parsed?.aiTags);
-
-  const mechanicsHints: string[] = [];
-  const pushHint = (value: unknown) => {
-    if (typeof value === "string" && value.trim()) {
-      mechanicsHints.push(value.trim());
-    }
-  };
-
-  pushHint(parsed?.summary);
-
-  if (Array.isArray(parsed?.pros)) {
-    for (const item of parsed.pros) {
-      pushHint(item);
-    }
-  }
-
-  if (Array.isArray(parsed?.cons)) {
-    for (const item of parsed.cons) {
-      pushHint(item);
-    }
-  }
-
-  if (Array.isArray(parsed?.labels)) {
-    for (const item of parsed.labels) {
-      pushHint(item);
-    }
-  }
-
-  const collectSegmentHints = (segments: any) => {
-    if (!Array.isArray(segments)) return;
-    for (const segment of segments) {
-      if (!segment) continue;
-      if (typeof segment === "string") {
-        pushHint(segment);
-        continue;
-      }
-      if (typeof segment === "object") {
-        pushHint(segment.label);
-        pushHint(segment.description);
-        pushHint(segment.reason);
-      }
-    }
-  };
-
-  collectSegmentHints(parsed?.audiencePositive);
-  collectSegmentHints(parsed?.audienceNeutral);
-  collectSegmentHints(parsed?.audienceNegative);
-
-  const enrichedAiTags = enrichAiTagsWithMechanics(aiTags, mechanicsHints);
-  if (enrichedAiTags.length > 0) {
-    normalized.aiTags = enrichedAiTags;
-  } else if (aiTags.length > 0) {
+  if (aiTags.length > 0) {
     normalized.aiTags = aiTags;
   }
 
@@ -1760,9 +1392,6 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
       normalized.aiPrimaryGenre = primary;
     }
   }
-
-  const featureTagSlugs = normalizeFeatureTagSlugs(parsed?.featureTagSlugs);
-  normalized.featureTagSlugs = featureTagSlugs;
 
   return normalized;
 }
