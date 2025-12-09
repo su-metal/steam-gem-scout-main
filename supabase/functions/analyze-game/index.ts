@@ -823,14 +823,115 @@ audienceNegative が1件以上ある場合、
 - 最近のレビュー傾向を最重要視し currentStateSummary を作成する。  
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
+
 ───────────────────────────────
-【aiTags / aiPrimaryGenre】
+【SUMMARY とジャンル表現】
 ───────────────────────────────
 
-- Steamで一般的に使われる英語タグのみを使用。  
-- 文ではなく単語タグとし、類義語・重複は避ける。  
-- 5?10個程度。  
-- aiPrimaryGenre は代表ジャンル1つだけ。  
+- summary では、そのゲームの体験を分かりやすく伝えるために、
+  「○○系アクション」「○○系アドベンチャー」「ビジュアルノベル」など、一般的なジャンル名を含めてもよい。
+
+- ただし summary 内で "Roguelike" / "Roguelite" / "Deckbuilder" という語を使ってよいのは、
+  そのゲームがローグライク／デッキ構築ゲームとして明確な構造的特徴
+  （ランダム生成ダンジョンやステージ、死亡時の最初からのやり直し、
+    run ごとのビルド・カード構成・パーク構成、周回による恒久アンロックなど）を複数持ち、
+  それが体験の中心になっている場合に限る。
+
+- Visual Novel / Story Rich / Narrative / Social Deduction などのストーリー主導ゲームでは、
+  単にループ構造や周回前提の構成があるだけでは、summary に "Roguelike" / "Roguelite" / "Deckbuilder" を書いてはならない。
+  その場合は「ループ型SFアドベンチャー」「周回型ビジュアルノベル」など、
+  ストーリー中心であることが分かる表現を用いること。
+
+─────────────────────────────── 
+【aiTags / aiPrimaryGenre】 
+─────────────────────────────── 
+
+● aiTags について 
+
+- aiTags は、そのゲームの「ジャンル・メカニクス・遊び方」を表す英語タグの配列。 
+- Steam で一般的に使われる英語タグのみを使用する。 - 文ではなく単語タグとし、類義語・重複は避ける。 
+- 5〜10個程度を目安にするが、重要なメカニクスは省略してはいけない。 
+
+【タグ生成の優先順位】 
+
+1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。 
+2. レビューで「何度も」登場する具体的なメカニクスを拾い、 
+それに対応する英語タグを必ず 1 つ以上含める。 
+
+【代表的メカニクス → aiTags の対応（例）】 
+
+- クラフト・素材集め・レシピ・アイテムを組み合わせる要素が何度も語られる場合 
+  → aiTags に必ず "Crafting" を含める。 
+- 建築・家や建物を建てる・拠点づくりが何度も語られる場合 
+  → aiTags に "Building" や "Base-Building" を含める。 
+- 拠点防衛・タワーディフェンス・波状攻撃を迎え撃つ要素が何度も語られる場合 
+  → aiTags に "Tower Defense" や "Base Defense" など、対応する既存タグを含める。 
+- 探索・オープンワールド・広い世界・冒険が繰り返し語られる場合 
+  → "Open World" や "Exploration" や "Sandbox" など、入力に近い既存タグを含める。 
+- ランごとのやり直し・死んでやり直す・毎回構成が変わるといった要素が何度も語られる場合 
+  → "Roguelike" または "Roguelite" を含める。 
+  
+【禁止事項】 
+
+- レビューや入力 JSON にほとんど出てこないメカニクスを、想像だけで aiTags に追加しない。 
+- 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、 
+  対応するタグ（"Crafting" / "Building" / "Roguelike" など）を省略することも禁止。 
+
+● aiPrimaryGenre について 
+
+- aiPrimaryGenre は、そのゲームの代表ジャンル 1 つだけを書く。 
+- 例: "Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。 
+- 文や複数ジャンルの羅列は禁止。最も代表的な 1 つだけを選ぶ。 
+- 明確に判断できない場合は null にしてよい。 
+
+● featureTagSlugs について（VIBE / FeatureLabel 用 内部スラッグ） 
+
+- featureTagSlugs は、VIBE / FeatureLabel 用の **内部専用スラッグ配列** である。 
+- featureTagSlugs には、必ず以下の25個のうちからのみスラッグを入れること。 
+- それ以外の文字列・タグ・文章を featureTagSlugs に含めてはならない。 
+
+【Chill 系（穏やかな体験・癒やし系）】 
+- cozy_life_crafting （のんびり生活・クラフト） 
+- gentle_exploration （落ち着いた探索） 
+- light_puzzle （比較的ライトなパズル要素） 
+- relaxed_building （穏やかな建築・拠点づくり） 
+- ambient_experience （雰囲気・環境音・没入重視） 
+
+【Story 系（物語・ドラマ）】 - story_driven （物語主導の構成） 
+- character_drama （キャラクター同士のドラマ） 
+- mystery_investigation （謎解き・調査・真相究明） 
+- emotional_journey （感情を揺さぶる体験） 
+- lore_worldbuilding （世界観・設定の作り込み） 
+
+【Focus 系（戦略・思考）】 
+- turn_based_tactics （ターン制タクティクス） 
+- deckbuilding_strategy （デッキ構築ストラテジー） 
+- grand_strategy （国家・大局ストラテジー） 
+- automation_factory_strategy（自動化・工場系ストラテジー） 
+- colony_management （拠点・コロニー運営） 
+
+【Speed 系（テンション・反応速度）】 
+- action_combat （アクション戦闘） 
+- precision_shooter （精密エイム系シューター） 
+- rhythm_music_action （リズム／音楽アクション） 
+- sports_arena （スポーツ・アリーナ系対戦） 
+- high_intensity_roguelike （高テンション系ローグライク） 
+
+【Short 系（短時間・周回性）】 
+- run_based_roguelike （ラン単位のローグライク） 
+- arcade_action （アーケード調アクション） 
+- arcade_shooter （アーケード調シューター） 
+- short_puzzle （短い単位のパズル） 
+- micro_progression （細かな進行・ミクロな積み上げ） 
+
+【featureTagSlugs の厳守ルール】 
+- featureTagSlugs には **上記25個以外の文字列を一切含めないこと。** 
+- 文や自由記述は禁止。必ずスラッグ文字列のみを使う。 
+- 類義語や別表記（例:"Story Rich", "Roguelike", "Souls-like" など）は featureTagSlugs には書かない。 
+- そのゲームに本質的に当てはまるスラッグだけを 0〜10 個程度選ぶ。 
+- 同じスラッグを重複して入れない（配列内の各要素は一意）。 
+- ゲームにまったく当てはまるスラッグがない場合（稀なケース）は、
+featureTagSlugs を空配列 [] としてよいが、基本的には何かしら該当するものがないか慎重に検討すること。
 
 ================================================================
 【CARD TAG LABELS（labels 配列）】
