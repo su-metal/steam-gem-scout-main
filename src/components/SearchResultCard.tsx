@@ -674,12 +674,12 @@ export const SearchResultCard = ({
       className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
       onClick={handleClick}
     >
-      <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[32px] border-none transition-all duration-300">
+      <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[24px] border-none transition-all duration-300">
         {/* Animated Border Glow (Behind) */}
         {/* 1st glow */}
         <div
           className="
-           pointer-events-none absolute -inset-[1px] rounded-[32px] 
+           pointer-events-none absolute -inset-[1px] rounded-[24px] 
            bg-gradient-to-b from-cyan-500/40 via-purple-500/40 to-pink-500/40
            opacity-100           /* モバイル: 常時 hover 状態 */
            md:opacity-20         /* md 以上: 通常は薄く */
@@ -691,7 +691,7 @@ export const SearchResultCard = ({
         {/* 2nd glow */}
         <div
           className="
-           pointer-events-none absolute -inset-[2px] rounded-[32px] 
+           pointer-events-none absolute -inset-[2px] rounded-[24px] 
            bg-cyan-400/20
            opacity-50           /* モバイル: 常時 hover 状態 */
            md:opacity-0         /* md 以上: 通常は非表示 */
@@ -702,7 +702,7 @@ export const SearchResultCard = ({
         />
 
         {/* Main Chassis */}
-        <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[32px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
+        <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[24px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
           {/* Tech Header (HUD) */}
           <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
             <div className="flex items-center gap-1.5">
@@ -883,7 +883,7 @@ export const SearchResultCard = ({
               pointer-events-none
               absolute -bottom-[1px] -left-[1px]
               h-24 w-24
-              rounded-[32px]
+              rounded-[24px]
               border-b-1 border-l-2 border-transparent
               border-b-cyan-400 border-l-cyan-400
               opacity-60 md:opacity-40
@@ -896,7 +896,7 @@ export const SearchResultCard = ({
               pointer-events-none
               absolute -bottom-[1px] -right-[1px]
               h-24 w-24
-              rounded-[32px]
+              rounded-[24px]
               border-b-1 border-r-2 border-transparent
               border-b-purple-400 border-r-purple-400
               opacity-60 md:opacity-40

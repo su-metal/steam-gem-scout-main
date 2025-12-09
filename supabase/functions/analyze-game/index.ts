@@ -841,20 +841,53 @@ audienceNegative が1件以上ある場合、
 【aiTags / aiPrimaryGenre / featureTagSlugs】
 ───────────────────────────────
 
+───────────────────────────────
+【aiTags / aiPrimaryGenre】
+───────────────────────────────
+
 ● aiTags について
 
-- aiTags は、ストアタグやゲームの雰囲気を表す「一般的な英語タグ」の配列として扱う。
-- Steamで一般的に使われる英語タグのみを使用する。
+- aiTags は、そのゲームの「ジャンル・メカニクス・遊び方」を表す英語タグの配列。
+- Steam で一般的に使われる英語タグのみを使用する。
 - 文ではなく単語タグとし、類義語・重複は避ける。
-- 5〜10個程度を目安とし、そのゲームをよく表しているタグだけを選ぶ。
-- 例： "Roguelike", "Souls-like", "Deckbuilder", "Metroidvania", "Survival", "Co-op" など。
+- 5〜10個程度を目安にするが、重要なメカニクスは省略してはいけない。
+
+【タグ生成の優先順位】
+
+1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。
+2. レビューで「何度も」登場する具体的なメカニクスを拾い、
+   それに対応する英語タグを必ず 1 つ以上含める。
+
+【代表的メカニクス → aiTags の対応（例）】
+
+- クラフト・素材集め・レシピ・アイテムを組み合わせる要素が何度も語られる場合
+  → aiTags に必ず "Crafting" を含める。
+
+- 建築・家や建物を建てる・拠点づくりが何度も語られる場合
+  → aiTags に "Building" や "Base-Building" を含める。
+
+- 拠点防衛・タワーディフェンス・波状攻撃を迎え撃つ要素が何度も語られる場合
+  → aiTags に "Tower Defense" や "Base Defense" など、対応する既存タグを含める。
+
+- 探索・オープンワールド・広い世界・冒険が繰り返し語られる場合
+  → "Open World" や "Exploration" や "Sandbox" など、入力に近い既存タグを含める。
+
+- ランごとのやり直し・死んでやり直す・毎回構成が変わるといった要素が何度も語られる場合
+  → "Roguelike" または "Roguelite" を含める。
+
+【禁止事項】
+
+- レビューや入力 JSON にほとんど出てこないメカニクスを、想像だけで aiTags に追加しない。
+- 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、
+  対応するタグ（"Crafting" / "Building" / "Roguelike" など）を省略することも禁止。
 
 ● aiPrimaryGenre について
 
-- aiPrimaryGenre は、そのゲームの代表ジャンル1つだけを書く。
-- 例："Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。
-- 文や複数ジャンルの羅列は禁止。最も代表的な1つだけを選ぶ。
-- 明確に判断できない場合は null でもよい。
+- aiPrimaryGenre は、そのゲームの代表ジャンル 1 つだけを書く。
+- 例: "Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。
+- 文や複数ジャンルの羅列は禁止。最も代表的な 1 つだけを選ぶ。
+- 明確に判断できない場合は null にしてよい。
+
 
 ● featureTagSlugs について（VIBE / FeatureLabel 用 内部スラッグ）
 
@@ -1160,11 +1193,16 @@ IMPORTANT:
             )
           : [];
 
+        const filteredFeatureTagSlugs = filterFeatureTagSlugsByAiTags(
+          featureTagSlugs,
+          aiTags
+        );
+
         analysis.aiTags = aiTags;
-        analysis.featureTagSlugs = featureTagSlugs;
+        analysis.featureTagSlugs = filteredFeatureTagSlugs;
 
         const tagsForFeatureMap =
-          featureTagSlugs.length > 0 ? featureTagSlugs : aiTags;
+          filteredFeatureTagSlugs.length > 0 ? filteredFeatureTagSlugs : aiTags;
 
         const featureLabels = mapAiTagsToFeatureLabels(tagsForFeatureMap);
 
@@ -1391,6 +1429,79 @@ function normalizeAiTags(raw: any): string[] {
   return deduped;
 }
 
+function enrichAiTagsWithMechanics(aiTags: string[], hints: string[]): string[] {
+  if (!Array.isArray(aiTags) || aiTags.length === 0) {
+    return [];
+  }
+
+  const base = Array.from(
+    new Set(
+      aiTags
+        .filter((t) => typeof t === "string")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+    )
+  );
+
+  if (base.length === 0) {
+    return [];
+  }
+
+  if (!Array.isArray(hints) || hints.length === 0) {
+    return base.slice(0, 10);
+  }
+
+  const lowerTags = base.map((t) => t.toLowerCase());
+
+  const text = hints
+    .filter((v) => typeof v === "string")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0)
+    .join(" ")
+    .toLowerCase();
+
+  const hasCraftLike =
+    /クラフト|素材集め|クラフティング|レシピ|アイテム合成/.test(text) ||
+    /craft|crafting|gathering/.test(text);
+
+  const hasBuildingLike =
+    /建築|拠点づくり|家を建てる|建物を建てる|基地づくり/.test(text) ||
+    /building|base[- ]building|base building/.test(text);
+
+  const hasRoguelikeByText =
+    /ローグライク|ローグライト|ローグライク的|ローグライト的/.test(text) ||
+    /roguelike|rogue[- ]like|roguelite|rogue[- ]lite/.test(text);
+
+  const result = new Set<string>(base);
+
+  if (hasCraftLike && !lowerTags.includes("crafting")) {
+    result.add("Crafting");
+  }
+
+  if (
+    hasBuildingLike &&
+    !lowerTags.includes("building") &&
+    !lowerTags.includes("base-building")
+  ) {
+    result.add("Building");
+  }
+
+  const hasRoguelikeTag = lowerTags.some(
+    (t) => t === "roguelike" || t === "roguelite"
+  );
+
+  if (hasRoguelikeTag && !hasRoguelikeByText) {
+    for (const entry of Array.from(result)) {
+      const lt = entry.toLowerCase();
+      if (lt === "roguelike" || lt === "roguelite") {
+        result.delete(entry);
+      }
+    }
+  }
+
+  return Array.from(result).slice(0, 10);
+}
+
 function normalizeFeatureTagSlugs(raw: any): string[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
@@ -1408,6 +1519,90 @@ function normalizeFeatureTagSlugs(raw: any): string[] {
   }
 
   return normalized;
+}
+
+function filterFeatureTagSlugsByAiTags(
+  slugs: string[] | undefined | null,
+  aiTags: string[] | undefined | null
+): string[] {
+  if (!Array.isArray(slugs) || slugs.length === 0) return [];
+
+  const tags = (Array.isArray(aiTags) ? aiTags : [])
+    .map((t) => String(t).toLowerCase());
+
+  const hasStrategyLike = tags.some((t) =>
+    ["strategy", "tactics", "4x", "grand strategy"].some((k) => t.includes(k))
+  );
+  const hasDeckbuilding = tags.some((t) =>
+    ["deckbuilder", "deck-building", "card game", "card"].some((k) => t.includes(k))
+  );
+  const hasRoguelike = tags.some((t) =>
+    ["roguelike", "roguelite", "rogue-lite"].some((k) => t.includes(k))
+  );
+  const hasSports = tags.some((t) =>
+    ["sports", "soccer", "football", "basketball"].some((k) => t.includes(k))
+  );
+  const hasRhythm = tags.some((t) =>
+    ["rhythm", "rhythm game", "music", "music game"].some((k) => t.includes(k))
+  );
+  const hasSandboxOrBuilding = tags.some((t) =>
+    ["sandbox", "crafting", "building", "base-building"].some((k) => t.includes(k))
+  );
+
+  return slugs.filter((slug) => {
+    const s = String(slug);
+
+    if (s === "deckbuilding_strategy") {
+      if (!(hasDeckbuilding || (hasStrategyLike && hasRoguelike))) {
+        return false;
+      }
+    }
+
+    if (s === "turn_based_tactics") {
+      if (!hasStrategyLike) return false;
+    }
+
+    if (s === "grand_strategy") {
+      if (!tags.some((t) => t.includes("grand strategy"))) return false;
+    }
+
+    if (s === "automation_factory_strategy") {
+      const hasFactoryLike = tags.some((t) =>
+        ["factory", "automation", "factorio"].some((k) => t.includes(k))
+      );
+      if (!hasFactoryLike && !hasStrategyLike) return false;
+    }
+
+    if (s === "colony_management") {
+      const hasColonyLike = tags.some((t) =>
+        ["colony", "management", "sim", "builder"].some((k) => t.includes(k))
+      );
+      if (!hasColonyLike) return false;
+    }
+
+    if (s === "run_based_roguelike" || s === "high_intensity_roguelike") {
+      if (!hasRoguelike) return false;
+    }
+
+    if (s === "sports_arena") {
+      if (!hasSports) return false;
+    }
+
+    if (s === "rhythm_music_action") {
+      if (!hasRhythm) return false;
+    }
+
+    if (
+      s === "cozy_life_crafting" ||
+      s === "relaxed_building" ||
+      s === "gentle_exploration"
+    ) {
+      if (hasSandboxOrBuilding) return true;
+      return true;
+    }
+
+    return true;
+  });
 }
 
 function clampInt(value: number, min: number, max: number): number {
@@ -1504,7 +1699,58 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   }
 
   const aiTags = normalizeAiTags(parsed?.aiTags);
-  if (aiTags.length > 0) {
+
+  const mechanicsHints: string[] = [];
+  const pushHint = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) {
+      mechanicsHints.push(value.trim());
+    }
+  };
+
+  pushHint(parsed?.summary);
+
+  if (Array.isArray(parsed?.pros)) {
+    for (const item of parsed.pros) {
+      pushHint(item);
+    }
+  }
+
+  if (Array.isArray(parsed?.cons)) {
+    for (const item of parsed.cons) {
+      pushHint(item);
+    }
+  }
+
+  if (Array.isArray(parsed?.labels)) {
+    for (const item of parsed.labels) {
+      pushHint(item);
+    }
+  }
+
+  const collectSegmentHints = (segments: any) => {
+    if (!Array.isArray(segments)) return;
+    for (const segment of segments) {
+      if (!segment) continue;
+      if (typeof segment === "string") {
+        pushHint(segment);
+        continue;
+      }
+      if (typeof segment === "object") {
+        pushHint(segment.label);
+        pushHint(segment.description);
+        pushHint(segment.reason);
+      }
+    }
+  };
+
+  collectSegmentHints(parsed?.audiencePositive);
+  collectSegmentHints(parsed?.audienceNeutral);
+  collectSegmentHints(parsed?.audienceNegative);
+
+  const enrichedAiTags = enrichAiTagsWithMechanics(aiTags, mechanicsHints);
+  if (enrichedAiTags.length > 0) {
+    normalized.aiTags = enrichedAiTags;
+  } else if (aiTags.length > 0) {
     normalized.aiTags = aiTags;
   }
 

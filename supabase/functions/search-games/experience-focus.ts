@@ -1,40 +1,4 @@
-// TODO: 後で _shared に切り出して共通化してもOK。
-// ひとまず search-games 側でも同じ定義を持たせる。
-
-export type Vibe = "Chill" | "Story" | "Focus" | "Speed" | "Short";
-
-export type FeatureLabel =
-  // 🌿 Chill
-  | "Cozy Life & Crafting"
-  | "Gentle Exploration"
-  | "Light Puzzle"
-  | "Relaxed Building"
-  | "Ambient Experience"
-  // 📖 Story
-  | "Story-Driven"
-  | "Character Drama"
-  | "Mystery & Investigation"
-  | "Emotional Journey"
-  | "Lore / Worldbuilding"
-  // 🧠 Focus
-  | "Turn-Based Tactics"
-  | "Deckbuilding Strategy"
-  | "Grand Strategy"
-  | "Automation / Factory Strategy"
-  | "Colony Management"
-  // ⚡ Speed
-  | "Action Combat"
-  | "Precision Shooter"
-  | "Rhythm / Music Action"
-  | "Sports & Arena"
-  | "High-Intensity Roguelike"
-  // ⏱ Short
-  | "Run-Based Roguelike"
-  | "Arcade Action"
-  | "Arcade Shooter"
-  | "Short Puzzle"
-  | "Micro Progression";
-
+import type { Vibe, FeatureLabel } from "../_shared/feature-labels.ts";
 
 export type ExperienceFocusId =
   // Chill
@@ -86,229 +50,242 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
   // 🌿 Chill
   {
     id: "chill-cozy-life-crafting",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Cozy Life & Crafting",
-    featureLabels: ["Cozy Life & Crafting"],
+    featureLabels: ["crafting", "farming_life_sim", "cozy", "wholesome"],
   },
   {
     id: "chill-gentle-exploration",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Gentle Exploration",
-    featureLabels: ["Gentle Exploration"],
+    featureLabels: ["exploration_core", "calm_exploration", "relaxing"],
   },
   {
     id: "chill-light-puzzle",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Light Puzzle",
-    featureLabels: ["Light Puzzle"],
+    featureLabels: ["puzzle_solving", "relaxing", "meditative"],
   },
   {
     id: "chill-relaxed-building",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Relaxed Building",
-    featureLabels: ["Relaxed Building"],
+    featureLabels: ["base_building", "relaxing", "cozy"],
   },
   {
     id: "chill-ambient-experience",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Ambient Experience",
-    featureLabels: ["Ambient Experience"],
+    featureLabels: ["atmospheric", "meditative"],
   },
   {
     id: "chill-any",
-    vibe: "Chill",
+    vibe: "chill",
     label: "Any",
     featureLabels: [
-      "Cozy Life & Crafting",
-      "Gentle Exploration",
-      "Light Puzzle",
-      "Relaxed Building",
-      "Ambient Experience",
+      "crafting",
+      "farming_life_sim",
+      "cozy",
+      "wholesome",
+      "exploration_core",
+      "calm_exploration",
+      "relaxing",
+      "puzzle_solving",
+      "meditative",
+      "base_building",
+      "atmospheric",
     ],
   },
 
   // 📖 Story
   {
     id: "story-story-driven",
-    vibe: "Story",
+    vibe: "story",
     label: "Story-Driven",
-    featureLabels: ["Story-Driven"],
+    featureLabels: ["emotional_narrative", "rpg_progression"],
   },
   {
     id: "story-character-drama",
-    vibe: "Story",
+    vibe: "story",
     label: "Character Drama",
-    featureLabels: ["Character Drama"],
+    featureLabels: ["emotional_narrative", "wholesome"],
   },
   {
     id: "story-mystery-investigation",
-    vibe: "Story",
+    vibe: "story",
     label: "Mystery & Investigation",
-    featureLabels: ["Mystery & Investigation"],
+    featureLabels: ["puzzle_solving", "emotional_narrative", "tense"],
   },
   {
     id: "story-emotional-journey",
-    vibe: "Story",
+    vibe: "story",
     label: "Emotional Journey",
-    featureLabels: ["Emotional Journey"],
+    featureLabels: ["emotional_narrative", "atmospheric"],
   },
   {
     id: "story-lore-worldbuilding",
-    vibe: "Story",
+    vibe: "story",
     label: "Lore / Worldbuilding",
-    featureLabels: ["Lore / Worldbuilding"],
+    featureLabels: ["atmospheric", "exploration_core"],
   },
   {
     id: "story-any",
-    vibe: "Story",
+    vibe: "story",
     label: "Any",
     featureLabels: [
-      "Story-Driven",
-      "Character Drama",
-      "Mystery & Investigation",
-      "Emotional Journey",
-      "Lore / Worldbuilding",
+      "emotional_narrative",
+      "rpg_progression",
+      "wholesome",
+      "puzzle_solving",
+      "tense",
+      "atmospheric",
+      "exploration_core",
     ],
   },
 
   // 🧠 Focus（Tactical）
   {
     id: "focus-turn-based-tactics",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Turn-Based Tactics",
-    featureLabels: ["Turn-Based Tactics"],
+    featureLabels: ["turn_based_tactics", "rpg_progression", "resource_management"],
   },
   {
     id: "focus-deckbuilding-strategy",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Deckbuilding Strategy",
-    featureLabels: ["Deckbuilding Strategy"],
+    featureLabels: ["deckbuilding", "roguelike_structure"],
   },
   {
     id: "focus-grand-strategy",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Grand Strategy",
-    featureLabels: ["Grand Strategy"],
+    featureLabels: ["resource_management", "colony_management"],
   },
   {
     id: "focus-automation-factory-strategy",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Automation / Factory Strategy",
-    featureLabels: ["Automation / Factory Strategy"],
+    featureLabels: ["automation_systems", "resource_management"],
   },
   {
     id: "focus-colony-management",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Colony Management",
-    featureLabels: ["Colony Management"],
+    featureLabels: ["colony_management", "resource_management"],
   },
   {
     id: "focus-any",
-    vibe: "Focus",
+    vibe: "focus",
     label: "Any",
     featureLabels: [
-      "Turn-Based Tactics",
-      "Deckbuilding Strategy",
-      "Grand Strategy",
-      "Automation / Factory Strategy",
-      "Colony Management",
+      "turn_based_tactics",
+      "rpg_progression",
+      "resource_management",
+      "deckbuilding",
+      "roguelike_structure",
+      "colony_management",
+      "automation_systems",
     ],
   },
 
   // ⚡ Speed（Adrenaline）
   {
     id: "speed-action-combat",
-    vibe: "Speed",
+    vibe: "speed",
     label: "Action Combat",
-    featureLabels: ["Action Combat"],
+    featureLabels: ["combat_focused", "high_intensity", "high_skill_action"],
   },
   {
     id: "speed-precision-shooter",
-    vibe: "Speed",
+    vibe: "speed",
     label: "Precision Shooter",
-    featureLabels: ["Precision Shooter"],
+    featureLabels: ["combat_focused", "high_skill_action", "high_intensity"],
   },
   {
     id: "speed-rhythm-music-action",
-    vibe: "Speed",
+    vibe: "speed",
     label: "Rhythm / Music Action",
-    featureLabels: ["Rhythm / Music Action"],
+    featureLabels: ["rhythm_action", "high_intensity"],
   },
   {
     id: "speed-sports-arena",
-    vibe: "Speed",
+    vibe: "speed",
     label: "Sports & Arena",
-    featureLabels: ["Sports & Arena"],
+    featureLabels: ["sports_gameplay", "high_intensity", "coop_core"],
   },
   {
     id: "speed-high-intensity-roguelike",
-    vibe: "Speed",
+    vibe: "speed",
     label: "High-Intensity Roguelike",
-    featureLabels: ["High-Intensity Roguelike"],
+    featureLabels: ["roguelike_structure", "procedural_generation", "high_intensity"],
   },
   {
     id: "speed-any",
-    vibe: "Speed",
+    vibe: "speed",
     label: "Any",
     featureLabels: [
-      "Action Combat",
-      "Precision Shooter",
-      "Rhythm / Music Action",
-      "Sports & Arena",
-      "High-Intensity Roguelike",
+      "combat_focused",
+      "high_intensity",
+      "high_skill_action",
+      "rhythm_action",
+      "sports_gameplay",
+      "coop_core",
+      "roguelike_structure",
+      "procedural_generation",
     ],
   },
 
   // ⏱ Short（Quick Run）
   {
     id: "short-run-based-roguelike",
-    vibe: "Short",
+    vibe: "short",
     label: "Run-Based Roguelike",
-    featureLabels: ["Run-Based Roguelike"],
+    featureLabels: ["roguelike_structure", "procedural_generation"],
   },
   {
     id: "short-arcade-action",
-    vibe: "Short",
+    vibe: "short",
     label: "Arcade Action",
-    featureLabels: ["Arcade Action"],
+    featureLabels: ["combat_focused", "high_intensity"],
   },
   {
     id: "short-arcade-shooter",
-    vibe: "Short",
+    vibe: "short",
     label: "Arcade Shooter",
-    featureLabels: ["Arcade Shooter"],
+    featureLabels: ["combat_focused", "high_intensity"],
   },
   {
     id: "short-short-puzzle",
-    vibe: "Short",
+    vibe: "short",
     label: "Short Puzzle",
-    featureLabels: ["Short Puzzle"],
+    featureLabels: ["puzzle_solving"],
   },
   {
     id: "short-micro-progression",
-    vibe: "Short",
+    vibe: "short",
     label: "Micro Progression",
-    featureLabels: ["Micro Progression"],
+    featureLabels: ["rpg_progression", "roguelike_structure"],
   },
   {
     id: "short-any",
-    vibe: "Short",
+    vibe: "short",
     label: "Any",
     featureLabels: [
-      "Run-Based Roguelike",
-      "Arcade Action",
-      "Arcade Shooter",
-      "Short Puzzle",
-      "Micro Progression",
+      "roguelike_structure",
+      "procedural_generation",
+      "combat_focused",
+      "high_intensity",
+      "puzzle_solving",
+      "rpg_progression",
     ],
   },
 ];
 
-export const EXPERIENCE_FOCUS_BY_VIBE: Record<Vibe, ExperienceFocus[]> =
-  {
-    Chill: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "Chill"),
-    Story: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "Story"),
-    Focus: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "Focus"),
-    Speed: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "Speed"),
-    Short: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "Short"),
-  };
+export const EXPERIENCE_FOCUS_BY_VIBE: Record<Vibe, ExperienceFocus[]> = {
+  chill: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "chill"),
+  story: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "story"),
+  focus: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "focus"),
+  speed: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "speed"),
+  short: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "short"),
+};
