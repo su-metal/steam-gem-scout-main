@@ -1,5 +1,38 @@
 import type { Vibe, FeatureLabel } from "../_shared/feature-labels.ts";
 
+// 内部 featureTagSlugs → FeatureLabel のマッピング
+const FEATURE_SLUG_TO_LABEL: Record<string, FeatureLabel> = {
+  cozy_life_crafting: "Cozy Life & Crafting",
+  gentle_exploration: "Gentle Exploration",
+  light_puzzle: "Light Puzzle",
+  relaxed_building: "Relaxed Building",
+  ambient_experience: "Ambient Experience",
+
+  story_driven: "Story-Driven",
+  character_drama: "Character Drama",
+  mystery_investigation: "Mystery & Investigation",
+  emotional_journey: "Emotional Journey",
+  lore_worldbuilding: "Lore / Worldbuilding",
+
+  turn_based_tactics: "Turn-Based Tactics",
+  deckbuilding_strategy: "Deckbuilding Strategy",
+  grand_strategy: "Grand Strategy",
+  automation_factory_strategy: "Automation / Factory Strategy",
+  colony_management: "Colony Management",
+
+  action_combat: "Action Combat",
+  precision_shooter: "Precision Shooter",
+  rhythm_music_action: "Rhythm / Music Action",
+  sports_arena: "Sports & Arena",
+  high_intensity_roguelike: "High-Intensity Roguelike",
+
+  run_based_roguelike: "Run-Based Roguelike",
+  arcade_action: "Arcade Action",
+  arcade_shooter: "Arcade Shooter",
+  short_puzzle: "Short Puzzle",
+  micro_progression: "Micro Progression",
+};
+
 // ==== Chill 用マッピング ====
 // ※ このブロックは削除・変更せず、そのまま残してください
 const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
@@ -454,20 +487,25 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
 };
 
 /**
- * AI が吐いた aiTags から Feature Labels を導出する。
+ * FeatureTagSlugs（優先）または aiTags（互換）から Feature Labels を導出する。
  * - 大文字小文字のゆらぎを吸収
  * - 重複ラベルは Set で除去
  */
-export function mapAiTagsToFeatureLabels(aiTags: string[]): FeatureLabel[] {
+export function mapAiTagsToFeatureLabels(tags: string[]): FeatureLabel[] {
   const labels = new Set<FeatureLabel>();
 
-  for (const raw of aiTags) {
+  for (const raw of tags) {
     if (!raw) continue;
 
     // 前後空白を削って小文字化
     const tag = raw.trim().toLowerCase();
+    if (!tag) continue;
 
-    const label = AI_TAG_TO_FEATURE_LABEL[tag];
+    let label = FEATURE_SLUG_TO_LABEL[tag];
+    if (!label) {
+      label = AI_TAG_TO_FEATURE_LABEL[tag];
+    }
+
     if (label) {
       labels.add(label);
       continue;

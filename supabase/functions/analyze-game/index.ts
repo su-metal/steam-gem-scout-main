@@ -121,6 +121,12 @@ interface HiddenGemAnalysis {
   aiPrimaryGenre?: string | null;
 
   /**
+   * VIBE / FeatureLabel に使う内部スラッグ。
+   * aiTags とは別に扱い、常に 25 個の候補から選ぶ。
+   */
+  featureTagSlugs?: string[] | null;
+
+  /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
    * 例: true のとき「昔は微妙だったが今は良くなった」系タイトル。
    */
@@ -210,8 +216,9 @@ function buildFallbackAnalysis(
     stabilityTrend: "Unknown",
     audienceBadges: [],
     aiTags: [],
-    featureLabels: [],
     aiPrimaryGenre: null,
+    featureTagSlugs: [],
+    featureLabels: [],
     aiError: true,
   };
 }
@@ -831,13 +838,72 @@ audienceNegative が1件以上ある場合、
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
 ───────────────────────────────
-【aiTags / aiPrimaryGenre】
+【aiTags / aiPrimaryGenre / featureTagSlugs】
 ───────────────────────────────
 
-- Steamで一般的に使われる英語タグのみを使用。  
-- 文ではなく単語タグとし、類義語・重複は避ける。  
-- 5?10個程度。  
-- aiPrimaryGenre は代表ジャンル1つだけ。  
+● aiTags について
+
+- aiTags は、ストアタグやゲームの雰囲気を表す「一般的な英語タグ」の配列として扱う。
+- Steamで一般的に使われる英語タグのみを使用する。
+- 文ではなく単語タグとし、類義語・重複は避ける。
+- 5〜10個程度を目安とし、そのゲームをよく表しているタグだけを選ぶ。
+- 例： "Roguelike", "Souls-like", "Deckbuilder", "Metroidvania", "Survival", "Co-op" など。
+
+● aiPrimaryGenre について
+
+- aiPrimaryGenre は、そのゲームの代表ジャンル1つだけを書く。
+- 例："Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。
+- 文や複数ジャンルの羅列は禁止。最も代表的な1つだけを選ぶ。
+- 明確に判断できない場合は null でもよい。
+
+● featureTagSlugs について（VIBE / FeatureLabel 用 内部スラッグ）
+
+- featureTagSlugs は、VIBE / FeatureLabel 用の **内部専用スラッグ配列** である。
+- featureTagSlugs には、必ず以下の25個のうちからのみスラッグを入れること。
+- それ以外の文字列・タグ・文章を featureTagSlugs に含めてはならない。
+
+【Chill 系（穏やかな体験・癒やし系）】
+- cozy_life_crafting        （のんびり生活・クラフト）
+- gentle_exploration        （落ち着いた探索）
+- light_puzzle              （比較的ライトなパズル要素）
+- relaxed_building          （穏やかな建築・拠点づくり）
+- ambient_experience        （雰囲気・環境音・没入重視）
+
+【Story 系（物語・ドラマ）】
+- story_driven              （物語主導の構成）
+- character_drama           （キャラクター同士のドラマ）
+- mystery_investigation     （謎解き・調査・真相究明）
+- emotional_journey         （感情を揺さぶる体験）
+- lore_worldbuilding        （世界観・設定の作り込み）
+
+【Focus 系（戦略・思考）】
+- turn_based_tactics        （ターン制タクティクス）
+- deckbuilding_strategy     （デッキ構築ストラテジー）
+- grand_strategy            （国家・大局ストラテジー）
+- automation_factory_strategy（自動化・工場系ストラテジー）
+- colony_management         （拠点・コロニー運営）
+
+【Speed 系（テンション・反応速度）】
+- action_combat             （アクション戦闘）
+- precision_shooter         （精密エイム系シューター）
+- rhythm_music_action       （リズム／音楽アクション）
+- sports_arena              （スポーツ・アリーナ系対戦）
+- high_intensity_roguelike  （高テンション系ローグライク）
+
+【Short 系（短時間・周回性）】
+- run_based_roguelike       （ラン単位のローグライク）
+- arcade_action             （アーケード調アクション）
+- arcade_shooter            （アーケード調シューター）
+- short_puzzle              （短い単位のパズル）
+- micro_progression         （細かな進行・ミクロな積み上げ）
+
+【featureTagSlugs の厳守ルール】
+- featureTagSlugs には **上記25個以外の文字列を一切含めないこと。**
+- 文や自由記述は禁止。必ずスラッグ文字列のみを使う。
+- 類義語や別表記（例:"Story Rich", "Roguelike", "Souls-like" など）は featureTagSlugs には書かない。
+- そのゲームに本質的に当てはまるスラッグだけを 0〜10 個程度選ぶ。
+- 同じスラッグを重複して入れない（配列内の各要素は一意）。
+- ゲームにまったく当てはまるスラッグがない場合（稀なケース）は、featureTagSlugs を空配列 [] としてよいが、基本的には何かしら該当するものがないか慎重に検討すること。
 
 ================================================================
 【CARD TAG LABELS（labels 配列）】
@@ -882,6 +948,13 @@ audienceBadges は SearchResultCard の小型ピル。
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
   "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
   "aiPrimaryGenre": "Roguelike" | null,
+  "featureTagSlugs": [
+    "cozy_life_crafting" | "gentle_exploration" | "light_puzzle" | "relaxed_building" | "ambient_experience" |
+    "story_driven" | "character_drama" | "mystery_investigation" | "emotional_journey" | "lore_worldbuilding" |
+    "turn_based_tactics" | "deckbuilding_strategy" | "grand_strategy" | "automation_factory_strategy" | "colony_management" |
+    "action_combat" | "precision_shooter" | "rhythm_music_action" | "sports_arena" | "high_intensity_roguelike" |
+    "run_based_roguelike" | "arcade_action" | "arcade_shooter" | "short_puzzle" | "micro_progression"
+  ] | [],
   "audienceBadges": [
     { "id": string, "label": string }
   ],
@@ -1081,8 +1154,21 @@ IMPORTANT:
             )
           : [];
 
+        const featureTagSlugs: string[] = Array.isArray(analysis.featureTagSlugs)
+          ? analysis.featureTagSlugs.filter(
+              (s: unknown): s is string => typeof s === "string"
+            )
+          : [];
+
         analysis.aiTags = aiTags;
-        analysis.featureLabels = mapAiTagsToFeatureLabels(aiTags);
+        analysis.featureTagSlugs = featureTagSlugs;
+
+        const tagsForFeatureMap =
+          featureTagSlugs.length > 0 ? featureTagSlugs : aiTags;
+
+        const featureLabels = mapAiTagsToFeatureLabels(tagsForFeatureMap);
+
+        analysis.featureLabels = featureLabels;
 
         // -----------------------------
         // 復活フラグ / 安定評価フラグ のガード処理
@@ -1305,6 +1391,25 @@ function normalizeAiTags(raw: any): string[] {
   return deduped;
 }
 
+function normalizeFeatureTagSlugs(raw: any): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(key);
+    if (normalized.length >= 25) break;
+  }
+
+  return normalized;
+}
+
 function clampInt(value: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return min;
@@ -1409,6 +1514,9 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
       normalized.aiPrimaryGenre = primary;
     }
   }
+
+  const featureTagSlugs = normalizeFeatureTagSlugs(parsed?.featureTagSlugs);
+  normalized.featureTagSlugs = featureTagSlugs;
 
   return normalized;
 }
