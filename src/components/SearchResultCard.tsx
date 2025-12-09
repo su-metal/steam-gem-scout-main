@@ -704,7 +704,7 @@ export const SearchResultCard = ({
         {/* Main Chassis */}
         <div className="relative z-10 flex flex-col h-full bg-[#050505] rounded-[24px] overflow-hidden ring-transparent md:ring-white/10 md:group-hover:ring-transparent transition-all">
           {/* Tech Header (HUD) */}
-          <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-8">
+          <div className="h-6 bg-[#0c0c0c] border-b border-white/5 flex items-center justify-between px-4">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.9)] animate-pulse" />
               <span

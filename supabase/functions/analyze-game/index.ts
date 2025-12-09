@@ -844,15 +844,31 @@ audienceNegative が1件以上ある場合、
   その場合は「ループ型SFアドベンチャー」「周回型ビジュアルノベル」など、
   ストーリー中心であることが分かる表現を用いること。
 
-─────────────────────────────── 
-【aiTags / aiPrimaryGenre】 
-─────────────────────────────── 
+───────────────────────────────
+【aiTags / aiPrimaryGenre】
+───────────────────────────────
 
-● aiTags について 
+- Steamで一般的に使われる英語タグのみを使用。  
+- 文ではなく単語タグとし、類義語・重複は避ける。  
+- 5〜10個程度。  
+- aiPrimaryGenre は代表ジャンル1つだけ。  
 
-- aiTags は、そのゲームの「ジャンル・メカニクス・遊び方」を表す英語タグの配列。 
-- Steam で一般的に使われる英語タグのみを使用する。 - 文ではなく単語タグとし、類義語・重複は避ける。 
-- 5〜10個程度を目安にするが、重要なメカニクスは省略してはいけない。 
+- "Roguelike" / "Roguelite" を aiTags に含めてよいのは、
+  レビューやストア説明の中で次の要素が複数回登場し、ゲーム体験の中心になっている場合に限る：
+  - ランダム生成のステージやダンジョンがある
+  - 死亡時に最初からやり直しになる permadeath の仕組みがある
+  - 各 run ごとに異なるビルド・カード構成・パーク構成などを選ぶ
+  - 周回を重ねることで恒久的なアンロックやメタ進行がある
+
+- 単に「時間ループ型の物語」や「何周も遊ぶことで情報が増える」だけの
+  ビジュアルノネル／Story Rich／Social Deduction タイトルは、
+  aiTags に "Roguelike" / "Roguelite" / "Deckbuilder" を含めてはならない。
+
+- featureTagSlugs に含まれる内部スラッグ名（例: "run_based_roguelike", "high_intensity_roguelike" など）を、
+  そのまま aiTags として出力してはならない。
+  Roguelike 系を表現したい場合は、aiTags では "Roguelike" または "Roguelite" など、
+  Steam で一般的なタグ名のみを使うこと。
+
 
 【タグ生成の優先順位】 
 
@@ -976,8 +992,8 @@ audienceBadges は SearchResultCard の小型ピル。
   "historicalIssuesSummary": string | "" | null,
   "hasImprovedSinceLaunch": true | false | null,
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
-  "aiTags": ["Roguelike", "Souls-like", "Deckbuilder", ...] | [],
-  "aiPrimaryGenre": "Roguelike" | null,
+   "aiTags": ["Action", "Adventure", "Visual Novel", "RPG", ...] | [],
+  "aiPrimaryGenre": "Action" | "Adventure" | "RPG" | "Visual Novel" | "Strategy" | null,
   "audienceBadges": [
     { "id": string, "label": string }
   ],
