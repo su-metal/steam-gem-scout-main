@@ -1,35 +1,4 @@
-// 体験ラベルのマスタ（全25種）
-export type FeatureLabel =
-  // 🌿 Chill
-  | "Cozy Life & Crafting"
-  | "Gentle Exploration"
-  | "Light Puzzle"
-  | "Relaxed Building"
-  | "Ambient Experience"
-  // 📖 Story
-  | "Story-Driven"
-  | "Character Drama"
-  | "Mystery & Investigation"
-  | "Emotional Journey"
-  | "Lore / Worldbuilding"
-  // 🧠 Focus
-  | "Turn-Based Tactics"
-  | "Deckbuilding Strategy"
-  | "Grand Strategy"
-  | "Automation / Factory Strategy"
-  | "Colony Management"
-  // ⚡ Speed
-  | "Action Combat"
-  | "Precision Shooter"
-  | "Rhythm / Music Action"
-  | "Sports & Arena"
-  | "High-Intensity Roguelike"
-  // ⏱ Short
-  | "Run-Based Roguelike"
-  | "Arcade Action"
-  | "Arcade Shooter"
-  | "Short Puzzle"
-  | "Micro Progression";
+import type { Vibe, FeatureLabel } from "../_shared/feature-labels.ts";
 
 // ==== Chill 用マッピング ====
 // ※ このブロックは削除・変更せず、そのまま残してください
@@ -54,10 +23,10 @@ const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   harvest_moon_like: "Cozy Life & Crafting",
 
   // 日本語寄りの表現も一応サポート
-  "スローライフ": "Cozy Life & Crafting",
-  "日常系": "Cozy Life & Crafting",
-  "ほのぼの": "Cozy Life & Crafting",
-  "まったり生活": "Cozy Life & Crafting",
+  スローライフ: "Cozy Life & Crafting",
+  日常系: "Cozy Life & Crafting",
+  ほのぼの: "Cozy Life & Crafting",
+  まったり生活: "Cozy Life & Crafting",
 
   // Gentle Exploration
   walking_sim: "Gentle Exploration",
@@ -75,10 +44,10 @@ const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   no_combat: "Gentle Exploration",
   exploration_no_combat: "Gentle Exploration",
 
-  "散歩ゲー": "Gentle Exploration",
-  "ウォーキングシム": "Gentle Exploration",
-  "景色重視": "Gentle Exploration",
-  "風景メイン": "Gentle Exploration",
+  散歩ゲー: "Gentle Exploration",
+  ウォーキングシム: "Gentle Exploration",
+  景色重視: "Gentle Exploration",
+  風景メイン: "Gentle Exploration",
 
   // Light Puzzle
   light_puzzle: "Light Puzzle",
@@ -96,9 +65,9 @@ const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   puzzle_short: "Light Puzzle",
   puzzle_snack: "Light Puzzle",
 
-  "パズル_カジュアル": "Light Puzzle",
-  "ライトパズル": "Light Puzzle",
-  "脳トレ_ライト": "Light Puzzle",
+  パズル_カジュアル: "Light Puzzle",
+  ライトパズル: "Light Puzzle",
+  脳トレ_ライト: "Light Puzzle",
 
   // Relaxed Building
   cozy_building: "Relaxed Building",
@@ -116,9 +85,9 @@ const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   management_light: "Relaxed Building",
   sim_chill: "Relaxed Building",
 
-  "街づくり_まったり": "Relaxed Building",
-  "建築メイン": "Relaxed Building",
-  "サンドボックス_建築": "Relaxed Building",
+  街づくり_まったり: "Relaxed Building",
+  建築メイン: "Relaxed Building",
+  サンドボックス_建築: "Relaxed Building",
 
   // Ambient Experience
   ambient: "Ambient Experience",
@@ -138,10 +107,10 @@ const CHILL_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   chill_background_game: "Ambient Experience",
   idle_ambient: "Ambient Experience",
 
-  "雰囲気ゲー": "Ambient Experience",
-  "作業用ゲーム": "Ambient Experience",
-  "BGM目的": "Ambient Experience",
-  "眺めるだけ": "Ambient Experience",
+  雰囲気ゲー: "Ambient Experience",
+  作業用ゲーム: "Ambient Experience",
+  BGM目的: "Ambient Experience",
+  眺めるだけ: "Ambient Experience",
 };
 
 // ==== Story 用マッピング ====
@@ -160,9 +129,9 @@ const STORY_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   cinematic_story: "Story-Driven",
   visual_novel_like: "Story-Driven",
 
-  "ストーリー重視": "Story-Driven",
-  "ストーリー主導": "Story-Driven",
-  "物語メイン": "Story-Driven",
+  ストーリー重視: "Story-Driven",
+  ストーリー主導: "Story-Driven",
+  物語メイン: "Story-Driven",
 
   // Character Drama
   character_driven: "Character Drama",
@@ -177,9 +146,9 @@ const STORY_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   companion_focus: "Character Drama",
   ensemble_cast: "Character Drama",
 
-  "キャラ重視": "Character Drama",
-  "キャラクター重視": "Character Drama",
-  "人物ドラマ": "Character Drama",
+  キャラ重視: "Character Drama",
+  キャラクター重視: "Character Drama",
+  人物ドラマ: "Character Drama",
 
   // Mystery & Investigation
   mystery: "Mystery & Investigation",
@@ -194,10 +163,10 @@ const STORY_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   investigation_game: "Mystery & Investigation",
   courtroom_drama: "Mystery & Investigation",
 
-  "推理もの": "Mystery & Investigation",
-  "推理モノ": "Mystery & Investigation",
-  "ミステリー": "Mystery & Investigation",
-  "調査モノ": "Mystery & Investigation",
+  推理もの: "Mystery & Investigation",
+  推理モノ: "Mystery & Investigation",
+  ミステリー: "Mystery & Investigation",
+  調査モノ: "Mystery & Investigation",
 
   // Emotional Journey
   emotional: "Emotional Journey",
@@ -211,10 +180,10 @@ const STORY_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   touching_story: "Emotional Journey",
   drama_focus: "Emotional Journey",
 
-  "感動系": "Emotional Journey",
-  "泣ける": "Emotional Journey",
-  "エモーショナル": "Emotional Journey",
-  "心温まる": "Emotional Journey",
+  感動系: "Emotional Journey",
+  泣ける: "Emotional Journey",
+  エモーショナル: "Emotional Journey",
+  心温まる: "Emotional Journey",
 
   // Lore / Worldbuilding
   worldbuilding: "Lore / Worldbuilding",
@@ -228,11 +197,10 @@ const STORY_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   detailed_world: "Lore / Worldbuilding",
   background_lore: "Lore / Worldbuilding",
 
-  "世界観重視": "Lore / Worldbuilding",
-  "世界設定重視": "Lore / Worldbuilding",
-  "設定厨向け": "Lore / Worldbuilding",
+  世界観重視: "Lore / Worldbuilding",
+  世界設定重視: "Lore / Worldbuilding",
+  設定厨向け: "Lore / Worldbuilding",
 };
-
 
 // ==== Focus 用マッピング ====
 
@@ -251,9 +219,9 @@ const FOCUS_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   turn_based_combat: "Turn-Based Tactics",
   tactical_battles: "Turn-Based Tactics",
 
-  "タクティクス": "Turn-Based Tactics",
-  "タクティカルRPG": "Turn-Based Tactics",
-  "SRPG": "Turn-Based Tactics",
+  タクティクス: "Turn-Based Tactics",
+  タクティカルRPG: "Turn-Based Tactics",
+  SRPG: "Turn-Based Tactics",
 
   // Deckbuilding Strategy
   deckbuilder: "Deckbuilding Strategy",
@@ -267,8 +235,8 @@ const FOCUS_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   roguelite_deckbuilder: "Deckbuilding Strategy",
   card_synergy_focus: "Deckbuilding Strategy",
 
-  "デッキ構築": "Deckbuilding Strategy",
-  "カードゲーム_戦略": "Deckbuilding Strategy",
+  デッキ構築: "Deckbuilding Strategy",
+  カードゲーム_戦略: "Deckbuilding Strategy",
 
   // Grand Strategy
   grand_strategy: "Grand Strategy",
@@ -282,9 +250,9 @@ const FOCUS_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   large_scale_strategy: "Grand Strategy",
   geopolitics_strategy: "Grand Strategy",
 
-  "グランドストラテジー": "Grand Strategy",
+  グランドストラテジー: "Grand Strategy",
   "4Xストラテジー": "Grand Strategy",
-  "国家運営": "Grand Strategy",
+  国家運営: "Grand Strategy",
 
   // Automation / Factory Strategy
   factory_automation: "Automation / Factory Strategy",
@@ -298,9 +266,9 @@ const FOCUS_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   resource_automation: "Automation / Factory Strategy",
   automation_planning: "Automation / Factory Strategy",
 
-  "オートメーション": "Automation / Factory Strategy",
-  "工場自動化": "Automation / Factory Strategy",
-  "ライン構築": "Automation / Factory Strategy",
+  オートメーション: "Automation / Factory Strategy",
+  工場自動化: "Automation / Factory Strategy",
+  ライン構築: "Automation / Factory Strategy",
 
   // Colony Management
   colony_sim: "Colony Management",
@@ -314,11 +282,10 @@ const FOCUS_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   colonist_management: "Colony Management",
   village_management: "Colony Management",
 
-  "コロニーシム": "Colony Management",
-  "コロニー運営": "Colony Management",
-  "入植地運営": "Colony Management",
+  コロニーシム: "Colony Management",
+  コロニー運営: "Colony Management",
+  入植地運営: "Colony Management",
 };
-
 
 // ==== Speed 用マッピング ====
 
@@ -339,9 +306,9 @@ const SPEED_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   metroidvania_action: "Action Combat",
   combo_focused: "Action Combat",
 
-  "アクション寄り": "Action Combat",
-  "高難度アクション": "Action Combat",
-  "高難易度アクション": "Action Combat",
+  アクション寄り: "Action Combat",
+  高難度アクション: "Action Combat",
+  高難易度アクション: "Action Combat",
 
   // Precision Shooter
   precision_shooter: "Precision Shooter",
@@ -356,8 +323,8 @@ const SPEED_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   counter_strike_like: "Precision Shooter",
   arena_fps: "Precision Shooter",
 
-  "シビアなエイム": "Precision Shooter",
-  "ハイスピードFPS": "Precision Shooter",
+  シビアなエイム: "Precision Shooter",
+  ハイスピードFPS: "Precision Shooter",
 
   // Rhythm / Music Action
   rhythm_game: "Rhythm / Music Action",
@@ -370,9 +337,9 @@ const SPEED_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   beat_saber_like: "Rhythm / Music Action",
   music_runner: "Rhythm / Music Action",
 
-  "音ゲー": "Rhythm / Music Action",
-  "リズムゲーム": "Rhythm / Music Action",
-  "音楽アクション": "Rhythm / Music Action",
+  音ゲー: "Rhythm / Music Action",
+  リズムゲーム: "Rhythm / Music Action",
+  音楽アクション: "Rhythm / Music Action",
 
   // Sports & Arena
   sports_game: "Sports & Arena",
@@ -388,8 +355,8 @@ const SPEED_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   rocket_league_like: "Sports & Arena",
   competitive_sports: "Sports & Arena",
 
-  "スポーツゲーム": "Sports & Arena",
-  "アリーナ系スポーツ": "Sports & Arena",
+  スポーツゲーム: "Sports & Arena",
+  アリーナ系スポーツ: "Sports & Arena",
 
   // High-Intensity Roguelike
   action_roguelike: "High-Intensity Roguelike",
@@ -402,10 +369,9 @@ const SPEED_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   roguelike_shooter: "High-Intensity Roguelike",
   roguelite_shooter: "High-Intensity Roguelike",
 
-  "高テンションローグライク": "High-Intensity Roguelike",
-  "ローグライト_アクション": "High-Intensity Roguelike",
+  高テンションローグライク: "High-Intensity Roguelike",
+  ローグライト_アクション: "High-Intensity Roguelike",
 };
-
 
 // ==== Short 用マッピング ====
 
@@ -419,8 +385,8 @@ const SHORT_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   pick_up_and_play_roguelike: "Run-Based Roguelike",
   bite_sized_roguelike: "Run-Based Roguelike",
 
-  "ローグライト_周回": "Run-Based Roguelike",
-  "短時間ローグライク": "Run-Based Roguelike",
+  ローグライト_周回: "Run-Based Roguelike",
+  短時間ローグライク: "Run-Based Roguelike",
 
   // Arcade Action
   arcade_action: "Arcade Action",
@@ -432,8 +398,8 @@ const SHORT_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   simple_arcade_action: "Arcade Action",
   endless_runner_action: "Arcade Action",
 
-  "アーケードアクション": "Arcade Action",
-  "スコアアタック": "Arcade Action",
+  アーケードアクション: "Arcade Action",
+  スコアアタック: "Arcade Action",
 
   // Arcade Shooter
   arcade_shooter: "Arcade Shooter",
@@ -445,9 +411,9 @@ const SHORT_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   scrolling_shooter: "Arcade Shooter",
   "2d_shooter": "Arcade Shooter",
 
-  "アーケードシューター": "Arcade Shooter",
-  "弾幕シューティング": "Arcade Shooter",
-  "シューティング_アーケード": "Arcade Shooter",
+  アーケードシューター: "Arcade Shooter",
+  弾幕シューティング: "Arcade Shooter",
+  シューティング_アーケード: "Arcade Shooter",
 
   // Short Puzzle
   short_puzzle: "Short Puzzle",
@@ -458,8 +424,8 @@ const SHORT_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   episodic_puzzle: "Short Puzzle",
   quick_puzzle: "Short Puzzle",
 
-  "短時間パズル": "Short Puzzle",
-  "スキマ時間パズル": "Short Puzzle",
+  短時間パズル: "Short Puzzle",
+  スキマ時間パズル: "Short Puzzle",
 
   // Micro Progression
   micro_progression: "Micro Progression",
@@ -472,11 +438,10 @@ const SHORT_AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   upgrade_loop: "Micro Progression",
   progression_snack: "Micro Progression",
 
-  "インクリメンタル": "Micro Progression",
-  "クリッカー": "Micro Progression",
-  "メタ進行": "Micro Progression",
+  インクリメンタル: "Micro Progression",
+  クリッカー: "Micro Progression",
+  メタ進行: "Micro Progression",
 };
-
 
 // ==== 統合マップと公開関数 ====
 
@@ -493,9 +458,7 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
  * - 大文字小文字のゆらぎを吸収
  * - 重複ラベルは Set で除去
  */
-export function mapAiTagsToFeatureLabels(
-  aiTags: string[],
-): FeatureLabel[] {
+export function mapAiTagsToFeatureLabels(aiTags: string[]): FeatureLabel[] {
   const labels = new Set<FeatureLabel>();
 
   for (const raw of aiTags) {

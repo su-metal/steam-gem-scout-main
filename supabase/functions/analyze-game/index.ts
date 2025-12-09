@@ -1,6 +1,10 @@
 // Supabase Edge Functions 用の型定義。
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+declare const Deno: any;
+
+import { mapAiTagsToFeatureLabels } from "./feature-labels.ts";
+import type { FeatureLabel, Vibe } from "../_shared/feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +77,7 @@ interface AudienceSegment {
   id: string;
   label: string;
   description?: string;
-
+  sub?: string;
   // Player Match 用
   // sub?: string;
   fitScore?: number;
@@ -155,6 +159,8 @@ interface HiddenGemAnalysis {
   audienceNegative?: AudienceSegment[];
   audienceNeutral?: AudienceSegment[];
   aiError?: boolean;
+
+  featureLabels?: FeatureLabel[]; // Derived labels from aiTags
 }
 
 interface AudienceBadge {
@@ -204,6 +210,7 @@ function buildFallbackAnalysis(
     stabilityTrend: "Unknown",
     audienceBadges: [],
     aiTags: [],
+    featureLabels: [],
     aiPrimaryGenre: null,
     aiError: true,
   };
@@ -453,7 +460,7 @@ function formatReviewBlock(
   return `${label}:\n${lines.join("\n")}`;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: ANALYZE_GAME_CORS_HEADERS });
   }
@@ -945,6 +952,7 @@ ${historicalReviewsText}
 IMPORTANT:
 - When the data clearly shows that the game has changed over time (for example: a very rough or buggy launch that later improved after patches), briefly describe that trajectory directly inside currentStateSummary.
 - historicalIssuesSummary is deprecated for the UI and should normally be returned as an empty string. Do not move important information into historicalIssuesSummary; instead, fold notable launch/early issues and their resolution into currentStateSummary.
+- Always include the "aiTags" field as an array of strings in the JSON response; return an empty array when no tags are available rather than omitting the field.
 `.trim();
     const controller = new AbortController();
     try {
@@ -1066,6 +1074,15 @@ IMPORTANT:
 
         const parsed = JSON.parse(raw.trim());
         analysis = normalizeAnalysisPayload(parsed);
+
+        const aiTags: string[] = Array.isArray(analysis.aiTags)
+          ? analysis.aiTags.filter(
+              (t: unknown): t is string => typeof t === "string"
+            )
+          : [];
+
+        analysis.aiTags = aiTags;
+        analysis.featureLabels = mapAiTagsToFeatureLabels(aiTags);
 
         // -----------------------------
         // 復活フラグ / 安定評価フラグ のガード処理

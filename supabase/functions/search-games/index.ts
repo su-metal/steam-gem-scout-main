@@ -38,6 +38,15 @@ interface SearchBody {
   aiTags?: string[];
 }
 
+type CachedGameRow = {
+  data: Record<string, unknown> | null;
+  price: number | null;
+  price_original: number | null;
+  discount_percent: number | null;
+  tags: string[] | null;
+  feature_labels: string[] | null;
+};
+
 const toNumber = (val: any, fallback = 0): number => {
   const n = Number(val);
   return Number.isFinite(n) ? n : fallback;
@@ -443,7 +452,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // まずは JSON データをまとめて取得
     const { data, error } = await supabase
       .from("game_rankings_cache")
-      .select("data, price, price_original, discount_percent, tags");
+      .select("data, price, price_original, discount_percent, tags, feature_labels");
 
     if (error) {
       console.error("search-games db error", error);
@@ -453,12 +462,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    const rows = (data ?? []) as any[];
+    const rows = (data ?? []) as CachedGameRow[];
 
     // JSONB data と物理カラム（price 系）をマージして RankingGame 相当に整形
     const rawGames = rows
       .map((row) => {
-        const base = row.data ?? {};
+      const base = row.data ?? {};
+
+      const persistedFeatureLabels = Array.isArray(row.feature_labels)
+        ? row.feature_labels.filter(
+            (label): label is string => typeof label === "string"
+          )
+        : [];
 
         // AIタグ（game_rankings_cache.tags）
         const aiTags = Array.isArray(row.tags) ? row.tags : [];
@@ -495,6 +510,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           tags: mergedTags,
           // 必要なら別フィールドとして aiTags も持たせておく
           aiTags,
+          persistedFeatureLabels,
         };
       })
       .filter((g) => g && g.appId != null);
@@ -604,6 +620,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         typeof analysisRaw.hasImprovedSinceLaunch === "boolean"
           ? analysisRaw.hasImprovedSinceLaunch
           : null;
+      const analysisFeatureLabels = Array.isArray(analysisRaw.featureLabels)
+        ? analysisRaw.featureLabels.filter(
+            (label): label is string => typeof label === "string"
+          )
+        : [];
 
       return {
         appId: toNumber(g.appId, 0),
@@ -646,6 +667,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ),
           stabilityTrend,
           hasImprovedSinceLaunch,
+          featureLabels: analysisFeatureLabels,
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
           ),
@@ -667,6 +689,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           (g.mood_scores as MoodVector | undefined | null) ??
           (g.moodScores as MoodVector | undefined | null) ??
           null,
+        featureLabels: Array.isArray(g.persistedFeatureLabels)
+          ? g.persistedFeatureLabels
+          : [],
       };
     });
 

@@ -1093,11 +1093,27 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         }
       }
 
+      const featureLabelsFromAnalysis =
+        aiResult &&
+        typeof aiResult === "object" &&
+        Array.isArray((aiResult as any).featureLabels)
+          ? ((aiResult as any).featureLabels as any[])
+          : [];
+
+      const normalizedFeatureLabels = Array.from(
+        new Set(
+          featureLabelsFromAnalysis.filter(
+            (label): label is string => typeof label === "string"
+          )
+        )
+      );
+
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
         .update({
           data: updatedData,
           tags: finalTagsForGame,
+          feature_labels: normalizedFeatureLabels,
         })
         .eq("id", existing.id);
 
