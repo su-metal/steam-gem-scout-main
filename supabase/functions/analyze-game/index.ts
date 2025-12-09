@@ -1185,6 +1185,7 @@ IMPORTANT:
 
         const parsed = JSON.parse(raw.trim());
         analysis = normalizeAnalysisPayload(parsed);
+        analysis.aiTags = sanitizeAiTagsForStoryHeavy(analysis.aiTags);
 
         // -----------------------------
         // 復活フラグ / 安定評価フラグ のガード処理
@@ -1417,6 +1418,91 @@ function normalizeAiTags(raw: any): string[] {
   }
 
   return deduped;
+}
+
+function isStoryHeavyFromAiTags(
+  aiTags: string[] | null | undefined
+): boolean {
+  if (!aiTags || aiTags.length === 0) return false;
+
+  const normalized = aiTags
+    .map((tag) => (typeof tag === "string" ? tag.trim().toLowerCase() : ""))
+    .filter((tag) => tag.length > 0);
+
+  if (!normalized.length) return false;
+
+  const strongSignals = [
+    "visual novel",
+    "story rich",
+    "narrative",
+    "interactive fiction",
+    "choices matter",
+    "multiple endings",
+    "social deduction",
+  ];
+  const softSignals = [
+    "mystery",
+    "investigation",
+    "detective",
+    "emotional",
+    "drama",
+  ];
+
+  let score = 0;
+  if (
+    normalized.some((tag) =>
+      strongSignals.some((signal) => tag.includes(signal))
+    )
+  ) {
+    score += 3;
+  }
+  if (
+    normalized.some((tag) =>
+      softSignals.some((signal) => tag.includes(signal))
+    )
+  ) {
+    score += 1;
+  }
+
+  return score >= 2;
+}
+
+function sanitizeAiTagsForStoryHeavy(
+  aiTags: string[] | null | undefined
+): string[] {
+  const source = Array.isArray(aiTags) ? aiTags : [];
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const tag of source) {
+    if (typeof tag !== "string") continue;
+    const trimmed = tag.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+
+  if (!normalized.length || !isStoryHeavyFromAiTags(normalized)) {
+    return normalized;
+  }
+
+  const banned = [
+    "roguelike",
+    "roguelite",
+    "run based roguelike",
+    "run-based roguelike",
+    "deckbuilder",
+    "deck builder",
+  ];
+
+  return normalized.filter((tag) => {
+    const lower = tag.toLowerCase();
+    return !banned.some(
+      (blocked) => lower === blocked || lower.includes(blocked)
+    );
+  });
 }
 
 function clampInt(value: number, min: number, max: number): number {
