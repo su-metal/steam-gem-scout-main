@@ -2,6 +2,8 @@
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
+import { mapAiTagsToFeatureLabels } from "./feature-labels.ts";
+
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -1218,6 +1220,18 @@ IMPORTANT:
         const scores = computeScores(gameData, analysis);
         analysis.scores = scores;
         analysis.scoreHighlights = pickScoreHighlights(scores);
+        const sanitizedAiTags: string[] = Array.isArray(analysis.aiTags)
+          ? analysis.aiTags
+          : [];
+        const sanitizedFeatureTagSlugs: string[] = Array.isArray(
+          analysis.featureTagSlugs
+        )
+          ? analysis.featureTagSlugs
+          : [];
+        analysis.featureLabels = mapAiTagsToFeatureLabels(
+          sanitizedAiTags,
+          sanitizedFeatureTagSlugs
+        );
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
