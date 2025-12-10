@@ -1324,8 +1324,6 @@ visual_novel
   turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity  
   （強い根拠が summary / labels / pros / audience に無い限り付与禁止）
 
-────────────────────────────────
-
 
 ================================================================
 【CARD TAG LABELS（labels 配列）】
@@ -1628,7 +1626,6 @@ IMPORTANT:
           analysis.featureLabels,
           featureLabelEvidence,
           sanitizedAiTags,
-          sanitizedFeatureTagSlugs,
           {
             summary: analysis.summary,
             labels: analysis.labels,
@@ -1637,7 +1634,8 @@ IMPORTANT:
             audiencePositive: analysis.audiencePositive,
             audienceNeutral: analysis.audienceNeutral,
             audienceNegative: analysis.audienceNegative,
-          }
+          },
+          sanitizedFeatureTagSlugs
         );
 
         const tagSafetyCtx: TagSafetyContext = {

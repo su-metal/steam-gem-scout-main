@@ -651,8 +651,8 @@ export function buildFeatureLabelsFromAnalysis(
   analysisFeatureLabels: string[] | null | undefined,
   evidenceText: string[],
   aiTags: string[] | null | undefined,
-  featureTagSlugs?: string[] | null | undefined,
-  summaryContext: SummaryContextInput
+  summaryContext: SummaryContextInput,
+  featureTagSlugs?: string[] | null | undefined
 ): FeatureLabel[] {
   const normalizedFromAnalysis = normalizeAnalysisFeatureLabels(analysisFeatureLabels);
   const summaryCtx = buildSummaryContextFlags(summaryContext);
@@ -660,7 +660,10 @@ export function buildFeatureLabelsFromAnalysis(
   const summaryPieces = [
     summaryContext.summary,
     ...(summaryContext.labels ?? []),
-  ].filter((text): text is string => typeof text === "string" && text.trim());
+  ].filter(
+    (text): text is string =>
+      typeof text === "string" && text.trim().length > 0
+  );
 
   const summaryExisting = new Set<FeatureLabel>(normalizedFromAnalysis);
   const summaryDerived = deriveFeatureLabelsFromText(summaryPieces, summaryExisting);

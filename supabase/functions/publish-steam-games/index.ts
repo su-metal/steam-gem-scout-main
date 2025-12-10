@@ -756,7 +756,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       // 既に同じ appId の行があれば UPDATE、なければ INSERT
       const { data: existing, error: selectError } = await supabase
         .from("game_rankings_cache")
-        .select("id, data, tags") // ★ 元は "id" だけだった所を変更
+        .select("id, data, tags, feature_labels") // ★ 元は "id" だけだった所を変更
         .eq("data->>appId", appIdStr)
         .maybeSingle();
 
@@ -773,6 +773,25 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       // 既存行がある場合は、analysis / gemLabel / headerImage を引き継ぐ
       if (existing && existing.data && typeof existing.data === "object") {
         const previousData = existing.data as any;
+        const persistedFeatureLabels: string[] = Array.isArray(
+          (existing as any).feature_labels
+        )
+          ? (existing as any).feature_labels.filter(
+              (label): label is string =>
+                typeof label === "string" && label.trim().length > 0
+            )
+          : [];
+        const dataFeatureLabels: string[] = Array.isArray(
+          previousData.featureLabels
+        )
+          ? (previousData.featureLabels as any[]).filter(
+              (label): label is string =>
+                typeof label === "string" && label.trim().length > 0
+            )
+          : [];
+        const mergedFeatureLabels = Array.from(
+          new Set([...dataFeatureLabels, ...persistedFeatureLabels])
+        );
 
         rankingGameForUpdate = {
           ...rankingGame,
@@ -788,6 +807,12 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
             previousData.mood_scores !== undefined
               ? previousData.mood_scores
               : rankingGame.mood_scores,
+          // NOTE: keep the already-sanitized featureLabels instead of overwriting them
+          // when the importer refreshes an existing cache row.
+          featureLabels:
+            mergedFeatureLabels.length > 0
+              ? mergedFeatureLabels
+              : (rankingGame as any).featureLabels,
           // headerImage は既存があれば優先し、無い場合は今回計算したものを使う
           headerImage:
             previousData.headerImage ??
@@ -939,7 +964,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const { data: existing, error } = await supabase
         .from("game_rankings_cache")
-        .select("id, data")
+        .select("id, data, feature_labels")
         .eq("data->>appId", appIdStr)
         .maybeSingle();
 
@@ -961,6 +986,19 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
       }
 
       const currentData = existing.data as any;
+      const existingFeatureLabels: string[] = Array.isArray(
+        (existing as any).feature_labels
+      )
+        ? (existing as any).feature_labels.filter(
+            (label): label is string =>
+              typeof label === "string" && label.trim().length > 0
+          )
+        : Array.isArray(currentData?.featureLabels)
+        ? (currentData.featureLabels as any[]).filter(
+            (label): label is string =>
+              typeof label === "string" && label.trim().length > 0
+          )
+        : [];
 
       // ★ AI には reviews も渡すが、DB に保存するときは捨てたいのでここで分離
       const {
@@ -1098,26 +1136,41 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         typeof aiResult === "object" &&
         Array.isArray((aiResult as any).featureLabels)
           ? ((aiResult as any).featureLabels as any[])
+          : Array.isArray((aiResult as any)?.analysis?.featureLabels)
+          ? ((aiResult as any).analysis.featureLabels as any[])
           : [];
 
       const normalizedFeatureLabels = Array.from(
         new Set(
-          featureLabelsFromAnalysis.filter(
-            (label): label is string => typeof label === "string"
-          )
+          featureLabelsFromAnalysis
+            .map((label) =>
+              typeof label === "string" ? label.trim() : ""
+            )
+            .filter((label): label is string => label.length > 0)
         )
       );
 
+      const mergedFeatureLabels = Array.from(
+        new Set([...existingFeatureLabels, ...normalizedFeatureLabels])
+      );
+
+      if (mergedFeatureLabels.length > 0) {
+        updatedData.analysis = {
+          ...(updatedData.analysis ?? {}),
+          featureLabels: mergedFeatureLabels,
+        };
+      }
+
       // NOTE: analysis.featureLabels was being returned but never written back into
       // game_rankings_cache.data, so the cached JSON stayed stale despite fresh AI output.
-      updatedData.featureLabels = normalizedFeatureLabels;
+      updatedData.featureLabels = mergedFeatureLabels;
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
         .update({
           data: updatedData,
           tags: finalTagsForGame,
-          feature_labels: normalizedFeatureLabels,
+          feature_labels: mergedFeatureLabels,
         })
         .eq("id", existing.id);
 
