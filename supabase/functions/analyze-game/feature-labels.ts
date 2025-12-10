@@ -66,6 +66,188 @@ const ALL_FEATURE_SLUGS = new Set<FeatureLabel>([
   ...ADDITIONAL_STORY_SHORT_FEATURE_LABELS,
 ]);
 
+interface AudienceSummarySegment {
+  label?: string;
+  description?: string;
+  reason?: string;
+  sub?: string;
+}
+
+export interface SummaryContextInput {
+  summary?: string | null;
+  labels?: string[] | null;
+  pros?: string[] | null;
+  cons?: string[] | null;
+  audiencePositive?: AudienceSummarySegment[] | null;
+  audienceNeutral?: AudienceSummarySegment[] | null;
+  audienceNegative?: AudienceSummarySegment[] | null;
+}
+
+export interface SummaryContextFlags {
+  hasStorySignals: boolean;
+  hasStrategySignals: boolean;
+  hasActionSignals: boolean;
+  hasPuzzleSignals: boolean;
+  hasChillSignals: boolean;
+  hasProductivitySignals: boolean;
+  hasCustomizationSignals: boolean;
+}
+
+const SUMMARY_CONTEXT_KEYWORDS: Record<keyof SummaryContextFlags, string[]> = {
+  hasStorySignals: ["ストーリー", "物語", "シナリオ", "キャラクター", "ドラマ", "visual novel", "story driven"],
+  hasStrategySignals: ["戦略", "タクティクス", "tactics", "ターン制", "資源", "管理", "マネージャー", "resource", "strategy"],
+  hasActionSignals: ["戦闘", "アクション", "反応", "シューティング", "コンボ", "攻撃", "high intensity", "skill", "fight"],
+  hasPuzzleSignals: ["パズル", "謎解き", "ロジック", "パターン", "数独", "puzzle", "riddle"],
+  hasChillSignals: ["癒やし", "癒し", "リラックス", "落ち着く", "ゆったり", "チル", "BGM", "ambient", "calm", "relax"],
+  hasProductivitySignals: ["作業", "勉強", "集中", "時間管理", "タイマー", "ポモドーロ", "todo", "タスク", "フォーカス", "生産性", "進捗"],
+  hasCustomizationSignals: ["アバター", "部屋", "インテリア", "カスタマイズ", "装飾", "家具", "衣装", "コーデ"],
+};
+
+const PRODUCTIVITY_ALLOWED_LABELS: FeatureLabel[] = [
+  "cozy",
+  "relaxing",
+  "calm_exploration",
+  "atmospheric",
+  "meditative",
+  "wholesome",
+  "short_puzzle",
+  "puzzle_solving",
+];
+
+const PRODUCTIVITY_BLOCKED_LABELS: FeatureLabel[] = [
+  "crafting",
+  "base_building",
+  "survival_loop",
+  "exploration_core",
+  "procedural_generation",
+  "roguelike_structure",
+  "combat_focused",
+  "high_skill_action",
+  "platforming",
+  "deckbuilding",
+  "turn_based_tactics",
+  "resource_management",
+  "automation_systems",
+  "colony_management",
+  "farming_life_sim",
+  "rpg_progression",
+  "stealth_gameplay",
+  "vehicle_driving",
+  "coop_core",
+  "rhythm_action",
+  "visual_novel",
+  "sports_gameplay",
+  "story_driven" as FeatureLabel,
+  "character_drama" as FeatureLabel,
+  "mystery_investigation" as FeatureLabel,
+  "emotional_journey" as FeatureLabel,
+  "dialogue_heavy" as FeatureLabel,
+  "run_based_roguelike" as FeatureLabel,
+];
+
+interface LabelPolicy {
+  allowed: Set<FeatureLabel> | null;
+  banned: Set<FeatureLabel>;
+}
+
+function containsAnyKeyword(text: string, keywords: string[]): boolean {
+  for (const keyword of keywords) {
+    if (keyword && text.includes(keyword)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectAudienceTextSegments(
+  segments?: AudienceSummarySegment[] | null
+): string[] {
+  if (!Array.isArray(segments)) return [];
+  const snippets: string[] = [];
+  for (const seg of segments) {
+    if (!seg) continue;
+    if (seg.label) snippets.push(seg.label);
+    if (seg.description) snippets.push(seg.description);
+    if (seg.reason) snippets.push(seg.reason);
+    if (seg.sub) snippets.push(seg.sub);
+  }
+  return snippets;
+}
+
+export function buildSummaryContextFlags(
+  input: SummaryContextInput
+): SummaryContextFlags {
+  const parts: string[] = [];
+  if (input.summary) parts.push(input.summary);
+  if (input.labels) parts.push(...input.labels);
+  if (input.pros) parts.push(...input.pros);
+  if (input.cons) parts.push(...input.cons);
+  parts.push(...collectAudienceTextSegments(input.audiencePositive));
+  parts.push(...collectAudienceTextSegments(input.audienceNeutral));
+  parts.push(...collectAudienceTextSegments(input.audienceNegative));
+  const combined = parts.join(" ").toLowerCase();
+
+  const flags: SummaryContextFlags = {
+    hasStorySignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasStorySignals),
+    hasStrategySignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasStrategySignals),
+    hasActionSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasActionSignals),
+    hasPuzzleSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasPuzzleSignals),
+    hasChillSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasChillSignals),
+    hasProductivitySignals: containsAnyKeyword(
+      combined,
+      SUMMARY_CONTEXT_KEYWORDS.hasProductivitySignals
+    ),
+    hasCustomizationSignals: containsAnyKeyword(
+      combined,
+      SUMMARY_CONTEXT_KEYWORDS.hasCustomizationSignals
+    ),
+  };
+
+  return flags;
+}
+
+function determineLabelPolicy(
+  ctx: SummaryContextFlags
+): LabelPolicy {
+  const banned = new Set<FeatureLabel>();
+  let allowed: Set<FeatureLabel> | null = null;
+
+  const isProductivityToolish =
+    (ctx.hasProductivitySignals || ctx.hasCustomizationSignals) &&
+    !ctx.hasActionSignals &&
+    !ctx.hasPuzzleSignals &&
+    !ctx.hasStrategySignals &&
+    !ctx.hasStorySignals;
+
+  if (isProductivityToolish) {
+    allowed = new Set(PRODUCTIVITY_ALLOWED_LABELS);
+    for (const label of PRODUCTIVITY_BLOCKED_LABELS) {
+      banned.add(label);
+    }
+  }
+
+  return { allowed, banned };
+}
+
+function applyLabelPolicy(
+  candidates: FeatureLabel[],
+  policy: LabelPolicy
+): FeatureLabel[] {
+  const allowed = policy.allowed;
+  const seen = new Set<FeatureLabel>();
+  const result: FeatureLabel[] = [];
+
+  for (const label of candidates) {
+    if (policy.banned.has(label)) continue;
+    if (allowed && !allowed.has(label)) continue;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    result.push(label);
+  }
+
+  return result;
+}
+
 const STORY_HEAVY_IGNORED_LABELS = new Set<FeatureLabel>([
   "deckbuilding" as FeatureLabel,
   "turn_based_tactics" as FeatureLabel,
@@ -186,6 +368,30 @@ const TEXT_HINTS: Array<{
     label: "cozy",
     keywords: ["まったり", "のんびり", "ゆったり", "癒やし"],
   },
+  {
+    label: "relaxing",
+    keywords: ["リラックス", "relax", "relaxing"],
+  },
+  {
+    label: "calm_exploration",
+    keywords: ["静かな探索", "静かに歩く", "calm exploration", "穏やかな旅"],
+  },
+  {
+    label: "atmospheric",
+    keywords: ["雰囲気", "ambient", "atmospheric", "没入感", "世界観"],
+  },
+  {
+    label: "wholesome",
+    keywords: ["心温まる", "wholesome", "優しい", "ほっこり", "穏やか"],
+  },
+  {
+    label: "meditative",
+    keywords: ["瞑想", "meditative", "静謐", "落ち着く"],
+  },
+  {
+    label: "puzzle_solving",
+    keywords: ["パズル", "謎解き", "ロジック", "仕掛け", "puzzle"],
+  },
 ];
 
 const TEXT_DERIVATION_THRESHOLD = 2;
@@ -221,7 +427,8 @@ function normalizeAnalysisFeatureLabels(
 
 function deriveFeatureLabelsFromText(
   textPieces: string[],
-  existing: Set<FeatureLabel>
+  existing: Set<FeatureLabel>,
+  hints: Array<{ label: FeatureLabel; keywords: string[] }> = TEXT_HINTS
 ): FeatureLabel[] {
   if (!textPieces || !textPieces.length) return [];
   const combined = textPieces.filter(Boolean).join(" ").toLowerCase();
@@ -230,7 +437,7 @@ function deriveFeatureLabelsFromText(
   const derived: FeatureLabel[] = [];
   let added = 0;
 
-  for (const hint of TEXT_HINTS) {
+  for (const hint of hints) {
     if (existing.has(hint.label)) continue;
     if (hint.keywords.some((keyword) => combined.includes(keyword))) {
       derived.push(hint.label);
@@ -293,9 +500,12 @@ function fillFromFallback(
   labels: FeatureLabel[],
   candidates: FeatureLabel[],
   minCount: number
+  ,
+  banned?: Set<FeatureLabel>
 ): FeatureLabel[] {
   const next = [...labels];
   for (const candidate of candidates) {
+    if (banned && banned.has(candidate)) continue;
     if (next.length >= minCount) break;
     if (!next.includes(candidate)) {
       next.push(candidate);
@@ -307,15 +517,26 @@ function fillFromFallback(
 function ensureMinimumLabels(
   labels: FeatureLabel[],
   aiTags: string[] | null | undefined,
-  storyHeavy: boolean
+  storyHeavy: boolean,
+  banned?: Set<FeatureLabel>
 ): FeatureLabel[] {
   let next = [...labels];
 
   if (next.length < GLOBAL_FEATURE_LABEL_MIN) {
     if (storyHeavy) {
-      next = fillFromFallback(next, STORY_HEAVY_FALLBACK_LABELS, GLOBAL_FEATURE_LABEL_MIN);
+      next = fillFromFallback(
+        next,
+        STORY_HEAVY_FALLBACK_LABELS,
+        GLOBAL_FEATURE_LABEL_MIN,
+        banned
+      );
     } else {
-      next = fillFromFallback(next, STORY_HEAVY_FALLBACK_LABELS, GLOBAL_FEATURE_LABEL_MIN);
+      next = fillFromFallback(
+        next,
+        STORY_HEAVY_FALLBACK_LABELS,
+        GLOBAL_FEATURE_LABEL_MIN,
+        banned
+      );
     }
   }
 
@@ -430,30 +651,61 @@ export function buildFeatureLabelsFromAnalysis(
   analysisFeatureLabels: string[] | null | undefined,
   evidenceText: string[],
   aiTags: string[] | null | undefined,
-  featureTagSlugs?: string[] | null | undefined
+  featureTagSlugs?: string[] | null | undefined,
+  summaryContext: SummaryContextInput
 ): FeatureLabel[] {
-  const initial = normalizeAnalysisFeatureLabels(analysisFeatureLabels);
+  const normalizedFromAnalysis = normalizeAnalysisFeatureLabels(analysisFeatureLabels);
+  const summaryCtx = buildSummaryContextFlags(summaryContext);
+
+  const summaryPieces = [
+    summaryContext.summary,
+    ...(summaryContext.labels ?? []),
+  ].filter((text): text is string => typeof text === "string" && text.trim());
+
+  const summaryExisting = new Set<FeatureLabel>(normalizedFromAnalysis);
+  const summaryDerived = deriveFeatureLabelsFromText(summaryPieces, summaryExisting);
+
+  if (
+    summaryCtx.hasStorySignals &&
+    !summaryCtx.hasActionSignals &&
+    !summaryCtx.hasStrategySignals &&
+    !summaryCtx.hasPuzzleSignals
+  ) {
+    const storyPriority: FeatureLabel[] = [
+      "story_driven",
+      "character_drama",
+      "emotional_journey",
+      "mystery_investigation",
+      "dialogue_heavy",
+      "visual_novel",
+    ];
+    for (const label of storyPriority) {
+      if (summaryExisting.has(label)) continue;
+      summaryDerived.push(label);
+      summaryExisting.add(label);
+    }
+  }
+
+  const reinforcementExisting = new Set<FeatureLabel>([
+    ...normalizedFromAnalysis,
+    ...summaryDerived,
+  ]);
+  const reinforcementDerived = deriveFeatureLabelsFromText(
+    evidenceText,
+    reinforcementExisting
+  );
+
+  const aiDerived = mapAiTagsToFeatureLabels(aiTags, featureTagSlugs);
+  const policy = determineLabelPolicy(summaryCtx);
+  const combinedCandidates = [
+    ...normalizedFromAnalysis,
+    ...summaryDerived,
+    ...reinforcementDerived,
+    ...aiDerived,
+  ];
+
+  const filtered = applyLabelPolicy(combinedCandidates, policy);
   const storyHeavy = isStoryHeavyGame(aiTags);
-  const existing = new Set<FeatureLabel>(initial);
-  let combined = [...initial];
 
-  if (combined.length < TEXT_DERIVATION_THRESHOLD) {
-    const derived = deriveFeatureLabelsFromText(evidenceText, existing);
-    if (derived.length) {
-      combined = [...combined, ...derived];
-    }
-  }
-
-  if (combined.length < GLOBAL_FEATURE_LABEL_MIN) {
-    const fallback = mapAiTagsToFeatureLabels(aiTags, featureTagSlugs);
-    for (const fallbackLabel of fallback) {
-      if (combined.length >= GLOBAL_FEATURE_LABEL_MIN) break;
-      if (!existing.has(fallbackLabel)) {
-        existing.add(fallbackLabel);
-        combined.push(fallbackLabel);
-      }
-    }
-  }
-
-  return ensureMinimumLabels(combined, aiTags, storyHeavy);
+  return ensureMinimumLabels(filtered, aiTags, storyHeavy, policy.banned);
 }

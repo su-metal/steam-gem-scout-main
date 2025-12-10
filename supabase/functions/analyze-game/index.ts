@@ -10,6 +10,7 @@ declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
 
+import type { FeatureLabel } from "./feature-labels.ts";
 import { buildFeatureLabelsFromAnalysis } from "./feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
@@ -98,6 +99,30 @@ interface AudienceSegment {
   missReviewParaphrased?: string;
 }
 
+const COZY_KEYWORDS = [
+  "癒やし",
+  "癒し",
+  "まったり",
+  "のんびり",
+  "リラックス",
+  "chill",
+  "くつろげる",
+  "ほっこり",
+  "落ち着く",
+] as const;
+
+const STRESS_KEYWORDS = [
+  "グラインド",
+  "作業感",
+  "周回がきつい",
+  "疲れる",
+  "しんどい",
+  "周回作業",
+  "ストレス",
+  "過酷",
+  "ハード",
+] as const;
+
 interface TagSafetyContext {
   summary?: string | null;
   labels?: string[] | null;
@@ -106,9 +131,18 @@ interface TagSafetyContext {
   audiencePositive?: AudienceSegment[] | null;
   audienceNeutral?: AudienceSegment[] | null;
   audienceNegative?: AudienceSegment[] | null;
+  cozyKeywordHits: number;
+  stressKeywordHits: number;
+  corpus?: string;
 }
 
-function buildTagSafetyCorpus(ctx: TagSafetyContext): string {
+interface TagSafetyCorpusResult {
+  corpus: string;
+  cozyKeywordHits: number;
+  stressKeywordHits: number;
+}
+
+function buildTagSafetyCorpus(ctx: TagSafetyContext): TagSafetyCorpusResult {
   const parts: string[] = [];
 
   if (ctx.summary) parts.push(ctx.summary);
@@ -134,7 +168,21 @@ function buildTagSafetyCorpus(ctx: TagSafetyContext): string {
   collectAudience(ctx.audienceNeutral);
   collectAudience(ctx.audienceNegative);
 
-  return parts.join("\n").toLowerCase();
+  const corpus = parts.join("\n").toLowerCase();
+  const cozyKeywordHits = COZY_KEYWORDS.reduce(
+    (acc, kw) => acc + (corpus.includes(kw) ? 1 : 0),
+    0
+  );
+  const stressKeywordHits = STRESS_KEYWORDS.reduce(
+    (acc, kw) => acc + (corpus.includes(kw) ? 1 : 0),
+    0
+  );
+
+  return {
+    corpus,
+    cozyKeywordHits,
+    stressKeywordHits,
+  };
 }
 
 function hasCardTerms(corpus: string): boolean {
@@ -192,6 +240,109 @@ function applyDeckbuilderAndRoguelikeSafety(
   }
 
   return { aiTags: safeAiTags, featureLabels: safeFeatureLabels };
+}
+
+function isProductivityLikeTitle(ctx: TagSafetyContext): boolean {
+  const text = (ctx.corpus ?? "").toLowerCase();
+  const productivityHints = [
+    "作業支援",
+    "作業ツール",
+    "作業用",
+    "勉強用",
+    "学習用",
+    "勉強",
+    "学習",
+    "タスク管理",
+    "todo",
+    "to-do",
+    "時間管理",
+    "タイムマネジメント",
+    "ポモドーロ",
+    "ポモドーロタイマー",
+    "集中",
+    "フォーカス",
+    "勉強会",
+    "作業通話",
+    "co-working",
+    "focus app",
+    "focus tool",
+  ];
+  const storyHints = [
+    "ストーリー",
+    "物語",
+    "シナリオ",
+    "キャラクター",
+    "キャラ",
+    "ドラマ",
+    "冒険",
+    "冒険譚",
+    "クエスト",
+    "メインストーリー",
+    "章構成",
+    "ルート分岐",
+    "エンディング",
+    "エンド",
+    "ダンジョン",
+    "戦闘",
+    "バトル",
+  ];
+  const hasProductivityHint = productivityHints.some((kw) => text.includes(kw));
+  const hasStoryHint = storyHints.some((kw) => text.includes(kw));
+  return hasProductivityHint && !hasStoryHint;
+}
+
+function sanitizeStoryLabelsForProductivity(
+  ctx: TagSafetyContext,
+  featureLabels: FeatureLabel[]
+): FeatureLabel[] {
+  if (!isProductivityLikeTitle(ctx)) return featureLabels;
+
+  const bannedStoryLabels: FeatureLabel[] = [
+    "story_driven",
+    "character_drama",
+    "mystery_investigation",
+    "emotional_journey",
+    "dialogue_heavy",
+    "visual_novel",
+  ];
+
+  return featureLabels.filter((label) => !bannedStoryLabels.includes(label));
+}
+
+function applyCozySafetyFilters(
+  input: { featureLabels: FeatureLabel[]; aiTags: string[] },
+  ctx: TagSafetyContext
+): { featureLabels: FeatureLabel[]; aiTags: string[] } {
+  const COZY_FEATURE_LABELS: FeatureLabel[] = [
+    "cozy",
+    "relaxing",
+    "calm_exploration",
+    "atmospheric",
+    "meditative",
+    "wholesome",
+    "short_puzzle",
+    "puzzle_solving",
+  ];
+
+  const COZY_AI_TAGS = ["Cozy", "Relaxing", "Relaxing,", "Wholesome"];
+
+  const looksClearlyCozy =
+    ctx.cozyKeywordHits >= 3 && ctx.stressKeywordHits === 0;
+
+  if (looksClearlyCozy) {
+    return input;
+  }
+
+  const featureLabels = input.featureLabels.filter(
+    (label) => !COZY_FEATURE_LABELS.includes(label)
+  );
+
+  const aiTags = input.aiTags.filter((tag) => {
+    const lower = tag.toLowerCase();
+    return !COZY_AI_TAGS.some((cozyTag) => cozyTag.toLowerCase() === lower);
+  });
+
+  return { featureLabels, aiTags };
 }
 
 interface HiddenGemAnalysis {
@@ -1477,7 +1628,16 @@ IMPORTANT:
           analysis.featureLabels,
           featureLabelEvidence,
           sanitizedAiTags,
-          sanitizedFeatureTagSlugs
+          sanitizedFeatureTagSlugs,
+          {
+            summary: analysis.summary,
+            labels: analysis.labels,
+            pros: analysis.pros,
+            cons: analysis.cons,
+            audiencePositive: analysis.audiencePositive,
+            audienceNeutral: analysis.audienceNeutral,
+            audienceNegative: analysis.audienceNegative,
+          }
         );
 
         const tagSafetyCtx: TagSafetyContext = {
@@ -1488,19 +1648,43 @@ IMPORTANT:
           audiencePositive: analysis.audiencePositive,
           audienceNeutral: analysis.audienceNeutral,
           audienceNegative: analysis.audienceNegative,
+          cozyKeywordHits: 0,
+          stressKeywordHits: 0,
         };
 
-        const tagCorpus = buildTagSafetyCorpus(tagSafetyCtx);
+        const {
+          corpus: tagCorpus,
+          cozyKeywordHits,
+          stressKeywordHits,
+        } = buildTagSafetyCorpus(tagSafetyCtx);
+        tagSafetyCtx.cozyKeywordHits = cozyKeywordHits;
+        tagSafetyCtx.stressKeywordHits = stressKeywordHits;
+        tagSafetyCtx.corpus = tagCorpus;
+
         const safeTags = applyDeckbuilderAndRoguelikeSafety(
           analysis.aiTags,
           analysis.featureLabels,
           tagCorpus
         );
+        const normalizedFeatureLabels = safeTags.featureLabels.map(
+          (label) => label as FeatureLabel
+        );
+        const storySafeLabels = sanitizeStoryLabelsForProductivity(
+          tagSafetyCtx,
+          normalizedFeatureLabels
+        );
+        const cozySafe = applyCozySafetyFilters(
+          {
+            aiTags: safeTags.aiTags,
+            featureLabels: storySafeLabels,
+          },
+          tagSafetyCtx
+        );
 
         analysis = {
           ...analysis,
-          aiTags: safeTags.aiTags,
-          featureLabels: safeTags.featureLabels,
+          aiTags: cozySafe.aiTags,
+          featureLabels: cozySafe.featureLabels,
         };
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {

@@ -1108,6 +1108,10 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         )
       );
 
+      // NOTE: analysis.featureLabels was being returned but never written back into
+      // game_rankings_cache.data, so the cached JSON stayed stale despite fresh AI output.
+      updatedData.featureLabels = normalizedFeatureLabels;
+
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
         .update({
