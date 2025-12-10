@@ -2,7 +2,15 @@
 // ローカルの TypeScript では解決できずエラーになるためコメントアウト。
 // /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { mapAiTagsToFeatureLabels } from "./feature-labels.ts";
+// ローカルの型チェック用に最低限の Deno 定義を追加（実行時は本物の Deno）
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
+};
+
+import { buildFeatureLabelsFromAnalysis } from "./feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,7 +85,7 @@ interface AudienceSegment {
   description?: string;
 
   // Player Match 用
-  // sub?: string;
+  sub?: string;
   fitScore?: number;
   reason?: string;
 
@@ -90,10 +98,110 @@ interface AudienceSegment {
   missReviewParaphrased?: string;
 }
 
+interface TagSafetyContext {
+  summary?: string | null;
+  labels?: string[] | null;
+  pros?: string[] | null;
+  cons?: string[] | null;
+  audiencePositive?: AudienceSegment[] | null;
+  audienceNeutral?: AudienceSegment[] | null;
+  audienceNegative?: AudienceSegment[] | null;
+}
+
+function buildTagSafetyCorpus(ctx: TagSafetyContext): string {
+  const parts: string[] = [];
+
+  if (ctx.summary) parts.push(ctx.summary);
+  if (ctx.labels) parts.push(...ctx.labels);
+  if (ctx.pros) parts.push(...ctx.pros);
+  if (ctx.cons) parts.push(...ctx.cons);
+
+  const collectAudience = (segments?: AudienceSegment[] | null) => {
+    if (!segments) return;
+    for (const seg of segments) {
+      if (seg.label) parts.push(seg.label);
+      if (seg.description) parts.push(seg.description);
+      if (seg.sub) parts.push(seg.sub);
+      if (seg.reason) parts.push(seg.reason);
+      if (seg.hitReviewOriginal) parts.push(seg.hitReviewOriginal);
+      if (seg.hitReviewParaphrased) parts.push(seg.hitReviewParaphrased);
+      if (seg.missReviewOriginal) parts.push(seg.missReviewOriginal);
+      if (seg.missReviewParaphrased) parts.push(seg.missReviewParaphrased);
+    }
+  };
+
+  collectAudience(ctx.audiencePositive);
+  collectAudience(ctx.audienceNeutral);
+  collectAudience(ctx.audienceNegative);
+
+  return parts.join("\n").toLowerCase();
+}
+
+function hasCardTerms(corpus: string): boolean {
+  const cardPatterns = [
+    "カード",
+    "カードゲーム",
+    "デッキ",
+    "デッキ構築",
+    "山札",
+    "カードプール",
+    "カードシナジー",
+    " card",
+    " cards",
+    " deck",
+    " decks",
+    " deckbuilding",
+    " deck-builder",
+  ];
+
+  const lower = corpus.toLowerCase();
+  return cardPatterns.some((kw) => lower.includes(kw));
+}
+
+function applyDeckbuilderAndRoguelikeSafety(
+  aiTags: string[] | null | undefined,
+  featureLabels: string[] | null | undefined,
+  corpus: string
+): { aiTags: string[]; featureLabels: string[] } {
+  const cleanedAiTags = (aiTags ?? []).map((t) => t.trim()).filter(Boolean);
+  const cleanedFeatureLabels = (featureLabels ?? [])
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  const hasCards = hasCardTerms(corpus);
+
+  let safeAiTags = cleanedAiTags;
+  let safeFeatureLabels = cleanedFeatureLabels;
+
+  if (!hasCards) {
+    const aiLower = cleanedAiTags.map((t) => t.toLowerCase());
+    safeAiTags = cleanedAiTags.filter((_, i) => {
+      const v = aiLower[i];
+      return !v.includes("deckbuild");
+    });
+
+    const flLower = cleanedFeatureLabels.map((t) => t.toLowerCase());
+    safeFeatureLabels = cleanedFeatureLabels.filter((_, i) => {
+      const v = flLower[i];
+      return (
+        v !== "deckbuilding" &&
+        v !== "deckbuilding_strategy" &&
+        v !== "run_based_roguelike"
+      );
+    });
+  }
+
+  return { aiTags: safeAiTags, featureLabels: safeFeatureLabels };
+}
+
 interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
   summary: string;
   labels: string[];
+  /** LLM が選んだ FeatureLabel スラッグの一覧（allowed list に限定） */
+  featureLabels?: string[];
+  /** VIBE / FeatureLabel 用の内部スラッグ一覧 */
+  featureTagSlugs?: string[];
   pros: string[];
   cons: string[];
   riskScore: number;
@@ -207,6 +315,7 @@ function buildFallbackAnalysis(
     audienceBadges: [],
     aiTags: [],
     aiPrimaryGenre: null,
+    featureLabels: [],
     aiError: true,
   };
 }
@@ -455,7 +564,7 @@ function formatReviewBlock(
   return `${label}:\n${lines.join("\n")}`;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: ANALYZE_GAME_CORS_HEADERS });
   }
@@ -826,130 +935,246 @@ audienceNegative が1件以上ある場合、
 - 過去の問題点は historicalIssuesSummary に分ける。  
 - hasImprovedSinceLaunch / stabilityTrend はレビューの時系列から判断する。  
 
-───────────────────────────────
-【SUMMARY とジャンル表現】
-───────────────────────────────
-
-- summary では、そのゲームの体験を分かりやすく伝えるために、
-  「○○系アクション」「○○系アドベンチャー」「ビジュアルノベル」など、一般的なジャンル名を含めてもよい。
-
-- ただし summary 内で "Roguelike" / "Roguelite" / "Deckbuilder" という語を使ってよいのは、
-  そのゲームがローグライク／デッキ構築ゲームとして明確な構造的特徴
-  （ランダム生成ダンジョンやステージ、死亡時の最初からのやり直し、
-    run ごとのビルド・カード構成・パーク構成、周回による恒久アンロックなど）を複数持ち、
-  それが体験の中心になっている場合に限る。
-
-- Visual Novel / Story Rich / Narrative / Social Deduction などのストーリー主導ゲームでは、
-  単にループ構造や周回前提の構成があるだけでは、summary に "Roguelike" / "Roguelite" / "Deckbuilder" を書いてはならない。
-  その場合は「ループ型SFアドベンチャー」「周回型ビジュアルノベル」など、
-  ストーリー中心であることが分かる表現を用いること。
 
 ───────────────────────────────
-【aiTags / aiPrimaryGenre】
+  【aiTags / aiPrimaryGenre / featureLabels】
 ───────────────────────────────
 
-- Steamで一般的に使われる英語タグのみを使用。  
-- 文ではなく単語タグとし、類義語・重複は避ける。  
-- 5〜10個程度。  
-- aiPrimaryGenre は代表ジャンル1つだけ。  
+  ● aiTags について
+  - Steam で一般的に使われる英語タグのみを使用する。
+  - 文ではなく **単語タグ** とし、類義語・重複は避ける。
+  - 5〜10 個程度を目安とする。
+  - aiPrimaryGenre は「代表ジャンル 1つだけ」（例:  Action, Adventure, RPG, Visual Novel, Strategy など）。複数ジャンルの羅列は禁止。判断できない場合は null 可。
 
-- "Roguelike" / "Roguelite" を aiTags に含めてよいのは、
-  レビューやストア説明の中で次の要素が複数回登場し、ゲーム体験の中心になっている場合に限る：
-  - ランダム生成のステージやダンジョンがある
-  - 死亡時に最初からやり直しになる permadeath の仕組みがある
-  - 各 run ごとに異なるビルド・カード構成・パーク構成などを選ぶ
-  - 周回を重ねることで恒久的なアンロックやメタ進行がある
+  【タグ生成の優先順位】
+  1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。
+  2. レビューで何度も登場する具体的メカニクスを拾い、対応する英語タグを 1つ以上含める。
 
-- 単に「時間ループ型の物語」や「何周も遊ぶことで情報が増える」だけの
-  ビジュアルノネル／Story Rich／Social Deduction タイトルは、
-  aiTags に "Roguelike" / "Roguelite" / "Deckbuilder" を含めてはならない。
+  【代表的メカニクス → aiTags の対応例】
+  - クラフト・素材集め・レシピ・アイテム合成が繰り返し語られる → Crafting
+  - 建築・家や拠点づくりが繰り返し語られる → Building / Base-Building
+  - 探索・オープンワールド・広い世界が繰り返し語られる → Open World / Exploration / Sandbox
 
-- featureTagSlugs に含まれる内部スラッグ名（例: "run_based_roguelike", "high_intensity_roguelike" など）を、
-  そのまま aiTags として出力してはならない。
-  Roguelike 系を表現したい場合は、aiTags では "Roguelike" または "Roguelite" など、
-  Steam で一般的なタグ名のみを使うこと。
+  【Roguelike / Deckbuilder に関する厳格ルール】
 
+  - aiTags に Roguelike / Roguelite / Deckbuilding を含めてよいのは、
+    レビューや summary / labels / pros / cons / audience に、
+    その構造を裏付ける具体表現が複数回はっきり登場する場合に限る。
 
-【タグ生成の優先順位】 
+  - **Deckbuilding について（重要）**
+    次の語が summary / labels / pros / cons / audience のどこにも 1つも登場しない場合は、
+    aiTags に Deckbuilding を絶対に含めてはならない：
 
-1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。 
-2. レビューで「何度も」登場する具体的なメカニクスを拾い、 
-それに対応する英語タグを必ず 1 つ以上含める。 
+    「カード」「カードゲーム」「デッキ」「デッキ構築」
+    「山札」「カードプール」「カードシナジー」
+    card / cards / deck / decks / deckbuilding / deck-builder
 
-【代表的メカニクス → aiTags の対応（例）】 
+    単に「ループ」「周回」「数値強化」「戦略」などが出てくるだけでは、
+    Deckbuilding と見なしてはならない。
 
-- クラフト・素材集め・レシピ・アイテムを組み合わせる要素が何度も語られる場合 
-  → aiTags に必ず "Crafting" を含める。 
-- 建築・家や建物を建てる・拠点づくりが何度も語られる場合 
-  → aiTags に "Building" や "Base-Building" を含める。 
-- 拠点防衛・タワーディフェンス・波状攻撃を迎え撃つ要素が何度も語られる場合 
-  → aiTags に "Tower Defense" や "Base Defense" など、対応する既存タグを含める。 
-- 探索・オープンワールド・広い世界・冒険が繰り返し語られる場合 
-  → "Open World" や "Exploration" や "Sandbox" など、入力に近い既存タグを含める。 
-- ランごとのやり直し・死んでやり直す・毎回構成が変わるといった要素が何度も語られる場合 
-  → "Roguelike" または "Roguelite" を含める。 
-  
-【禁止事項】 
+  - **Roguelike について（簡易）**
+    ランダム生成ステージや permadeath、run ごとのビルド構成など
+    典型的なローグライク構造がテキスト上ではっきり説明されていない場合は、
+    aiTags に Roguelike / Roguelite を含めない方針とする。
+    「時間ループ型ストーリー」「何周も遊ぶことで情報が増える」だけでは Roguelike と見なさない。
 
-- レビューや入力 JSON にほとんど出てこないメカニクスを、想像だけで aiTags に追加しない。 
-- 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、 
-  対応するタグ（"Crafting" / "Building" / "Roguelike" など）を省略することも禁止。 
+  【禁止事項】
+  - テキストにほとんど出てこないメカニクスを、想像だけで aiTags に追加してはならない。
+  - 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、
+    対応するタグ（Crafting / Building / Roguelike など）を省略することも禁止。
 
-● aiPrimaryGenre について 
+  ● featureLabels について
+  - featureLabels は、このゲームの体験構造を表す **最終 FeatureLabel スラッグ配列**。
+  - 要素には、事前定義されたスラッグだけを使うこと。
+  - 個数は 3〜7 個程度を目安とし、無理に水増ししない。
+  - 必要なラベルがない場合のみ、空配列 [] を使ってよい。
 
-- aiPrimaryGenre は、そのゲームの代表ジャンル 1 つだけを書く。 
-- 例: "Roguelike", "Action", "JRPG", "Deckbuilder", "Adventure" など。 
-- 文や複数ジャンルの羅列は禁止。最も代表的な 1 つだけを選ぶ。 
-- 明確に判断できない場合は null にしてよい。 
+  【使用可能な FeatureLabel 一覧（抜粋）】
+  - story_driven / character_drama / mystery_investigation / emotional_journey / dialogue_heavy / social_deduction_narrative
+  - cozy_atmosphere / wholesome_chill / ambient_experience / gentle_exploration / light_puzzle / cozy_life_crafting
+  - turn_based_tactics / deckbuilding_strategy / grand_strategy / automation_factory / colony_management
+  - action_combat / precision_shooter / rhythm_action / sports_arena / high_intensity
+  - run_based_roguelike / arcade_action / arcade_shooter / micro_progression / short_puzzle
+  - base_building / crafting / exploration_core / dark_tension / sci_fi_mystery / psychological_atmosphere / visual_novel
 
-● featureTagSlugs について（VIBE / FeatureLabel 用 内部スラッグ） 
+  【Story Heavy ゲームの扱い】
+  - summary / labels / pros / audience に物語・キャラクター・推理要素が強く現れている場合、
+    story_driven / character_drama / emotional_journey / mystery_investigation / social_deduction_narrative / visual_novel
+    を優先して選ぶこと。
 
-- featureTagSlugs は、VIBE / FeatureLabel 用の **内部専用スラッグ配列** である。 
-- featureTagSlugs には、必ず以下の25個のうちからのみスラッグを入れること。 
-- それ以外の文字列・タグ・文章を featureTagSlugs に含めてはならない。 
+  - Story Heavy タイトルでは、次のラベルは **強い根拠がない限り付けてはならない**：
+    turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity
+────────────────
+【STORY（物語）系】
+────────────────
+story_driven  
+  - ストーリー進行がゲーム体験の中心。  
+  - NG：戦闘中心のゲームで「ストーリーも良い」程度。
 
-【Chill 系（穏やかな体験・癒やし系）】 
-- cozy_life_crafting （のんびり生活・クラフト） 
-- gentle_exploration （落ち着いた探索） 
-- light_puzzle （比較的ライトなパズル要素） 
-- relaxed_building （穏やかな建築・拠点づくり） 
-- ambient_experience （雰囲気・環境音・没入重視） 
+character_drama  
+  - キャラクター同士の関係性や感情が物語の軸。  
+  - NG：キャラが多いだけでドラマ性が薄い。
 
-【Story 系（物語・ドラマ）】 - story_driven （物語主導の構成） 
-- character_drama （キャラクター同士のドラマ） 
-- mystery_investigation （謎解き・調査・真相究明） 
-- emotional_journey （感情を揺さぶる体験） 
-- lore_worldbuilding （世界観・設定の作り込み） 
+mystery_investigation  
+  - 推理・調査・情報収集を通じて真相に迫る構造。  
+  - NG：雰囲気が謎っぽいだけで推理構造が無い。
 
-【Focus 系（戦略・思考）】 
-- turn_based_tactics （ターン制タクティクス） 
-- deckbuilding_strategy （デッキ構築ストラテジー） 
-- grand_strategy （国家・大局ストラテジー） 
-- automation_factory_strategy（自動化・工場系ストラテジー） 
-- colony_management （拠点・コロニー運営） 
+emotional_journey  
+  - 心情描写や感動的展開など情緒的体験が核心。  
+  - NG：音楽や雰囲気が良いだけ。
 
-【Speed 系（テンション・反応速度）】 
-- action_combat （アクション戦闘） 
-- precision_shooter （精密エイム系シューター） 
-- rhythm_music_action （リズム／音楽アクション） 
-- sports_arena （スポーツ・アリーナ系対戦） 
-- high_intensity_roguelike （高テンション系ローグライク） 
+dialogue_heavy  
+  - 会話テキストが非常に多く、読み進めることが中心。  
+  - NG：イベント会話が多いだけの RPG。
 
-【Short 系（短時間・周回性）】 
-- run_based_roguelike （ラン単位のローグライク） 
-- arcade_action （アーケード調アクション） 
-- arcade_shooter （アーケード調シューター） 
-- short_puzzle （短い単位のパズル） 
-- micro_progression （細かな進行・ミクロな積み上げ） 
+branching_choice  
+  - 選択肢によるストーリー分岐・結末変化がある。  
+  - NG：選択肢があるだけで展開が変わらない。
 
-【featureTagSlugs の厳守ルール】 
-- featureTagSlugs には **上記25個以外の文字列を一切含めないこと。** 
-- 文や自由記述は禁止。必ずスラッグ文字列のみを使う。 
-- 類義語や別表記（例:"Story Rich", "Roguelike", "Souls-like" など）は featureTagSlugs には書かない。 
-- そのゲームに本質的に当てはまるスラッグだけを 0〜10 個程度選ぶ。 
-- 同じスラッグを重複して入れない（配列内の各要素は一意）。 
-- ゲームにまったく当てはまるスラッグがない場合（稀なケース）は、
-featureTagSlugs を空配列 [] としてよいが、基本的には何かしら該当するものがないか慎重に検討すること。
+social_deduction_narrative  
+  - 人狼／正体隠匿の駆け引きを物語構造と組み合わせる。  
+  - NG：PvP人狼、Among Us 系の対戦中心。
+
+────────────────
+【CHILL（穏やか / 癒やし）系】
+────────────────
+cozy_atmosphere  
+  - 優しい雰囲気・落ち着く世界観が核。  
+  - NG：可愛いだけ。
+
+wholesome_chill  
+  - 心が温まる、優しい気持ちになる体験。  
+  - NG：明るいだけの作品。
+
+ambient_experience  
+  - 雰囲気・音・環境の没入が中心で、目的性が薄い。  
+  - NG：BGMが良いだけ。
+
+gentle_exploration  
+  - 敵やストレスが少ない、静かな探索体験。  
+  - NG：敵だらけのゲームに探索要素があるだけ。
+
+light_puzzle  
+  - 軽量で短時間のパズル。  
+  - NG：高難度謎解き中心。
+
+cozy_life_crafting  
+  - のんびり生活系クラフト・収集が中心。  
+  - NG：サバイバル系クラフト。
+
+────────────────
+【FOCUS（戦略・思考）系】
+────────────────
+turn_based_tactics  
+  - マップ上でユニットを動かし、位置取り・地形効果を活かすタクティカル戦闘。  
+  - NG：ターン制バトルがあるだけの JRPG、ビジュアルノベル＋数値育成。
+
+deckbuilding_strategy  
+  - デッキ構築（カード選択）とシナジー形成が攻略の核。  
+  - NG：カードが出るだけ、選択肢が3つあるだけ。
+
+grand_strategy  
+  - 国家・勢力・大規模運営を長期スパンで管理する戦略ゲーム。  
+  - NG：小規模な街づくり。
+
+automation_factory  
+  - 自動化ライン・生産効率化・工場構築が中心。  
+  - NG：建築要素があるだけ。
+
+colony_management  
+  - 住民・資源・拠点運営を細かく管理する体験が核。  
+  - NG：ただの街づくり。
+
+────────────────
+【SPEED（反応 / アクション）系】
+────────────────
+action_combat  
+  - 操作・反射・攻撃タイミングが中心のアクション戦闘。  
+  - NG：読書中心ゲームのオマケ戦闘。
+
+precision_shooter  
+  - 精密なエイム・反応速度が要求されるシューター。  
+  - NG：銃が出るだけの ADV。
+
+rhythm_action  
+  - ビートに合わせた入力を行うリズムアクション。  
+  - NG：音楽が良いだけ。
+
+sports_arena  
+  - スポーツ試合・競技アリーナの対戦が中心。  
+  - NG：スポーツ風ミニゲーム。
+
+high_intensity  
+  - テンションが高く、スピード感のあるアクション体験。  
+  - NG：一瞬激しい演出があるだけ。
+
+────────────────
+【SHORT（短時間 / 周回）系】
+────────────────
+run_based_roguelike  
+  - 1ラン単位のやり直し構造＋ランダム生成＋ビルド幅のあるローグライク。  
+  - NG：時間ループ物（ランダム生成やビルド構造が無い場合）。
+
+arcade_action  
+  - シンプル操作で短時間のアーケードアクション。  
+  - NG：長時間ステージ制アクション。
+
+arcade_shooter  
+  - 短時間で遊べるシューティング（STG）。  
+  - NG：FPS/TPS。
+
+micro_progression  
+  - 小さな成長が短周期で頻繁に得られる構造。  
+  - NG：RPGの大きなレベルアップ。
+
+short_puzzle  
+  - 1問ずつ短時間で解けるパズル構造。  
+  - NG：長編パズル。
+
+────────────────
+【OTHER（構造・要素）系】
+────────────────
+base_building  
+  - 拠点・施設を構築し、運営・拡張する要素が核。  
+  - NG：装飾建築だけ。
+
+crafting  
+  - 素材収集＋アイテム作成が進行の主要要素。  
+  - NG：武器を1つ作るだけ。
+
+exploration_core  
+  - 世界を歩き回り発見を楽しむ探索体験が中心。  
+  - NG：ただ移動が長いだけ。
+
+dark_tension  
+  - 緊張感・不安・ダークな雰囲気による心理的圧迫が核。  
+  - NG：一瞬のホラー演出。
+
+sci_fi_mystery  
+  - SF設定と謎解きが物語の核心に結びつく構造。  
+  - NG：舞台が宇宙なだけ。
+
+psychological_atmosphere  
+  - 心理的な不安・葛藤・精神テーマを扱う雰囲気重視体験。  
+  - NG：ただ暗いだけ。
+
+visual_novel  
+  - テキスト主体の読み物形式が中心。  
+  - NG：文章量が多いだけの RPG。
+
+────────────────
+【重要ルール：Story Heavy の特別扱い】
+────────────────
+- summary / labels に物語・キャラ関係・推理要素が明確に存在する場合、  
+  story_driven / character_drama / emotional_journey / mystery_investigation / social_deduction_narrative  
+  を優先して評価する。
+
+- Story Heavy タイトルでは、以下のラベルは **原則として採用しない**：  
+  turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity  
+  （強い根拠が summary / labels / pros / audience に無い限り付与禁止）
+
+────────────────────────────────
+
 
 ================================================================
 【CARD TAG LABELS（labels 配列）】
@@ -961,7 +1186,8 @@ SearchResultCard 上部の labels は短いタグピルとして表示される�
 - 文は禁止。名詞・体言止めのみ。  
 - 「〜が好きな人」「〜する人向け」など文末「人」は禁止。  
 - 「、」「。」を含めない。  
-- ゲーム固有の体験を示す1トピックのみを書く。
+- ゲーム固有の体験を示す1トピックのみを書く。ネガティブなトピックは採用しない。
+- トピックの数は最低5つ最大6つに制限
 
 ================================================================
 【AUDIENCE BADGES（audienceBadges）】
@@ -982,6 +1208,7 @@ audienceBadges は SearchResultCard の小型ピル。
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
   "summary": "2〜3文。このゲーム固有の特徴を1つ以上含める客観的説明。",
   "labels": ["日本語ラベル", ...],
+  "featureLabels": ["crafting" | "base_building" | "survival_loop" | "exploration_core" | "procedural_generation" | "roguelike_structure" | "combat_focused" | "high_skill_action" | "platforming" | "puzzle_solving" | "deckbuilding" | "turn_based_tactics" | "resource_management" | "automation_systems" | "colony_management" | "farming_life_sim" | "rpg_progression" | "stealth_gameplay" | "vehicle_driving" | "coop_core" | "rhythm_action" | "visual_novel" | "sports_gameplay" | "cozy" | "relaxing" | "calm_exploration" | "atmospheric" | "tense" | "high_intensity" | "horror_tinged" | "isolation" | "emotional_narrative" | "meditative" | "wholesome" | "chaotic_fastpaced"] | [],
   "pros": ["日本語の強み", ...],
   "cons": ["日本語の弱み", ...],
   "riskScore": 1-10,
@@ -992,7 +1219,7 @@ audienceBadges は SearchResultCard の小型ピル。
   "historicalIssuesSummary": string | "" | null,
   "hasImprovedSinceLaunch": true | false | null,
   "stabilityTrend": "Improving" | "Stable" | "Deteriorating" | "Unknown",
-   "aiTags": ["Action", "Adventure", "Visual Novel", "RPG", ...] | [],
+  "aiTags": ["Action", "Adventure", "Visual Novel", "RPG", ...] | [],
   "aiPrimaryGenre": "Action" | "Adventure" | "RPG" | "Visual Novel" | "Strategy" | null,
   "audienceBadges": [
     { "id": string, "label": string }
@@ -1245,10 +1472,36 @@ IMPORTANT:
         )
           ? analysis.featureTagSlugs
           : [];
-        analysis.featureLabels = mapAiTagsToFeatureLabels(
+        const featureLabelEvidence = buildFeatureLabelTextEvidence(analysis);
+        analysis.featureLabels = buildFeatureLabelsFromAnalysis(
+          analysis.featureLabels,
+          featureLabelEvidence,
           sanitizedAiTags,
           sanitizedFeatureTagSlugs
         );
+
+        const tagSafetyCtx: TagSafetyContext = {
+          summary: analysis.summary,
+          labels: analysis.labels,
+          pros: analysis.pros,
+          cons: analysis.cons,
+          audiencePositive: analysis.audiencePositive,
+          audienceNeutral: analysis.audienceNeutral,
+          audienceNegative: analysis.audienceNegative,
+        };
+
+        const tagCorpus = buildTagSafetyCorpus(tagSafetyCtx);
+        const safeTags = applyDeckbuilderAndRoguelikeSafety(
+          analysis.aiTags,
+          analysis.featureLabels,
+          tagCorpus
+        );
+
+        analysis = {
+          ...analysis,
+          aiTags: safeTags.aiTags,
+          featureLabels: safeTags.featureLabels,
+        };
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
@@ -1547,6 +1800,7 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     hiddenGemVerdict: normalizeVerdict(parsed?.hiddenGemVerdict),
     summary: normalizeOptionalString(parsed?.summary),
     labels: normalizeStringArray(parsed?.labels),
+    featureLabels: normalizeStringArray(parsed?.featureLabels),
     pros: normalizeStringArray(parsed?.pros),
     cons: normalizeStringArray(parsed?.cons),
     riskScore: clampInt(parsed?.riskScore ?? 5, 0, 10),
@@ -1596,6 +1850,11 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   );
   if (audienceNegative.length > 0) {
     normalized.audienceNegative = audienceNegative;
+  }
+
+  const featureTagSlugs = normalizeStringArray(parsed?.featureTagSlugs);
+  if (featureTagSlugs.length > 0) {
+    normalized.featureTagSlugs = featureTagSlugs;
   }
 
   const aiTags = normalizeAiTags(parsed?.aiTags);
@@ -1714,6 +1973,58 @@ function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
   }
 
   return result;
+}
+
+function collectAudienceTextSnippets(
+  segments?: AudienceSegment[] | null
+): string[] {
+  if (!Array.isArray(segments)) return [];
+  const snippets: string[] = [];
+
+  for (const segment of segments) {
+    if (!segment) continue;
+ 
+    const push = (text?: string | null) => {
+      if (typeof text === "string" && text.trim()) {
+        snippets.push(text.trim());
+      }
+    };
+
+    push(segment.label);
+    push(segment.description ?? null);
+    push(segment.sub ?? null);
+    push(segment.reason ?? null);
+  }
+
+  return snippets;
+}
+
+function buildFeatureLabelTextEvidence(analysis: HiddenGemAnalysis): string[] {
+  const snippets: string[] = [];
+
+  const push = (text?: string | null) => {
+    if (typeof text === "string" && text.trim()) {
+      snippets.push(text.trim());
+    }
+  };
+
+  push(analysis.summary);
+  push(analysis.currentStateSummary ?? null);
+  push(analysis.historicalIssuesSummary ?? null);
+
+  if (Array.isArray(analysis.labels)) {
+    for (const label of analysis.labels) {
+      if (label) snippets.push(label);
+    }
+  }
+
+  snippets.push(
+    ...collectAudienceTextSnippets(analysis.audiencePositive),
+    ...collectAudienceTextSnippets(analysis.audienceNeutral),
+    ...collectAudienceTextSnippets(analysis.audienceNegative)
+  );
+
+  return snippets;
 }
 
 function clamp01(value: number): number {

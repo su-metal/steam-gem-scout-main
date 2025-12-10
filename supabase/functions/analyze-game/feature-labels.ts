@@ -1,11 +1,28 @@
-import type { FeatureLabel } from "../_shared/feature-labels.ts";
+import type { FeatureLabel as BaseFeatureLabel } from "../_shared/feature-labels.ts";
 import {
   FEATURE_LABEL_DISPLAY_NAMES,
   MECHANIC_FEATURE_LABELS,
   MOOD_FEATURE_LABELS,
 } from "../_shared/feature-labels.ts";
 
-export { FeatureLabel, FEATURE_LABEL_DISPLAY_NAMES, MECHANIC_FEATURE_LABELS, MOOD_FEATURE_LABELS };
+const ADDITIONAL_STORY_SHORT_FEATURE_LABELS = [
+  "story_driven",
+  "character_drama",
+  "mystery_investigation",
+  "emotional_journey",
+  "dialogue_heavy",
+  "run_based_roguelike",
+  "short_puzzle",
+] as const;
+
+type AdditionalStoryShortFeatureLabel =
+  (typeof ADDITIONAL_STORY_SHORT_FEATURE_LABELS)[number];
+
+export type FeatureLabel =
+  | BaseFeatureLabel
+  | AdditionalStoryShortFeatureLabel;
+
+export { FEATURE_LABEL_DISPLAY_NAMES, MECHANIC_FEATURE_LABELS, MOOD_FEATURE_LABELS };
 
 const GLOBAL_FEATURE_LABEL_MIN = 3;
 const GLOBAL_FEATURE_LABEL_SOFT_MAX = 6;
@@ -46,6 +63,7 @@ const STORY_HEAVY_FALLBACK_LABELS: FeatureLabel[] = [
 const ALL_FEATURE_SLUGS = new Set<FeatureLabel>([
   ...MECHANIC_FEATURE_LABELS,
   ...MOOD_FEATURE_LABELS,
+  ...ADDITIONAL_STORY_SHORT_FEATURE_LABELS,
 ]);
 
 const STORY_HEAVY_IGNORED_LABELS = new Set<FeatureLabel>([
@@ -124,11 +142,107 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   chaos: "chaotic_fastpaced",
 };
 
+const TEXT_HINTS: Array<{
+  label: FeatureLabel;
+  keywords: string[];
+}> = [
+  {
+    label: "visual_novel",
+    keywords: ["ビジュアルノベル", "visual novel", "ヴィジュアルノベル", "文字読み", "テキスト主導"],
+  },
+  {
+    label: "story_driven",
+    keywords: ["ストーリー", "物語", "物語主導", "story driven"],
+  },
+  {
+    label: "character_drama",
+    keywords: ["キャラクター", "人間関係", "ドラマ", "感情描写", "関係性"],
+  },
+  {
+    label: "mystery_investigation",
+    keywords: ["推理", "ミステリー", "謎解き", "調査", "真相"],
+  },
+  {
+    label: "emotional_journey",
+    keywords: ["感情", "泣ける", "エモーショナル", "心が揺さぶる", "涙"],
+  },
+  {
+    label: "dialogue_heavy",
+    keywords: ["会話", "掛け合い", "対話", "シナリオ"],
+  },
+  {
+    label: "run_based_roguelike",
+    keywords: ["周回", "ループ", "リプレイ", "ラン", "run based", "run-based", "リトライ"],
+  },
+  {
+    label: "deckbuilding",
+    keywords: ["デッキ構築", "カード構築", "カードデッキ", "カードゲーム", "deckbuilding"],
+  },
+  {
+    label: "short_puzzle",
+    keywords: ["短時間", "隙間時間", "スキマ時間", "短いセッション"],
+  },
+  {
+    label: "cozy",
+    keywords: ["まったり", "のんびり", "ゆったり", "癒やし"],
+  },
+];
+
+const TEXT_DERIVATION_THRESHOLD = 2;
+const TEXT_DERIVATION_LIMIT = 3;
+
 function normalizeTagList(aiTags: string[] | null | undefined): string[] {
   if (!aiTags) return [];
   return aiTags
     .map((t) => (t ?? "").toString().toLowerCase().trim())
     .filter(Boolean);
+}
+
+function normalizeAnalysisFeatureLabels(
+  raw?: string[] | null
+): FeatureLabel[] {
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+  const seen = new Set<string>();
+  const result: FeatureLabel[] = [];
+
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+    if (!ALL_FEATURE_SLUGS.has(lower as FeatureLabel)) continue;
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    result.push(lower as FeatureLabel);
+  }
+
+  return result;
+}
+
+function deriveFeatureLabelsFromText(
+  textPieces: string[],
+  existing: Set<FeatureLabel>
+): FeatureLabel[] {
+  if (!textPieces || !textPieces.length) return [];
+  const combined = textPieces.filter(Boolean).join(" ").toLowerCase();
+  if (!combined) return [];
+
+  const derived: FeatureLabel[] = [];
+  let added = 0;
+
+  for (const hint of TEXT_HINTS) {
+    if (existing.has(hint.label)) continue;
+    if (hint.keywords.some((keyword) => combined.includes(keyword))) {
+      derived.push(hint.label);
+      existing.add(hint.label);
+      added += 1;
+      if (added >= TEXT_DERIVATION_LIMIT) {
+        break;
+      }
+    }
+  }
+
+  return derived;
 }
 
 function computeStoryScore(tags: string[]): number {
@@ -310,4 +424,36 @@ export function mapAiTagsToFeatureLabels(
 
   const labels = Array.from(result);
   return ensureMinimumLabels(labels, aiTags, storyHeavy);
+}
+
+export function buildFeatureLabelsFromAnalysis(
+  analysisFeatureLabels: string[] | null | undefined,
+  evidenceText: string[],
+  aiTags: string[] | null | undefined,
+  featureTagSlugs?: string[] | null | undefined
+): FeatureLabel[] {
+  const initial = normalizeAnalysisFeatureLabels(analysisFeatureLabels);
+  const storyHeavy = isStoryHeavyGame(aiTags);
+  const existing = new Set<FeatureLabel>(initial);
+  let combined = [...initial];
+
+  if (combined.length < TEXT_DERIVATION_THRESHOLD) {
+    const derived = deriveFeatureLabelsFromText(evidenceText, existing);
+    if (derived.length) {
+      combined = [...combined, ...derived];
+    }
+  }
+
+  if (combined.length < GLOBAL_FEATURE_LABEL_MIN) {
+    const fallback = mapAiTagsToFeatureLabels(aiTags, featureTagSlugs);
+    for (const fallbackLabel of fallback) {
+      if (combined.length >= GLOBAL_FEATURE_LABEL_MIN) break;
+      if (!existing.has(fallbackLabel)) {
+        existing.add(fallbackLabel);
+        combined.push(fallbackLabel);
+      }
+    }
+  }
+
+  return ensureMinimumLabels(combined, aiTags, storyHeavy);
 }
