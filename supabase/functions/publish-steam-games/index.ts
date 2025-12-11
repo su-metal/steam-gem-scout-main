@@ -4,6 +4,7 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { MoodVector, buildMoodFromTagsAndAnalysis } from "../_shared/mood.ts";
+import { normalizeAnalysisFeatureLabels } from "../analyze-game/feature-labels.ts";
 
 type Analysis = {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -1115,11 +1116,13 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         aiTagsFromResult.length > 0 ? aiTagsFromResult : existingTagsFromData
       );
 
+      const existingAnalysisFromData =
+        (baseDataForStorage as any)?.analysis ?? null;
+
       const updatedData: Record<string, any> = {
         // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
         ...baseDataForStorage,
         mood_scores: moodScores,
-        analysis: aiResult,
         // 🔸 JSON 側の tags もここで上書き
         tags: finalTagsForGame,
       };
@@ -1142,7 +1145,12 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         }
       }
 
-      const aiAnalysis = (aiResult as any).analysis ?? {};
+      const aiAnalysisRaw =
+        (aiResult as any).analysis ?? (aiResult ?? null) ?? null;
+      const aiAnalysis =
+        aiAnalysisRaw && typeof aiAnalysisRaw === "object"
+          ? aiAnalysisRaw
+          : {};
       const rawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2)
         ? aiAnalysis.featureLabelsV2
         : Array.isArray((aiResult as any).featureLabelsV2)
@@ -1164,15 +1172,14 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
           ? normalizedFeatureLabels
           : existingFeatureLabels;
 
-      const existingAnalysis = updatedData.analysis ?? {};
-      const nextAnalysis: typeof existingAnalysis = {
-        ...existingAnalysis,
+      const mergedAnalysis = {
+        ...((existingAnalysisFromData ?? {}) as Record<string, unknown>),
         ...aiAnalysis,
         featureLabelsV2: finalFeatureLabels,
       };
-      delete (nextAnalysis as any).featureLabels;
+      delete (mergedAnalysis as any).featureLabels;
 
-      updatedData.analysis = nextAnalysis;
+      updatedData.analysis = mergedAnalysis;
       updatedData.featureLabels = finalFeatureLabels;
 
       const { error: updateError } = await supabase
