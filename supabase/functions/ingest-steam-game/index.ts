@@ -861,21 +861,33 @@ async function fetchAndBuildRankingGame(
   //   - Steam の appdetails には data.movies があり、
   //     thumbnail / mp4 / webm などが含まれる想定
   const videoScreenshots = Array.isArray(data.movies)
-    ? data.movies.map((movie: any) => {
-        const thumbnail: string = movie.thumbnail ?? "";
-        const mp4Max: string | undefined = movie.mp4?.max ?? movie.mp4?.["480"];
-        const webmMax: string | undefined =
-          movie.webm?.max ?? movie.webm?.["480"];
+    ? data.movies
+        .map((movie: any) => {
+          const thumbnail: string = movie.thumbnail ?? "";
+          const mp4Max: string | undefined =
+            movie.mp4?.max ?? movie.mp4?.["480"];
+          const webmMax: string | undefined =
+            movie.webm?.max ?? movie.webm?.["480"];
 
-        // 再生に使う URL（mp4 → webm → サムネの順でフォールバック）
-        const full: string = mp4Max ?? webmMax ?? thumbnail ?? "";
+          // 実際の動画URL（mp4優先）
+          const videoUrl: string | undefined = mp4Max ?? webmMax;
 
-        return {
-          type: "video" as const,
-          thumbnail,
-          full,
-        };
-      })
+          // ★ mp4 / webm が無いものは「動画」として扱わない
+          if (!videoUrl) {
+            return null;
+          }
+
+          return {
+            type: "video" as const,
+            thumbnail,
+            full: videoUrl,
+          };
+        })
+        // null を除外
+        .filter(
+          (v): v is { type: "video"; thumbnail: string; full: string } =>
+            v !== null
+        )
     : [];
 
   // ▼ ギャラリー用メディア配列（動画 → 画像の順で並べる）
