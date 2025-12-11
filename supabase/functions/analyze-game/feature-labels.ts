@@ -55,12 +55,6 @@ export function normalizeAnalysisFeatureLabels(
   return result;
 }
 
-export function buildFeatureLabelsFromAnalysis(
-  analysisFeatureLabels: string[] | null | undefined
-): FeatureLabel[] {
-  return normalizeAnalysisFeatureLabels(analysisFeatureLabels);
-}
-
 export function normalizeAnalysisFeatureLabelsV2(
   raw?: unknown
 ): FeatureLabelV2[] {

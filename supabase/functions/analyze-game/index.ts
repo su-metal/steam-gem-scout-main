@@ -10,11 +10,7 @@ declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
 
-import type { FeatureLabel } from "./feature-labels.ts";
-import {
-  buildFeatureLabelsFromAnalysis,
-  normalizeAnalysisFeatureLabelsV2,
-} from "./feature-labels.ts";
+import { normalizeAnalysisFeatureLabelsV2 } from "./feature-labels.ts";
 import type { FeatureLabelV2 } from "../_shared/feature-labels.ts";
 import { FEATURE_LABELS_V2 } from "../_shared/feature-labels.ts";
 
@@ -112,8 +108,6 @@ interface HiddenGemAnalysis {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
   summary: string;
   labels: string[];
-  /** LLM が選んだ FeatureLabel スラッグの一覧（allowed list に限定） */
-  featureLabels?: string[];
   /** FeatureLabel V2 のスラッグ一覧 */
   featureLabelsV2?: FeatureLabelV2[];
   /** VIBE / FeatureLabel 用の内部スラッグ一覧 */
@@ -231,7 +225,6 @@ function buildFallbackAnalysis(
     audienceBadges: [],
     aiTags: [],
     aiPrimaryGenre: null,
-    featureLabels: [],
     aiError: true,
   };
 }
@@ -547,68 +540,6 @@ Deno.serve(async (req: Request) => {
 
 ### CRITICAL GUIDELINES
 
-0. **featureLabels 決定の手順（必ずこの順序）**
-   1) レビュー本文と aiTags を読み、ジャンル・メカニクス・テンポ・雰囲気・難易度・ストーリー性を把握する。
-   2) その理解にもとづいて summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags を出力する。
-   3) 最後に「自分が出力した summary / labels / pros / cons / audience* / aiTags だけ」を根拠として featureLabels を決定する。
-      - summary 等に書いていない概念を featureLabels だけに付け足してはならない。
-      - summary と矛盾するラベルは禁止。矛盾があれば featureLabels を修正する。
-
-0-b. **featureLabels の根拠ルール**
-   - 各ラベルには必ず次のいずれかの根拠が必要：summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags に対応する明記があること。
-   - 根拠が一切ないラベルは採用しない。
-   - 特に 'rpg_progression' では、summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags のどこかに「成長」「レベルアップ」「ビルド」などが明記されなければ採用しないこと。
-
-0-c. **フォーマット系ラベルの厳密条件（例）**
-   - visual_novel: 主な操作が「テキストを読む＋選択肢」。summary/labels/pros 等にビジュアルノベル記述がある、または aiTags に Visual Novel がある。3Dアクション主体なら付与禁止。
-   - run_based_roguelike: 周回（ラン）前提の構造が summary/pros/labels に明記。aiTags の Roguelike/Lite は強根拠だが、テキスト裏付けも必須。
-   - deckbuilding: カードを集めてデッキを構築することが summary/pros/labels に明記。aiTags だけでは不可。
-   - turn_based_tactics: ターン制でユニットを配置・移動し戦術を組む構造が summary/labels に明記。単なるターン制会話やカードゲームには付与しない。
-   - sports_arena（競技系）: チーム操作の競技アリーナが体験の中心であることが summary/labels/pros に明記。ミニゲーム的要素だけなら付与禁止。
-
-0-d. **エビデンススコア方式（内部で一貫性をもって実装）**
-   - +3: analysis.featureLabels に含まれる
-   - +2: aiTags に強く対応するタグがある
-   - +1〜+3: summary / labels / pros / cons / audience に対応表現がどれだけ多いか
-   - 合計が閾値未満のラベルは採用しない。スコア降順に並べ、上限を超える場合は弱いものから削る。
-
-0-e. **'rpg_progression' ラベルの付与条件**
-   - 'rpg_progression' は「RPG的な成長・ビルド・数値の伸び」を表すラベルで、レベルアップ・経験値・ステータス強化・スキル習得・クラスチェンジ・装備更新などが体験の中心になる作品にのみ付与してください。
-   - 装備やステータスの更新、ビルドの試行錯誤がレビューや summary / labels / pros / cons / audiencePositive / audienceNegative のいずれかで繰り返し語られていれば、強い根拠になります。
-   - 「成長」「レベルアップ」「ビルド」「育成」「成長曲線」「育成の幅」などのキーワードがレビュー・aiTags・summary 等で確認できれば、根拠として 'rpg_progression' を考慮してください。
-   - ストーリーADVやビジュアルノベルなど、数値的成長要素がほとんど存在しない作品、またはスキルツリーが微かにあるだけでレビュー上成長要素が語られていない作品には付与しないでください。
-   - 付与に迷ったときは自分が出力した summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags を見直し、成長・ビルド・育成に関する記述が体験の主役級であると判断できる場合のみ採用してください。
-
-0-f. **featureLabelsV2（FeatureLabel v2）**
-   - 新しい "featureLabelsV2" は FeatureLabel v2 の語彙を表す配列で、以下の一覧からのみ構成してください。
-     ${FEATURE_LABELS_V2_PROMPT}
-   - summary/pros/cons/audience/aiTags の根拠をもとに、AI が v2 スラッグを選んで "featureLabelsV2" に出力すること。 "featureLabels" とは独立したヒントとして扱ってください。
-   - JSON 出力では "featureLabelsV2" に上記一覧のスラッグ（繰り返し可、空配列可）を並べ、空なら "[]" を返してください。
-
-1. **このゲーム「固有の特徴」を抽出すること。**
-   - 多くのプレイヤーが繰り返し褒めている点／不満を集中している点を最優先で拾う。
-   - 抽出した features を summary / pros / cons / reason / 代表レビュー / audiencePositive / audienceNeutral / audienceNegative の土台にする。
-
-2. **レビュー内の具体的キーワードを必ず利用する。**
-   - 例：テンポ、配置読み、攻撃パターン、爆発力、視界管理、学習曲線、リソース負荷、UI構造、安定性、更新パッチなど。
-
-3. **プレイヤー像は reason 内だけ。**
-   - 主役は「どのような体験が評価／問題視されているか」という特徴そのもの。
-   - audiencePositive / audienceNeutral / audienceNegative の label はプレイヤー像ではなくゲーム固有の特徴名とする。
-
-4. **ジャンル内での立ち位置を意識する。**
-   - Slay the Spire、Monster Train 等の代表作と比較し、「どこが似ていてどこが違うか」を必要に応じて reason 等に反映する。
-
-5. **抽象表現・一般論は禁止。**
-   - NG：コアゲーマー向け、人を選ぶ、戦略好き。
-   - 必ず「このゲームならではの挙動・感情・負荷」に結び付けて書く。
-
-6. **pros / cons はゲームが主語。**
-   - システム、テンポ、UI、安定性、難易度、更新状況など客観的な要素のみを書く。
-   - プレイヤー像は pros / cons に書かない。
-
-7. **audiencePositive / audienceNeutral / audienceNegative の reason は、まず特徴→体験→必要ならプレイヤー像の順で書く。**
-   - 第1優先：pros / cons + features を受けて、「どの部分がどう良い／つらいのか」を具体的に説明する。
    - プレイヤー像は reason 内のみ。label には絶対に含めない。
 
 ───────────────────────────────
@@ -891,7 +822,7 @@ audienceNegative が1件以上ある場合、
 
 
 ───────────────────────────────
-  【aiTags / aiPrimaryGenre / featureLabels】
+  【aiTags / aiPrimaryGenre / featureLabelsV2】
 ───────────────────────────────
 
   ● aiTags について
@@ -937,11 +868,11 @@ audienceNegative が1件以上ある場合、
   - 逆に、クラフト・建築・ローグライクなどが明確に繰り返し語られているのに、
     対応するタグ（Crafting / Building / Roguelike など）を省略することも禁止。
 
-  ● featureLabels について
-  - featureLabels は、このゲームの体験構造を表す **最終 FeatureLabel スラッグ配列**。
-  - 要素には、事前定義されたスラッグだけを使うこと。
-  - 個数は 3〜7 個程度を目安とし、無理に水増ししない。
-  - 必要なラベルがない場合のみ、空配列 [] を使ってよい。
+  ● featureLabelsV2 について
+  - featureLabelsV2 は FeatureLabel v2（新語彙）のスラッグ配列です。
+  - 要素には、FEATURE_LABELS_V2 に含まれるスラッグだけを使ってください。
+  - 3～7 個程度の要素を目安とし、無理に水増ししない。
+  - 該当するラベルがない場合は [] を返してください。
 
 【STORY（物語）系】
 ────────────────
@@ -1143,43 +1074,6 @@ audienceBadges は SearchResultCard の小型ピル。
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
   "summary": "2〜3文。このゲーム固有の特徴を1つ以上含める客観的説明。",
   "labels": ["日本語ラベル", ...],
-  "featureLabels": [
-  "story_driven" |
-  "character_drama" |
-  "mystery_investigation" |
-  "emotional_journey" |
-  "dialogue_heavy" |
-  "branching_choice" |
-  "social_deduction_narrative" |
-  "cozy_atmosphere" |
-  "wholesome_chill" |
-  "ambient_experience" |
-  "gentle_exploration" |
-  "light_puzzle" |
-  "cozy_life_crafting" |
-  "turn_based_tactics" |
-  "deckbuilding_strategy" |
-  "grand_strategy" |
-  "automation_factory" |
-  "colony_management" |
-  "action_combat" |
-  "precision_shooter" |
-  "rhythm_action" |
-  "sports_arena" |
-  "high_intensity" |
-  "run_based_roguelike" |
-  "arcade_action" |
-  "arcade_shooter" |
-  "micro_progression" |
-  "short_puzzle" |
-  "base_building" |
-  "crafting" |
-  "exploration_core" |
-  "dark_tension" |
-  "sci_fi_mystery" |
-  "psychological_atmosphere" |
-   "visual_novel"
-] | [],
   "featureLabelsV2": [
 ${FEATURE_LABELS_V2_PROMPT}
   ] | [],
@@ -1439,9 +1333,6 @@ IMPORTANT:
         const scores = computeScores(gameData, analysis);
         analysis.scores = scores;
         analysis.scoreHighlights = pickScoreHighlights(scores);
-        analysis.featureLabels = buildFeatureLabelsFromAnalysis(
-          analysis.featureLabels
-        );
       } catch (e) {
         console.error("Failed to parse AI response as JSON:", {
           content,
@@ -1736,7 +1627,6 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     hiddenGemVerdict: normalizeVerdict(parsed?.hiddenGemVerdict),
     summary: normalizeOptionalString(parsed?.summary),
     labels: normalizeStringArray(parsed?.labels),
-    featureLabels: normalizeStringArray(parsed?.featureLabels),
     pros: normalizeStringArray(parsed?.pros),
     cons: normalizeStringArray(parsed?.cons),
     riskScore: clampInt(parsed?.riskScore ?? 5, 0, 10),

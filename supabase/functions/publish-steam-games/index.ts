@@ -1142,56 +1142,37 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         }
       }
 
-      const featureLabelsFromAnalysis =
-        aiResult &&
-        typeof aiResult === "object" &&
-        Array.isArray((aiResult as any).featureLabels)
-          ? ((aiResult as any).featureLabels as any[])
-          : Array.isArray((aiResult as any)?.analysis?.featureLabels)
-          ? ((aiResult as any).analysis.featureLabels as any[])
-          : [];
+      const aiAnalysis = (aiResult as any).analysis ?? {};
+      const rawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2)
+        ? aiAnalysis.featureLabelsV2
+        : Array.isArray((aiResult as any).featureLabelsV2)
+        ? (aiResult as any).featureLabelsV2
+        : [];
+      const rawFeatureLabelsV1: string[] = [
+        ...(Array.isArray((aiResult as any).featureLabels)
+          ? (aiResult as any).featureLabels
+          : []),
+        ...(Array.isArray(aiAnalysis.featureLabels) ? aiAnalysis.featureLabels : []),
+      ];
 
-      const normalizedFeatureLabels = Array.from(
-        new Set(
-          featureLabelsFromAnalysis
-            .map((label) =>
-              typeof label === "string" ? label.trim() : ""
-            )
-            .filter((label): label is string => label.length > 0)
-        )
+      const normalizedFeatureLabels = normalizeAnalysisFeatureLabels(
+        rawFeatureLabelsV2.length > 0 ? rawFeatureLabelsV2 : rawFeatureLabelsV1
       );
 
-      // AI が空配列を返した場合のみ、既存の featureLabels を温存する。
       const finalFeatureLabels =
         normalizedFeatureLabels.length > 0
           ? normalizedFeatureLabels
           : existingFeatureLabels;
 
-      if (finalFeatureLabels.length > 0) {
-        const existingAnalysis = updatedData.analysis ?? {};
-        const nextAnalysis: typeof existingAnalysis = {
-          ...existingAnalysis,
-          featureLabels: finalFeatureLabels,
-        };
+      const existingAnalysis = updatedData.analysis ?? {};
+      const nextAnalysis: typeof existingAnalysis = {
+        ...existingAnalysis,
+        ...aiAnalysis,
+        featureLabelsV2: finalFeatureLabels,
+      };
+      delete (nextAnalysis as any).featureLabels;
 
-        const incomingV2 = Array.isArray((aiResult as any)?.analysis?.featureLabelsV2)
-          ? (aiResult as any).analysis.featureLabelsV2
-          : undefined;
-
-        if (incomingV2 && incomingV2.length > 0) {
-          nextAnalysis.featureLabelsV2 = incomingV2;
-        } else if (
-          Array.isArray(existingAnalysis.featureLabelsV2) &&
-          existingAnalysis.featureLabelsV2.length > 0
-        ) {
-          nextAnalysis.featureLabelsV2 = existingAnalysis.featureLabelsV2;
-        }
-
-        updatedData.analysis = nextAnalysis;
-      }
-
-      // NOTE: analysis.featureLabels was being returned but never written back into
-      // game_rankings_cache.data, so the cached JSON stayed stale despite fresh AI output.
+      updatedData.analysis = nextAnalysis;
       updatedData.featureLabels = finalFeatureLabels;
 
       const { error: updateError } = await supabase
