@@ -1168,10 +1168,26 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
           : existingFeatureLabels;
 
       if (finalFeatureLabels.length > 0) {
-        updatedData.analysis = {
-          ...(updatedData.analysis ?? {}),
+        const existingAnalysis = updatedData.analysis ?? {};
+        const nextAnalysis: typeof existingAnalysis = {
+          ...existingAnalysis,
           featureLabels: finalFeatureLabels,
         };
+
+        const incomingV2 = Array.isArray((aiResult as any)?.analysis?.featureLabelsV2)
+          ? (aiResult as any).analysis.featureLabelsV2
+          : undefined;
+
+        if (incomingV2 && incomingV2.length > 0) {
+          nextAnalysis.featureLabelsV2 = incomingV2;
+        } else if (
+          Array.isArray(existingAnalysis.featureLabelsV2) &&
+          existingAnalysis.featureLabelsV2.length > 0
+        ) {
+          nextAnalysis.featureLabelsV2 = existingAnalysis.featureLabelsV2;
+        }
+
+        updatedData.analysis = nextAnalysis;
       }
 
       // NOTE: analysis.featureLabels was being returned but never written back into

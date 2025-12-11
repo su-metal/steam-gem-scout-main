@@ -11,13 +11,22 @@ declare const Deno: {
 };
 
 import type { FeatureLabel } from "./feature-labels.ts";
-import { buildFeatureLabelsFromAnalysis } from "./feature-labels.ts";
+import {
+  buildFeatureLabelsFromAnalysis,
+  normalizeAnalysisFeatureLabelsV2,
+} from "./feature-labels.ts";
+import type { FeatureLabelV2 } from "../_shared/feature-labels.ts";
+import { FEATURE_LABELS_V2 } from "../_shared/feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+const FEATURE_LABELS_V2_PROMPT = FEATURE_LABELS_V2.map(
+  (label) => `"${label}"`
+).join(", ");
 
 interface ReviewWindowStats {
   /** 対象期間内のレビュー件数 */
@@ -105,6 +114,8 @@ interface HiddenGemAnalysis {
   labels: string[];
   /** LLM が選んだ FeatureLabel スラッグの一覧（allowed list に限定） */
   featureLabels?: string[];
+  /** FeatureLabel V2 のスラッグ一覧 */
+  featureLabelsV2?: FeatureLabelV2[];
   /** VIBE / FeatureLabel 用の内部スラッグ一覧 */
   featureTagSlugs?: string[];
   pros: string[];
@@ -567,6 +578,12 @@ Deno.serve(async (req: Request) => {
    - 「成長」「レベルアップ」「ビルド」「育成」「成長曲線」「育成の幅」などのキーワードがレビュー・aiTags・summary 等で確認できれば、根拠として 'rpg_progression' を考慮してください。
    - ストーリーADVやビジュアルノベルなど、数値的成長要素がほとんど存在しない作品、またはスキルツリーが微かにあるだけでレビュー上成長要素が語られていない作品には付与しないでください。
    - 付与に迷ったときは自分が出力した summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags を見直し、成長・ビルド・育成に関する記述が体験の主役級であると判断できる場合のみ採用してください。
+
+0-f. **featureLabelsV2（FeatureLabel v2）**
+   - 新しい "featureLabelsV2" は FeatureLabel v2 の語彙を表す配列で、以下の一覧からのみ構成してください。
+     ${FEATURE_LABELS_V2_PROMPT}
+   - summary/pros/cons/audience/aiTags の根拠をもとに、AI が v2 スラッグを選んで "featureLabelsV2" に出力すること。 "featureLabels" とは独立したヒントとして扱ってください。
+   - JSON 出力では "featureLabelsV2" に上記一覧のスラッグ（繰り返し可、空配列可）を並べ、空なら "[]" を返してください。
 
 1. **このゲーム「固有の特徴」を抽出すること。**
    - 多くのプレイヤーが繰り返し褒めている点／不満を集中している点を最優先で拾う。
@@ -1161,8 +1178,11 @@ audienceBadges は SearchResultCard の小型ピル。
   "dark_tension" |
   "sci_fi_mystery" |
   "psychological_atmosphere" |
-  "visual_novel"
-] | []
+   "visual_novel"
+] | [],
+  "featureLabelsV2": [
+${FEATURE_LABELS_V2_PROMPT}
+  ] | [],
 
   "pros": ["日本語の強み", ...],
   "cons": ["日本語の弱み", ...],
@@ -1767,6 +1787,11 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   if (audienceNegative.length > 0) {
     normalized.audienceNegative = audienceNegative;
   }
+
+  const normalizedFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
+    parsed?.featureLabelsV2
+  );
+  normalized.featureLabelsV2 = normalizedFeatureLabelsV2;
 
   const featureTagSlugs = normalizeStringArray(parsed?.featureTagSlugs);
   if (featureTagSlugs.length > 0) {

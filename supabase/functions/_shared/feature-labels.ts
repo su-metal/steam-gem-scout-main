@@ -53,7 +53,141 @@ export type FeatureLabel =
   | "sci_fi_mystery"
   | "meditative"
   | "wholesome"
-  | "chaotic_fastpaced";
+  | "chaotic_fastpaced"
+  | "story_driven"
+  | "character_drama";
+
+/**
+ * FeatureLabel V2（次世代ラベル設計）
+ */
+export type FeatureLabelV2 =
+  // === Experience: Calm / Chill / Zen ===
+  | "cozy_experience"
+  | "gentle_exploration"
+  | "light_puzzleplay"
+  | "ambient_mood"
+  | "relaxing_flow"
+  // === Experience: Narrative / Story / Emotion ===
+  | "story_driven"
+  | "emotional_journey"
+  | "character_drama"
+  | "mystery_investigation"
+  | "dialogue_heavy"
+  | "worldbuilding_depth"
+  // === Experience: Strategy / Thinking / Planning ===
+  | "turn_based_tactics"
+  | "deckbuilding_strategy"
+  | "grand_strategy"
+  | "automation_logic"
+  | "colony_management"
+  | "logistics_planning"
+  // === Experience: Action / Adrenaline / Reflex ===
+  | "action_combat"
+  | "precision_shooter"
+  | "mobility_platforming"
+  | "rhythm_action"
+  | "high_intensity_challenge"
+  // === Experience: Quick / Arcade / Short ===
+  | "run_based_structure"
+  | "arcade_actionstyle"
+  | "arcade_shooter"
+  | "quick_puzzle"
+  | "micro_progression"
+  // === Atmosphere ===
+  | "atmospheric_world"
+  | "cozy_tone"
+  | "dark_tension"
+  | "whimsical_vibe"
+  | "sci_fi_atmosphere"
+  | "fantasy_atmosphere"
+  // === Customization / Expression / Social ===
+  | "player_customization"
+  | "environment_customization"
+  | "sandbox_creation"
+  | "light_social_presence"
+  | "shared_activity_feel"
+  | "routine_loop_play"
+  // === Mechanic ===
+  | "character_progression"
+  | "skill_tree_systems"
+  | "loot_and_rewards_loop"
+  | "construction_building"
+  | "resource_management"
+  | "automation_processes"
+  | "colony_simulation"
+  | "exploration_core"
+  | "open_world_structure"
+  | "survival_mechanics"
+  | "real_time_combat"
+  | "tactical_turn_combat"
+  | "precision_control_platforming"
+  | "choice_and_consequence"
+  | "branching_narrative_structure"
+  | "roguelike_run_structure";
+
+export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
+  "cozy_experience",
+  "gentle_exploration",
+  "light_puzzleplay",
+  "ambient_mood",
+  "relaxing_flow",
+  "story_driven",
+  "emotional_journey",
+  "character_drama",
+  "mystery_investigation",
+  "dialogue_heavy",
+  "worldbuilding_depth",
+  "turn_based_tactics",
+  "deckbuilding_strategy",
+  "grand_strategy",
+  "automation_logic",
+  "colony_management",
+  "logistics_planning",
+  "action_combat",
+  "precision_shooter",
+  "mobility_platforming",
+  "rhythm_action",
+  "high_intensity_challenge",
+  "run_based_structure",
+  "arcade_actionstyle",
+  "arcade_shooter",
+  "quick_puzzle",
+  "micro_progression",
+  "atmospheric_world",
+  "cozy_tone",
+  "dark_tension",
+  "whimsical_vibe",
+  "sci_fi_atmosphere",
+  "fantasy_atmosphere",
+  "player_customization",
+  "environment_customization",
+  "sandbox_creation",
+  "light_social_presence",
+  "shared_activity_feel",
+  "routine_loop_play",
+  "character_progression",
+  "skill_tree_systems",
+  "loot_and_rewards_loop",
+  "construction_building",
+  "resource_management",
+  "automation_processes",
+  "colony_simulation",
+  "exploration_core",
+  "open_world_structure",
+  "survival_mechanics",
+  "real_time_combat",
+  "tactical_turn_combat",
+  "precision_control_platforming",
+  "choice_and_consequence",
+  "branching_narrative_structure",
+  "roguelike_run_structure",
+];
+
+const FEATURE_LABELS_V2_SET = new Set<string>(FEATURE_LABELS_V2);
+
+export function isFeatureLabelV2(slug: string): slug is FeatureLabelV2 {
+  return FEATURE_LABELS_V2_SET.has(slug);
+}
 
 /**
  * UI 用の表示名

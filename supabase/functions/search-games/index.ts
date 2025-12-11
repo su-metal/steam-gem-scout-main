@@ -2,13 +2,14 @@
 
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.81.1";
-import type { FeatureLabel, Vibe } from "../_shared/feature-labels.ts";
+import type { FeatureLabel, FeatureLabelV2, Vibe } from "../_shared/feature-labels.ts";
 import { MoodSliderId, MoodVector } from "../_shared/mood.ts";
 import {
   EXPERIENCE_FOCUS_LIST,
   type ExperienceFocus,
   type ExperienceFocusId,
 } from "./experience-focus.ts";
+import { isFeatureLabelV2 } from "../_shared/feature-labels.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -168,14 +169,21 @@ function computeVibeFocusMatchScore(params: {
   primaryVibe: Vibe | null | undefined;
   experienceFocusId: ExperienceFocusId | null | undefined;
   featureLabels: FeatureLabel[] | null | undefined;
+  featureLabelsV2: FeatureLabelV2[] | null | undefined;
 }): number | null {
-  const { primaryVibe, experienceFocusId, featureLabels } = params;
-  if (
-    !primaryVibe ||
-    !experienceFocusId ||
-    !featureLabels ||
-    featureLabels.length === 0
-  ) {
+  const {
+    primaryVibe,
+    experienceFocusId,
+    featureLabels,
+    featureLabelsV2,
+  } = params;
+  if (!primaryVibe || !experienceFocusId) return null;
+
+  const hasV2 =
+    Array.isArray(featureLabelsV2) && featureLabelsV2.length > 0;
+  const hasV1 =
+    Array.isArray(featureLabels) && featureLabels.length > 0;
+  if (!hasV2 && !hasV1) {
     return null;
   }
 
@@ -184,10 +192,14 @@ function computeVibeFocusMatchScore(params: {
 
   const vibeMatches = focus.vibe === primaryVibe;
 
-  const focusSet = new Set<FeatureLabel>(focus.featureLabels);
+  const focusSet = new Set<FeatureLabelV2>(focus.featureLabels);
+  const gameLabels =
+    Array.isArray(featureLabelsV2) && featureLabelsV2.length > 0
+      ? featureLabelsV2
+      : featureLabels ?? [];
   let overlap = 0;
-  for (const label of featureLabels) {
-    if (focusSet.has(label)) {
+  for (const label of gameLabels) {
+    if (focusSet.has(label as FeatureLabelV2)) {
       overlap += 1;
     }
   }
@@ -699,6 +711,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
           )
         : [];
 
+      const analysisFeatureLabelsV2 = Array.isArray(analysisRaw.featureLabelsV2)
+        ? Array.from(
+            new Set(
+              analysisRaw.featureLabelsV2
+                .map((label) =>
+                  typeof label === "string" ? label.trim().toLowerCase() : ""
+                )
+                .filter(
+                  (label): label is FeatureLabelV2 =>
+                    label.length > 0 && isFeatureLabelV2(label)
+                )
+            )
+          )
+        : [];
+      const normalizedAnalysisFeatureLabelsV2 =
+        analysisFeatureLabelsV2.length > 0 ? analysisFeatureLabelsV2 : undefined;
+
       const featureLabels: FeatureLabel[] = Array.isArray(
         g.persistedFeatureLabels
       )
@@ -709,6 +738,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         primaryVibe: body.primaryVibeId ?? null,
         experienceFocusId: body.experienceFocusId ?? null,
         featureLabels,
+        featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
       });
 
       const { focusScore } = computeExperienceFocusScore(
@@ -759,6 +789,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           stabilityTrend,
           hasImprovedSinceLaunch,
           featureLabels: analysisFeatureLabels,
+          featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
           ),
