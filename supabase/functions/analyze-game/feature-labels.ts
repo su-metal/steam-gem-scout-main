@@ -5,65 +5,19 @@ import {
   MOOD_FEATURE_LABELS,
 } from "../_shared/feature-labels.ts";
 
-const ADDITIONAL_STORY_SHORT_FEATURE_LABELS = [
-  "story_driven",
-  "character_drama",
-  "mystery_investigation",
-  "emotional_journey",
-  "dialogue_heavy",
-  "run_based_roguelike",
-  "short_puzzle",
-] as const;
-
-type AdditionalStoryShortFeatureLabel =
-  (typeof ADDITIONAL_STORY_SHORT_FEATURE_LABELS)[number];
-
-export type FeatureLabel =
-  | BaseFeatureLabel
-  | AdditionalStoryShortFeatureLabel;
+export type FeatureLabel = BaseFeatureLabel;
 
 export { FEATURE_LABEL_DISPLAY_NAMES, MECHANIC_FEATURE_LABELS, MOOD_FEATURE_LABELS };
 
-const GLOBAL_FEATURE_LABEL_MIN = 3;
-const GLOBAL_FEATURE_LABEL_SOFT_MAX = 6;
 const GLOBAL_FEATURE_LABEL_HARD_MAX = 12;
-
-const STRONG_STORY_TAGS = [
-  "visual novel",
-  "story rich",
-  "narrative",
-  "interactive fiction",
-  "choices matter",
-  "multiple endings",
-  "social deduction",
-];
-
-const WEAK_STORY_TAGS = ["mystery", "investigation", "detective", "psychological", "drama", "emotional"];
-
-const STORY_PENALTY_TAGS = ["sports", "racing", "fighting", "simulation", "shooter"];
 
 const DECK_TAGS = ["deckbuilding", "deck builder", "deck-card"];
 const CARD_TAGS = ["card", "card battle", "card game", "tactics card"];
 const ROGUE_TAGS = ["roguelike", "roguelite", "rogue lite", "run-based", "permadeath"];
 
-const STORY_LABEL_PRIORITY: FeatureLabel[] = [
-  "story_driven" as FeatureLabel,
-  "character_drama" as FeatureLabel,
-  "mystery_investigation" as FeatureLabel,
-  "emotional_journey" as FeatureLabel,
-  "dialogue_heavy" as FeatureLabel,
-  "visual_novel" as FeatureLabel,
-];
-
-const STORY_HEAVY_FALLBACK_LABELS: FeatureLabel[] = [
-  "story_driven" as FeatureLabel,
-  "emotional_journey" as FeatureLabel,
-];
-
 const ALL_FEATURE_SLUGS = new Set<FeatureLabel>([
   ...MECHANIC_FEATURE_LABELS,
   ...MOOD_FEATURE_LABELS,
-  ...ADDITIONAL_STORY_SHORT_FEATURE_LABELS,
 ]);
 
 interface AudienceSummarySegment {
@@ -84,6 +38,7 @@ export interface SummaryContextInput {
 }
 
 export interface SummaryContextFlags {
+  // 補正ロジックを廃止したため、フラグは未使用のダミー
   hasStorySignals: boolean;
   hasStrategySignals: boolean;
   hasActionSignals: boolean;
@@ -94,56 +49,18 @@ export interface SummaryContextFlags {
 }
 
 const SUMMARY_CONTEXT_KEYWORDS: Record<keyof SummaryContextFlags, string[]> = {
-  hasStorySignals: ["ストーリー", "物語", "シナリオ", "キャラクター", "ドラマ", "visual novel", "story driven"],
-  hasStrategySignals: ["戦略", "タクティクス", "tactics", "ターン制", "資源", "管理", "マネージャー", "resource", "strategy"],
-  hasActionSignals: ["戦闘", "アクション", "反応", "シューティング", "コンボ", "攻撃", "high intensity", "skill", "fight"],
-  hasPuzzleSignals: ["パズル", "謎解き", "ロジック", "パターン", "数独", "puzzle", "riddle"],
-  hasChillSignals: ["癒やし", "癒し", "リラックス", "落ち着く", "ゆったり", "チル", "BGM", "ambient", "calm", "relax"],
-  hasProductivitySignals: ["作業", "勉強", "集中", "時間管理", "タイマー", "ポモドーロ", "todo", "タスク", "フォーカス", "生産性", "進捗"],
-  hasCustomizationSignals: ["アバター", "部屋", "インテリア", "カスタマイズ", "装飾", "家具", "衣装", "コーデ"],
+  hasStorySignals: [],
+  hasStrategySignals: [],
+  hasActionSignals: [],
+  hasPuzzleSignals: [],
+  hasChillSignals: [],
+  hasProductivitySignals: [],
+  hasCustomizationSignals: [],
 };
 
-const PRODUCTIVITY_ALLOWED_LABELS: FeatureLabel[] = [
-  "cozy",
-  "relaxing",
-  "calm_exploration",
-  "atmospheric",
-  "meditative",
-  "wholesome",
-  "short_puzzle",
-  "puzzle_solving",
-];
-
-const PRODUCTIVITY_BLOCKED_LABELS: FeatureLabel[] = [
-  "crafting",
-  "base_building",
-  "survival_loop",
-  "exploration_core",
-  "procedural_generation",
-  "roguelike_structure",
-  "combat_focused",
-  "high_skill_action",
-  "platforming",
-  "deckbuilding",
-  "turn_based_tactics",
-  "resource_management",
-  "automation_systems",
-  "colony_management",
-  "farming_life_sim",
-  "rpg_progression",
-  "stealth_gameplay",
-  "vehicle_driving",
-  "coop_core",
-  "rhythm_action",
-  "visual_novel",
-  "sports_gameplay",
-  "story_driven" as FeatureLabel,
-  "character_drama" as FeatureLabel,
-  "mystery_investigation" as FeatureLabel,
-  "emotional_journey" as FeatureLabel,
-  "dialogue_heavy" as FeatureLabel,
-  "run_based_roguelike" as FeatureLabel,
-];
+// Productivity 補正は廃止のため未使用ダミー
+const PRODUCTIVITY_ALLOWED_LABELS: FeatureLabel[] = [];
+const PRODUCTIVITY_BLOCKED_LABELS: FeatureLabel[] = [];
 
 interface LabelPolicy {
   allowed: Set<FeatureLabel> | null;
@@ -177,69 +94,36 @@ function collectAudienceTextSegments(
 export function buildSummaryContextFlags(
   input: SummaryContextInput
 ): SummaryContextFlags {
-  const parts: string[] = [];
-  if (input.summary) parts.push(input.summary);
-  if (input.labels) parts.push(...input.labels);
-  if (input.pros) parts.push(...input.pros);
-  if (input.cons) parts.push(...input.cons);
-  parts.push(...collectAudienceTextSegments(input.audiencePositive));
-  parts.push(...collectAudienceTextSegments(input.audienceNeutral));
-  parts.push(...collectAudienceTextSegments(input.audienceNegative));
-  const combined = parts.join(" ").toLowerCase();
-
-  const flags: SummaryContextFlags = {
-    hasStorySignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasStorySignals),
-    hasStrategySignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasStrategySignals),
-    hasActionSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasActionSignals),
-    hasPuzzleSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasPuzzleSignals),
-    hasChillSignals: containsAnyKeyword(combined, SUMMARY_CONTEXT_KEYWORDS.hasChillSignals),
-    hasProductivitySignals: containsAnyKeyword(
-      combined,
-      SUMMARY_CONTEXT_KEYWORDS.hasProductivitySignals
-    ),
-    hasCustomizationSignals: containsAnyKeyword(
-      combined,
-      SUMMARY_CONTEXT_KEYWORDS.hasCustomizationSignals
-    ),
+  // 補正ロジックを廃止したため、ダミーのフラグを返す
+  return {
+    hasStorySignals: false,
+    hasStrategySignals: false,
+    hasActionSignals: false,
+    hasPuzzleSignals: false,
+    hasChillSignals: false,
+    hasProductivitySignals: false,
+    hasCustomizationSignals: false,
   };
-
-  return flags;
 }
 
 function determineLabelPolicy(
   ctx: SummaryContextFlags
 ): LabelPolicy {
-  const banned = new Set<FeatureLabel>();
-  let allowed: Set<FeatureLabel> | null = null;
-
-  const isProductivityToolish =
-    (ctx.hasProductivitySignals || ctx.hasCustomizationSignals) &&
-    !ctx.hasActionSignals &&
-    !ctx.hasPuzzleSignals &&
-    !ctx.hasStrategySignals &&
-    !ctx.hasStorySignals;
-
-  if (isProductivityToolish) {
-    allowed = new Set(PRODUCTIVITY_ALLOWED_LABELS);
-    for (const label of PRODUCTIVITY_BLOCKED_LABELS) {
-      banned.add(label);
-    }
-  }
-
-  return { allowed, banned };
+  // どんなコンテキストでも補正しない
+  return {
+    allowed: null,
+    banned: new Set<FeatureLabel>(),
+  };
 }
 
 function applyLabelPolicy(
   candidates: FeatureLabel[],
   policy: LabelPolicy
 ): FeatureLabel[] {
-  const allowed = policy.allowed;
   const seen = new Set<FeatureLabel>();
   const result: FeatureLabel[] = [];
 
   for (const label of candidates) {
-    if (policy.banned.has(label)) continue;
-    if (allowed && !allowed.has(label)) continue;
     if (seen.has(label)) continue;
     seen.add(label);
     result.push(label);
@@ -247,15 +131,6 @@ function applyLabelPolicy(
 
   return result;
 }
-
-const STORY_HEAVY_IGNORED_LABELS = new Set<FeatureLabel>([
-  "deckbuilding" as FeatureLabel,
-  "turn_based_tactics" as FeatureLabel,
-  "resource_management" as FeatureLabel,
-  "automation_systems" as FeatureLabel,
-  "colony_management" as FeatureLabel,
-  "roguelike_structure" as FeatureLabel,
-]);
 
 const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   crafting: "crafting",
@@ -285,9 +160,6 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   logic: "puzzle_solving",
   "deckbuilder": "deckbuilding",
   "card game": "deckbuilding",
-  tactic: "turn_based_tactics",
-  tactics: "turn_based_tactics",
-  strategy: "turn_based_tactics",
   management: "resource_management",
   economy: "resource_management",
   automation: "automation_systems",
@@ -308,7 +180,6 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   rhythm: "rhythm_action",
   "music game": "rhythm_action",
   "visual novel": "visual_novel",
-  visceral: "visual_novel",
   sports: "sports_gameplay",
   football: "sports_gameplay",
   soccer: "sports_gameplay",
@@ -322,6 +193,13 @@ const AI_TAG_TO_FEATURE_LABEL: Record<string, FeatureLabel> = {
   meditative: "meditative",
   wholesome: "wholesome",
   chaos: "chaotic_fastpaced",
+  psychological: "psychological_atmosphere",
+  "psychological horror": "psychological_atmosphere",
+  "branching choice": "branching_choice",
+  branching: "branching_choice",
+  choice: "branching_choice",
+  microprogression: "micro_progression",
+  "micro progression": "micro_progression",
 };
 
 const TEXT_HINTS: Array<{
@@ -330,39 +208,27 @@ const TEXT_HINTS: Array<{
 }> = [
   {
     label: "visual_novel",
-    keywords: ["ビジュアルノベル", "visual novel", "ヴィジュアルノベル", "文字読み", "テキスト主導"],
-  },
-  {
-    label: "story_driven",
-    keywords: ["ストーリー", "物語", "物語主導", "story driven"],
-  },
-  {
-    label: "character_drama",
-    keywords: ["キャラクター", "人間関係", "ドラマ", "感情描写", "関係性"],
-  },
-  {
-    label: "mystery_investigation",
-    keywords: ["推理", "ミステリー", "謎解き", "調査", "真相"],
-  },
-  {
-    label: "emotional_journey",
-    keywords: ["感情", "泣ける", "エモーショナル", "心が揺さぶる", "涙"],
-  },
-  {
-    label: "dialogue_heavy",
-    keywords: ["会話", "掛け合い", "対話", "シナリオ"],
-  },
-  {
-    label: "run_based_roguelike",
-    keywords: ["周回", "ループ", "リプレイ", "ラン", "run based", "run-based", "リトライ"],
+    keywords: ["ビジュアルノベル", "visual novel", "ヴィジュアルノベル"],
   },
   {
     label: "deckbuilding",
     keywords: ["デッキ構築", "カード構築", "カードデッキ", "カードゲーム", "deckbuilding"],
   },
   {
-    label: "short_puzzle",
-    keywords: ["短時間", "隙間時間", "スキマ時間", "短いセッション"],
+    label: "emotional_journey",
+    keywords: ["感情", "泣ける", "エモーショナル", "心が揺さぶる", "涙", "感情の旅"],
+  },
+  {
+    label: "branching_choice",
+    keywords: ["分岐", "選択肢", "マルチエンディング", "選択によって", "枝分かれ"],
+  },
+  {
+    label: "psychological_atmosphere",
+    keywords: ["心理", "精神的", "psychological", "サイコ", "雰囲気ホラー"],
+  },
+  {
+    label: "micro_progression",
+    keywords: ["小刻み", "ミクロな進行", "小さな成長", "micro progression", "少しずつ進む"],
   },
   {
     label: "cozy",
@@ -452,131 +318,27 @@ function deriveFeatureLabelsFromText(
   return derived;
 }
 
-function computeStoryScore(tags: string[]): number {
-  let score = 0;
-  for (const tag of tags) {
-    if (STRONG_STORY_TAGS.some((keyword) => tag.includes(keyword))) {
-      score += 2;
-    }
-    if (WEAK_STORY_TAGS.some((keyword) => tag.includes(keyword))) {
-      score += 1;
-    }
-    if (STORY_PENALTY_TAGS.some((keyword) => tag.includes(keyword))) {
-      score -= 1;
-    }
-  }
-  return score;
-}
-
-function isStoryHeavyGame(aiTags: string[] | null | undefined): boolean {
-  const tags = normalizeTagList(aiTags);
-  const score = computeStoryScore(tags);
-  return score >= 3;
-}
-
-function ensureStoryOrder(labels: FeatureLabel[], storyHeavy: boolean): FeatureLabel[] {
-  if (!storyHeavy) return labels;
-
-  const storySet = new Set(STORY_LABEL_PRIORITY);
-  const storyLabels = labels.filter((label) => storySet.has(label));
-  const others = labels.filter((label) => !storySet.has(label));
-
-  if (storyLabels.length === 0) {
-    return [...STORY_HEAVY_FALLBACK_LABELS, ...others];
-  }
-
-  return [...storyLabels, ...others];
-}
-
-function truncateToLimit(labels: FeatureLabel[], limit: number): FeatureLabel[] {
-  if (labels.length <= limit) return labels;
-  const storySet = new Set(STORY_LABEL_PRIORITY);
-  const storyPart = labels.filter((label) => storySet.has(label));
-  const rest = labels.filter((label) => !storySet.has(label));
-  return [...storyPart, ...rest].slice(0, limit);
-}
-
-function fillFromFallback(
-  labels: FeatureLabel[],
-  candidates: FeatureLabel[],
-  minCount: number
-  ,
-  banned?: Set<FeatureLabel>
-): FeatureLabel[] {
-  const next = [...labels];
-  for (const candidate of candidates) {
-    if (banned && banned.has(candidate)) continue;
-    if (next.length >= minCount) break;
-    if (!next.includes(candidate)) {
-      next.push(candidate);
-    }
-  }
-  return next;
-}
-
 function ensureMinimumLabels(
   labels: FeatureLabel[],
-  aiTags: string[] | null | undefined,
-  storyHeavy: boolean,
-  banned?: Set<FeatureLabel>
+  _aiTags: string[] | null | undefined,
+  _storyHeavy: boolean,
+  _banned?: Set<FeatureLabel>
 ): FeatureLabel[] {
-  let next = [...labels];
+  // Story Heavy の補正は廃止。重複除去とハード上限のみ。
+  const seen = new Set<FeatureLabel>();
+  const result: FeatureLabel[] = [];
 
-  if (next.length < GLOBAL_FEATURE_LABEL_MIN) {
-    if (storyHeavy) {
-      next = fillFromFallback(
-        next,
-        STORY_HEAVY_FALLBACK_LABELS,
-        GLOBAL_FEATURE_LABEL_MIN,
-        banned
-      );
-    } else {
-      next = fillFromFallback(
-        next,
-        STORY_HEAVY_FALLBACK_LABELS,
-        GLOBAL_FEATURE_LABEL_MIN,
-        banned
-      );
-    }
+  for (const label of labels) {
+    if (seen.has(label)) continue;
+    seen.add(label);
+    result.push(label);
   }
 
-  next = ensureStoryOrder(next, storyHeavy);
-
-  next = truncateToLimit(next, GLOBAL_FEATURE_LABEL_SOFT_MAX);
-  next = truncateToLimit(next, GLOBAL_FEATURE_LABEL_HARD_MAX);
-
-  return next;
-}
-
-function addStoryLabels(result: Set<FeatureLabel>, tags: string[]): void {
-  const hasVisualNovel = tags.some((t) => t.includes("visual novel"));
-  const hasSocialDeduction = tags.some((t) => t.includes("social deduction"));
-  const hasMystery = tags.some((t) => t.includes("mystery") || t.includes("investigation"));
-  const hasEmotional = tags.some((t) => t.includes("emotional"));
-
-  if (hasVisualNovel) {
-    result.add("story_driven" as FeatureLabel);
-    result.add("character_drama" as FeatureLabel);
-    result.add("dialogue_heavy" as FeatureLabel);
+  if (result.length > GLOBAL_FEATURE_LABEL_HARD_MAX) {
+    return result.slice(0, GLOBAL_FEATURE_LABEL_HARD_MAX);
   }
 
-  if (hasSocialDeduction) {
-    result.add("social_deduction_narrative" as FeatureLabel);
-    result.add("mystery_investigation" as FeatureLabel);
-  }
-
-  if (hasMystery) {
-    result.add("mystery_investigation" as FeatureLabel);
-  }
-
-  if (hasEmotional) {
-    result.add("emotional_journey" as FeatureLabel);
-  }
-
-  if (![...result].some((label) => STORY_LABEL_PRIORITY.includes(label))) {
-    result.add("story_driven" as FeatureLabel);
-    result.add("emotional_journey" as FeatureLabel);
-  }
+  return result;
 }
 
 function shouldAddDeckbuilding(tags: string[]): boolean {
@@ -594,7 +356,6 @@ export function mapAiTagsToFeatureLabels(
   featureTagSlugs?: string[] | null | undefined
 ): FeatureLabel[] {
   const normalizedAiTags = normalizeTagList(aiTags);
-  const storyHeavy = isStoryHeavyGame(normalizedAiTags);
   const result = new Set<FeatureLabel>();
 
   if (Array.isArray(featureTagSlugs)) {
@@ -606,36 +367,10 @@ export function mapAiTagsToFeatureLabels(
     }
   }
 
-  if (storyHeavy) {
-    addStoryLabels(result, normalizedAiTags);
-  }
-
   if (normalizedAiTags.length > 0) {
     for (const raw of normalizedAiTags) {
       if (!raw) continue;
-      if (storyHeavy && STORY_HEAVY_IGNORED_LABELS.has(raw as FeatureLabel)) {
-        continue;
-      }
 
-      if (raw.includes("puzzle")) {
-        result.add("light_puzzle" as FeatureLabel);
-      }
-      if (raw.includes("craft")) {
-        result.add(storyHeavy ? ("cozy_life_crafting" as FeatureLabel) : "crafting");
-      }
-      if (raw.includes("explore")) {
-        result.add("exploration_core");
-      }
-      if (raw.includes("cozy") || raw.includes("relax") || raw.includes("ambient")) {
-        result.add("cozy" as FeatureLabel);
-        result.add("ambient_experience" as FeatureLabel);
-      }
-      if (raw.includes("deckbuilding") && shouldAddDeckbuilding(normalizedAiTags)) {
-        result.add("deckbuilding" as FeatureLabel);
-      }
-      if (raw.includes("rogue") && shouldAddRoguelike(normalizedAiTags)) {
-        result.add("run_based_roguelike" as FeatureLabel);
-      }
       const mapped = AI_TAG_TO_FEATURE_LABEL[raw];
       if (mapped) {
         result.add(mapped);
@@ -644,7 +379,7 @@ export function mapAiTagsToFeatureLabels(
   }
 
   const labels = Array.from(result);
-  return ensureMinimumLabels(labels, aiTags, storyHeavy);
+  return ensureMinimumLabels(labels, aiTags, false);
 }
 
 export function buildFeatureLabelsFromAnalysis(
@@ -668,27 +403,6 @@ export function buildFeatureLabelsFromAnalysis(
   const summaryExisting = new Set<FeatureLabel>(normalizedFromAnalysis);
   const summaryDerived = deriveFeatureLabelsFromText(summaryPieces, summaryExisting);
 
-  if (
-    summaryCtx.hasStorySignals &&
-    !summaryCtx.hasActionSignals &&
-    !summaryCtx.hasStrategySignals &&
-    !summaryCtx.hasPuzzleSignals
-  ) {
-    const storyPriority: FeatureLabel[] = [
-      "story_driven",
-      "character_drama",
-      "emotional_journey",
-      "mystery_investigation",
-      "dialogue_heavy",
-      "visual_novel",
-    ];
-    for (const label of storyPriority) {
-      if (summaryExisting.has(label)) continue;
-      summaryDerived.push(label);
-      summaryExisting.add(label);
-    }
-  }
-
   const reinforcementExisting = new Set<FeatureLabel>([
     ...normalizedFromAnalysis,
     ...summaryDerived,
@@ -708,7 +422,19 @@ export function buildFeatureLabelsFromAnalysis(
   ];
 
   const filtered = applyLabelPolicy(combinedCandidates, policy);
-  const storyHeavy = isStoryHeavyGame(aiTags);
 
-  return ensureMinimumLabels(filtered, aiTags, storyHeavy, policy.banned);
+  const ensured = ensureMinimumLabels(filtered, aiTags, false);
+
+  const rawAnalysisSet = new Set(
+    (analysisFeatureLabels ?? [])
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter(Boolean)
+  );
+
+  const safeResult = ensured.filter((label) => {
+    if (label !== "turn_based_tactics") return true;
+    return rawAnalysisSet.has("turn_based_tactics");
+  });
+
+  return safeResult;
 }

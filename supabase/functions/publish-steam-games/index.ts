@@ -779,7 +779,7 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
           ? (existing as any).feature_labels.filter(
               (label): label is string =>
                 typeof label === "string" && label.trim().length > 0
-            )
+          )
           : [];
         const dataFeatureLabels: string[] = Array.isArray(
           previousData.featureLabels
@@ -789,9 +789,21 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
                 typeof label === "string" && label.trim().length > 0
             )
           : [];
-        const mergedFeatureLabels = Array.from(
-          new Set([...dataFeatureLabels, ...persistedFeatureLabels])
-        );
+        const analysisFeatureLabels: string[] =
+          previousData?.analysis &&
+          Array.isArray((previousData as any).analysis?.featureLabels)
+            ? ((previousData as any).analysis.featureLabels as any[])
+                .map((label: any) =>
+                  typeof label === "string" ? label.trim() : ""
+                )
+                .filter((label: string) => label.length > 0)
+            : [];
+        const carriedFeatureLabels =
+          analysisFeatureLabels.length > 0
+            ? analysisFeatureLabels
+            : dataFeatureLabels.length > 0
+            ? dataFeatureLabels
+            : persistedFeatureLabels;
 
         rankingGameForUpdate = {
           ...rankingGame,
@@ -807,11 +819,10 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
             previousData.mood_scores !== undefined
               ? previousData.mood_scores
               : rankingGame.mood_scores,
-          // NOTE: keep the already-sanitized featureLabels instead of overwriting them
-          // when the importer refreshes an existing cache row.
+          // 最新の解析結果に基づく featureLabels を優先的に保持する
           featureLabels:
-            mergedFeatureLabels.length > 0
-              ? mergedFeatureLabels
+            carriedFeatureLabels.length > 0
+              ? carriedFeatureLabels
               : (rankingGame as any).featureLabels,
           // headerImage は既存があれば優先し、無い場合は今回計算したものを使う
           headerImage:
@@ -1150,27 +1161,29 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         )
       );
 
-      const mergedFeatureLabels = Array.from(
-        new Set([...existingFeatureLabels, ...normalizedFeatureLabels])
-      );
+      // AI が空配列を返した場合のみ、既存の featureLabels を温存する。
+      const finalFeatureLabels =
+        normalizedFeatureLabels.length > 0
+          ? normalizedFeatureLabels
+          : existingFeatureLabels;
 
-      if (mergedFeatureLabels.length > 0) {
+      if (finalFeatureLabels.length > 0) {
         updatedData.analysis = {
           ...(updatedData.analysis ?? {}),
-          featureLabels: mergedFeatureLabels,
+          featureLabels: finalFeatureLabels,
         };
       }
 
       // NOTE: analysis.featureLabels was being returned but never written back into
       // game_rankings_cache.data, so the cached JSON stayed stale despite fresh AI output.
-      updatedData.featureLabels = mergedFeatureLabels;
+      updatedData.featureLabels = finalFeatureLabels;
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
         .update({
           data: updatedData,
           tags: finalTagsForGame,
-          feature_labels: mergedFeatureLabels,
+          feature_labels: finalFeatureLabels,
         })
         .eq("id", existing.id);
 

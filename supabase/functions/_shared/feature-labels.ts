@@ -22,6 +22,7 @@ export type FeatureLabel =
   | "platforming"
   | "puzzle_solving"
   | "deckbuilding"
+  | "run_based_roguelike"
   | "turn_based_tactics"
   | "resource_management"
   | "automation_systems"
@@ -34,6 +35,8 @@ export type FeatureLabel =
   | "rhythm_action"
   | "visual_novel"
   | "sports_gameplay"
+  | "branching_choice"
+  | "micro_progression"
   // === Mood (12) ===
   | "cozy"
   | "relaxing"
@@ -44,6 +47,9 @@ export type FeatureLabel =
   | "horror_tinged"
   | "isolation"
   | "emotional_narrative"
+  | "emotional_journey"
+  | "psychological_atmosphere"
+  | "sci_fi_mystery"
   | "meditative"
   | "wholesome"
   | "chaotic_fastpaced";
@@ -64,6 +70,7 @@ export const FEATURE_LABEL_DISPLAY_NAMES: Record<FeatureLabel, string> = {
   platforming: "プラットフォーム要素",
   puzzle_solving: "パズル要素",
   deckbuilding: "デッキ構築",
+  run_based_roguelike: "ランベースのローグライク",
   turn_based_tactics: "ターン制戦術",
   resource_management: "資源管理",
   automation_systems: "自動化システム",
@@ -76,6 +83,8 @@ export const FEATURE_LABEL_DISPLAY_NAMES: Record<FeatureLabel, string> = {
   rhythm_action: "リズムアクション",
   visual_novel: "ビジュアルノベル",
   sports_gameplay: "スポーツゲーム要素",
+  branching_choice: "分岐選択重視",
+  micro_progression: "小刻みな進行",
 
   // === Mood ===
   cozy: "ほのぼの・コージー",
@@ -87,6 +96,9 @@ export const FEATURE_LABEL_DISPLAY_NAMES: Record<FeatureLabel, string> = {
   horror_tinged: "ホラー要素",
   isolation: "孤独感",
   emotional_narrative: "感情的・物語重視",
+  emotional_journey: "感情の旅路",
+  psychological_atmosphere: "心理的な雰囲気",
+  sci_fi_mystery: "SFミステリ",
   meditative: "瞑想的・静謐",
   wholesome: "優しい・ほっこり",
   chaotic_fastpaced: "カオス・高速展開",
@@ -108,6 +120,7 @@ export const MECHANIC_FEATURE_LABELS: FeatureLabel[] = [
   "platforming",
   "puzzle_solving",
   "deckbuilding",
+  "run_based_roguelike",
   "turn_based_tactics",
   "resource_management",
   "automation_systems",
@@ -120,6 +133,8 @@ export const MECHANIC_FEATURE_LABELS: FeatureLabel[] = [
   "rhythm_action",
   "visual_novel",
   "sports_gameplay",
+  "branching_choice",
+  "micro_progression",
 ];
 
 /**
@@ -135,6 +150,9 @@ export const MOOD_FEATURE_LABELS: FeatureLabel[] = [
   "horror_tinged",
   "isolation",
   "emotional_narrative",
+  "emotional_journey",
+  "psychological_atmosphere",
+  "sci_fi_mystery",
   "meditative",
   "wholesome",
   "chaotic_fastpaced",

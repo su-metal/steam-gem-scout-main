@@ -206,41 +206,24 @@ function hasCardTerms(corpus: string): boolean {
   return cardPatterns.some((kw) => lower.includes(kw));
 }
 
+// deckbuilding / run_based_roguelike 系のタグ・FeatureLabel を強制で削る補正 です。
 function applyDeckbuilderAndRoguelikeSafety(
   aiTags: string[] | null | undefined,
   featureLabels: string[] | null | undefined,
-  corpus: string
+  _corpus: string
 ): { aiTags: string[]; featureLabels: string[] } {
   const cleanedAiTags = (aiTags ?? []).map((t) => t.trim()).filter(Boolean);
   const cleanedFeatureLabels = (featureLabels ?? [])
     .map((t) => t.trim())
     .filter(Boolean);
 
-  const hasCards = hasCardTerms(corpus);
-
-  let safeAiTags = cleanedAiTags;
-  let safeFeatureLabels = cleanedFeatureLabels;
-
-  if (!hasCards) {
-    const aiLower = cleanedAiTags.map((t) => t.toLowerCase());
-    safeAiTags = cleanedAiTags.filter((_, i) => {
-      const v = aiLower[i];
-      return !v.includes("deckbuild");
-    });
-
-    const flLower = cleanedFeatureLabels.map((t) => t.toLowerCase());
-    safeFeatureLabels = cleanedFeatureLabels.filter((_, i) => {
-      const v = flLower[i];
-      return (
-        v !== "deckbuilding" &&
-        v !== "deckbuilding_strategy" &&
-        v !== "run_based_roguelike"
-      );
-    });
-  }
-
-  return { aiTags: safeAiTags, featureLabels: safeFeatureLabels };
+  // 安全装置は無効化し、トリムと空文字除去のみで返す
+  return {
+    aiTags: cleanedAiTags,
+    featureLabels: cleanedFeatureLabels,
+  };
 }
+
 
 function isProductivityLikeTitle(ctx: TagSafetyContext): boolean {
   const text = (ctx.corpus ?? "").toLowerCase();
@@ -295,54 +278,19 @@ function sanitizeStoryLabelsForProductivity(
   ctx: TagSafetyContext,
   featureLabels: FeatureLabel[]
 ): FeatureLabel[] {
-  if (!isProductivityLikeTitle(ctx)) return featureLabels;
-
-  const bannedStoryLabels: FeatureLabel[] = [
-    "story_driven",
-    "character_drama",
-    "mystery_investigation",
-    "emotional_journey",
-    "dialogue_heavy",
-    "visual_novel",
-  ];
-
-  return featureLabels.filter((label) => !bannedStoryLabels.includes(label));
+  // 文脈による削除は行わない
+  return featureLabels;
 }
 
 function applyCozySafetyFilters(
   input: { featureLabels: FeatureLabel[]; aiTags: string[] },
   ctx: TagSafetyContext
 ): { featureLabels: FeatureLabel[]; aiTags: string[] } {
-  const COZY_FEATURE_LABELS: FeatureLabel[] = [
-    "cozy",
-    "relaxing",
-    "calm_exploration",
-    "atmospheric",
-    "meditative",
-    "wholesome",
-    "short_puzzle",
-    "puzzle_solving",
-  ];
-
-  const COZY_AI_TAGS = ["Cozy", "Relaxing", "Relaxing,", "Wholesome"];
-
-  const looksClearlyCozy =
-    ctx.cozyKeywordHits >= 3 && ctx.stressKeywordHits === 0;
-
-  if (looksClearlyCozy) {
-    return input;
-  }
-
-  const featureLabels = input.featureLabels.filter(
-    (label) => !COZY_FEATURE_LABELS.includes(label)
-  );
-
-  const aiTags = input.aiTags.filter((tag) => {
-    const lower = tag.toLowerCase();
-    return !COZY_AI_TAGS.some((cozyTag) => cozyTag.toLowerCase() === lower);
-  });
-
-  return { featureLabels, aiTags };
+  // Cozy 判定によるフィルタは行わない。入力をそのまま返す。
+  return {
+    featureLabels: input.featureLabels,
+    aiTags: input.aiTags,
+  };
 }
 
 interface HiddenGemAnalysis {
@@ -782,6 +730,38 @@ Deno.serve(async (req: Request) => {
 
 ### CRITICAL GUIDELINES
 
+0. **featureLabels 決定の手順（必ずこの順序）**
+   1) レビュー本文と aiTags を読み、ジャンル・メカニクス・テンポ・雰囲気・難易度・ストーリー性を把握する。
+   2) その理解にもとづいて summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags を出力する。
+   3) 最後に「自分が出力した summary / labels / pros / cons / audience* / aiTags だけ」を根拠として featureLabels を決定する。
+      - summary 等に書いていない概念を featureLabels だけに付け足してはならない。
+      - summary と矛盾するラベルは禁止。矛盾があれば featureLabels を修正する。
+
+0-b. **featureLabels の根拠ルール**
+   - 各ラベルには必ず次のいずれかの根拠が必要：summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags に対応する明記があること。
+   - 根拠が一切ないラベルは採用しない。
+   - 特に `rpg_progression` では、summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags のどこかに「成長」「レベルアップ」「ビルド」などが明記されなければ採用しないこと。
+
+0-c. **フォーマット系ラベルの厳密条件（例）**
+   - visual_novel: 主な操作が「テキストを読む＋選択肢」。summary/labels/pros 等にビジュアルノベル記述がある、または aiTags に Visual Novel がある。3Dアクション主体なら付与禁止。
+   - run_based_roguelike: 周回（ラン）前提の構造が summary/pros/labels に明記。aiTags の Roguelike/Lite は強根拠だが、テキスト裏付けも必須。
+   - deckbuilding: カードを集めてデッキを構築することが summary/pros/labels に明記。aiTags だけでは不可。
+   - turn_based_tactics: ターン制でユニットを配置・移動し戦術を組む構造が summary/labels に明記。単なるターン制会話やカードゲームには付与しない。
+   - sports_arena（競技系）: チーム操作の競技アリーナが体験の中心であることが summary/labels/pros に明記。ミニゲーム的要素だけなら付与禁止。
+
+0-d. **エビデンススコア方式（内部で一貫性をもって実装）**
+   - +3: analysis.featureLabels に含まれる
+   - +2: aiTags に強く対応するタグがある
+   - +1〜+3: summary / labels / pros / cons / audience に対応表現がどれだけ多いか
+   - 合計が閾値未満のラベルは採用しない。スコア降順に並べ、上限を超える場合は弱いものから削る。
+
+0-e. **`rpg_progression` ラベルの付与条件**
+   - `rpg_progression` は「RPG的な成長・ビルド・数値の伸び」を表すラベルで、レベルアップ・経験値・ステータス強化・スキル習得・クラスチェンジ・装備更新などが体験の中心になる作品にのみ付与してください。
+   - 装備やステータスの更新、ビルドの試行錯誤がレビューや summary / labels / pros / cons / audiencePositive / audienceNegative のいずれかで繰り返し語られていれば、強い根拠になります。
+   - 「成長」「レベルアップ」「ビルド」「育成」「成長曲線」「育成の幅」などのキーワードがレビュー・aiTags・summary 等で確認できれば、根拠として `rpg_progression` を考慮してください。
+   - ストーリーADVやビジュアルノベルなど、数値的成長要素がほとんど存在しない作品、またはスキルツリーが微かにあるだけでレビュー上成長要素が語られていない作品には付与しないでください。
+   - 付与に迷ったときは自分が出力した summary / labels / pros / cons / audiencePositive / audienceNeutral / audienceNegative / aiTags を見直し、成長・ビルド・育成に関する記述が体験の主役級であると判断できる場合のみ採用してください。
+
 1. **このゲーム「固有の特徴」を抽出すること。**
    - 多くのプレイヤーが繰り返し褒めている点／不満を集中している点を最優先で拾う。
    - 抽出した features を summary / pros / cons / reason / 代表レビュー / audiencePositive / audienceNeutral / audienceNegative の土台にする。
@@ -1140,22 +1120,6 @@ audienceNegative が1件以上ある場合、
   - 個数は 3〜7 個程度を目安とし、無理に水増ししない。
   - 必要なラベルがない場合のみ、空配列 [] を使ってよい。
 
-  【使用可能な FeatureLabel 一覧（抜粋）】
-  - story_driven / character_drama / mystery_investigation / emotional_journey / dialogue_heavy / social_deduction_narrative
-  - cozy_atmosphere / wholesome_chill / ambient_experience / gentle_exploration / light_puzzle / cozy_life_crafting
-  - turn_based_tactics / deckbuilding_strategy / grand_strategy / automation_factory / colony_management
-  - action_combat / precision_shooter / rhythm_action / sports_arena / high_intensity
-  - run_based_roguelike / arcade_action / arcade_shooter / micro_progression / short_puzzle
-  - base_building / crafting / exploration_core / dark_tension / sci_fi_mystery / psychological_atmosphere / visual_novel
-
-  【Story Heavy ゲームの扱い】
-  - summary / labels / pros / audience に物語・キャラクター・推理要素が強く現れている場合、
-    story_driven / character_drama / emotional_journey / mystery_investigation / social_deduction_narrative / visual_novel
-    を優先して選ぶこと。
-
-  - Story Heavy タイトルでは、次のラベルは **強い根拠がない限り付けてはならない**：
-    turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity
-────────────────
 【STORY（物語）系】
 ────────────────
 story_driven  
@@ -1316,13 +1280,12 @@ visual_novel
 ────────────────
 【重要ルール：Story Heavy の特別扱い】
 ────────────────
-- summary / labels に物語・キャラ関係・推理要素が明確に存在する場合、  
-  story_driven / character_drama / emotional_journey / mystery_investigation / social_deduction_narrative  
-  を優先して評価する。
 
-- Story Heavy タイトルでは、以下のラベルは **原則として採用しない**：  
-  turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity  
-  （強い根拠が summary / labels / pros / audience に無い限り付与禁止）
+- 明確な根拠がないかぎり、
+  turn_based_tactics / deckbuilding_strategy / run_based_roguelike / high_intensity
+  を安易に採用してはならない。
+  （カード・デッキ・ローグライク構造・高強度アクションが
+    テキスト上で具体的に説明されている場合のみ選ぶこと）
 
 
 ================================================================
@@ -1357,7 +1320,44 @@ audienceBadges は SearchResultCard の小型ピル。
   "hiddenGemVerdict": "Yes" | "No" | "Unknown",
   "summary": "2〜3文。このゲーム固有の特徴を1つ以上含める客観的説明。",
   "labels": ["日本語ラベル", ...],
-  "featureLabels": ["crafting" | "base_building" | "survival_loop" | "exploration_core" | "procedural_generation" | "roguelike_structure" | "combat_focused" | "high_skill_action" | "platforming" | "puzzle_solving" | "deckbuilding" | "turn_based_tactics" | "resource_management" | "automation_systems" | "colony_management" | "farming_life_sim" | "rpg_progression" | "stealth_gameplay" | "vehicle_driving" | "coop_core" | "rhythm_action" | "visual_novel" | "sports_gameplay" | "cozy" | "relaxing" | "calm_exploration" | "atmospheric" | "tense" | "high_intensity" | "horror_tinged" | "isolation" | "emotional_narrative" | "meditative" | "wholesome" | "chaotic_fastpaced"] | [],
+  "featureLabels": [
+  "story_driven" |
+  "character_drama" |
+  "mystery_investigation" |
+  "emotional_journey" |
+  "dialogue_heavy" |
+  "branching_choice" |
+  "social_deduction_narrative" |
+  "cozy_atmosphere" |
+  "wholesome_chill" |
+  "ambient_experience" |
+  "gentle_exploration" |
+  "light_puzzle" |
+  "cozy_life_crafting" |
+  "turn_based_tactics" |
+  "deckbuilding_strategy" |
+  "grand_strategy" |
+  "automation_factory" |
+  "colony_management" |
+  "action_combat" |
+  "precision_shooter" |
+  "rhythm_action" |
+  "sports_arena" |
+  "high_intensity" |
+  "run_based_roguelike" |
+  "arcade_action" |
+  "arcade_shooter" |
+  "micro_progression" |
+  "short_puzzle" |
+  "base_building" |
+  "crafting" |
+  "exploration_core" |
+  "dark_tension" |
+  "sci_fi_mystery" |
+  "psychological_atmosphere" |
+  "visual_novel"
+] | []
+
   "pros": ["日本語の強み", ...],
   "cons": ["日本語の弱み", ...],
   "riskScore": 1-10,
@@ -1855,9 +1855,7 @@ function normalizeAiTags(raw: any): string[] {
   return deduped;
 }
 
-function isStoryHeavyFromAiTags(
-  aiTags: string[] | null | undefined
-): boolean {
+function isStoryHeavyFromAiTags(aiTags: string[] | null | undefined): boolean {
   if (!aiTags || aiTags.length === 0) return false;
 
   const normalized = aiTags
@@ -1892,9 +1890,7 @@ function isStoryHeavyFromAiTags(
     score += 3;
   }
   if (
-    normalized.some((tag) =>
-      softSignals.some((signal) => tag.includes(signal))
-    )
+    normalized.some((tag) => softSignals.some((signal) => tag.includes(signal)))
   ) {
     score += 1;
   }
@@ -2165,7 +2161,7 @@ function collectAudienceTextSnippets(
 
   for (const segment of segments) {
     if (!segment) continue;
- 
+
     const push = (text?: string | null) => {
       if (typeof text === "string" && text.trim()) {
         snippets.push(text.trim());
