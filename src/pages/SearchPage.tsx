@@ -70,6 +70,7 @@ interface RankingGame {
     full?: string;
     thumbnail?: string;
   }[];
+  experienceFocusScore?: number | null;
 }
 
 // ランダム順生成（将来スコアロジックと組み合わせる前提で分離）
@@ -524,6 +525,9 @@ export default function SearchPage() {
   const primaryVibeId =
     (navigationState?.primaryVibePreset as PrimaryVibeId | undefined) ?? null;
 
+  const experienceFocusId =
+    (navigationState?.experienceClass as string | undefined) ?? null;
+
   // ▼ ヘッダー用テキストカラー（Vibe に応じて）
   const vibeHeaderTextClass =
     VIBE_HEADER_TEXT_CLASS[primaryVibeId ?? "default"];
@@ -730,6 +734,8 @@ export default function SearchPage() {
           excludeEarlyAccess,
           excludeMultiplayerOnly,
           excludeHorror,
+          primaryVibeId,
+          experienceFocusId,
         },
       });
 

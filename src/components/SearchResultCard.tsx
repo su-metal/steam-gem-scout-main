@@ -41,6 +41,7 @@ interface SearchResultCardProps {
   onSelect?: (appId: number) => void;
   vibeLabel?: string;
   experienceFocusLabel?: string;   // 追加: 選択中の Experience Focus 表示用
+  experienceFocusScore?: number | null;
   vibeAccentTextClass?: string;
 }
 

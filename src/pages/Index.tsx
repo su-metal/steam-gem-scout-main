@@ -133,6 +133,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "gentle-exploration", label: "Gentle Exploration" },
     { id: "light-puzzle", label: "Light Puzzle" },
     { id: "relaxed-building", label: "Relaxed Building / Townmaking" },
+    { id: "Ambient Experience", label: "Ambient Experience" },
     { id: "any", label: "Any" },
   ],
   Focus: [
@@ -148,6 +149,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "character-drama", label: "Character Drama" },
     { id: "mystery-investigation", label: "Mystery & Investigation" },
     { id: "emotional-journey", label: "Emotional Journey" },
+    { id: "lore / worldbuilding", label: "Lore / Worldbuilding" },
     { id: "any", label: "Any" },
   ],
   Speed: [

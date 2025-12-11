@@ -42,7 +42,7 @@ interface SearchBody {
   userMood?: Partial<Record<MoodSliderId, number>>;
   vibes?: Partial<Record<MoodSliderId, number>>;
   aiTags?: string[];
-  primaryVibe?: Vibe | null;
+  primaryVibeId?: Vibe | null;
   experienceFocusId?: ExperienceFocusId | null;
 }
 
@@ -202,6 +202,18 @@ function computeVibeFocusMatchScore(params: {
 
   if (score <= 0) return null;
   return score;
+}
+
+interface ExperienceFocusScoreResult {
+  focusScore: number | null;
+}
+
+function computeExperienceFocusScore(
+  _game: unknown,
+  _primaryVibeId: string | null | undefined,
+  _experienceFocusId: string | null | undefined
+): ExperienceFocusScoreResult {
+  return { focusScore: null };
 }
 
 // --- 可変スコア軸用ヘルパー -------------------------
@@ -573,6 +585,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       })
       .filter((g) => g && g.appId != null);
 
+    const primaryVibeId = body.primaryVibeId ?? null;
+    const experienceFocusId = body.experienceFocusId ?? null;
+
     const mapped = rawGames.map((g) => {
       const analysisRaw =
         typeof g.analysis === "string"
@@ -691,10 +706,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : [];
 
       const vibeFocusMatchScore = computeVibeFocusMatchScore({
-        primaryVibe: body.primaryVibe ?? null,
+        primaryVibe: body.primaryVibeId ?? null,
         experienceFocusId: body.experienceFocusId ?? null,
         featureLabels,
       });
+
+      const { focusScore } = computeExperienceFocusScore(
+        g,
+        primaryVibeId,
+        experienceFocusId
+      );
 
       return {
         appId: toNumber(g.appId, 0),
@@ -761,6 +782,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           null,
         featureLabels,
         vibeFocusMatchScore,
+        experienceFocusScore: focusScore,
       };
     });
 
