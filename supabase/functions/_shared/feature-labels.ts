@@ -37,6 +37,7 @@ export type FeatureLabel =
   | "sports_gameplay"
   | "branching_choice"
   | "micro_progression"
+  | "co_op_multiplayer"
   // === Mood (12) ===
   | "cozy"
   | "relaxing"
@@ -85,6 +86,7 @@ export const FEATURE_LABEL_DISPLAY_NAMES: Record<FeatureLabel, string> = {
   sports_gameplay: "スポーツゲーム要素",
   branching_choice: "分岐選択重視",
   micro_progression: "小刻みな進行",
+  co_op_multiplayer: "協力プレイ要素",
 
   // === Mood ===
   cozy: "ほのぼの・コージー",
@@ -102,6 +104,8 @@ export const FEATURE_LABEL_DISPLAY_NAMES: Record<FeatureLabel, string> = {
   meditative: "瞑想的・静謐",
   wholesome: "優しい・ほっこり",
   chaotic_fastpaced: "カオス・高速展開",
+  story_driven: "物語主導体験",
+  character_drama: "キャラクター・ドラマ",
 };
 
 /**
@@ -135,6 +139,7 @@ export const MECHANIC_FEATURE_LABELS: FeatureLabel[] = [
   "sports_gameplay",
   "branching_choice",
   "micro_progression",
+  "co_op_multiplayer",
 ];
 
 /**
@@ -156,6 +161,8 @@ export const MOOD_FEATURE_LABELS: FeatureLabel[] = [
   "meditative",
   "wholesome",
   "chaotic_fastpaced",
+  "story_driven",
+  "character_drama",
 ];
 
 export function isMechanicFeatureLabel(label: FeatureLabel): boolean {
