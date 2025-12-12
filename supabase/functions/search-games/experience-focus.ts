@@ -96,7 +96,7 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     id: "story-reading-centered-story",
     vibe: "story",
     label: "Reading-Centered Story",
-    featureLabels: ["dialogue_heavy", "visual_novel", "emotional_journey"],
+    featureLabels: ["dialogue_heavy", "character_drama", "emotional_journey"],
   },
   {
     id: "story-mystery-investigation",
@@ -135,7 +135,7 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     featureLabels: [
       "character_progression",
       "skill_tree_systems",
-      "combat_focused",
+      "high_intensity_challenge",
       "loot_and_rewards_loop",
     ],
   },
@@ -153,7 +153,7 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     id: "focus-base-and-systems",
     vibe: "focus",
     label: "Base & Systems",
-    featureLabels: ["base_building", "automation_processes", "resource_management"],
+    featureLabels: ["construction_building", "automation_processes", "resource_management"],
   },
   {
     id: "focus-simulation",
