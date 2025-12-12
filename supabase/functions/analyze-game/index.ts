@@ -1709,7 +1709,8 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     parsed?.featureLabelsV2
   );
   const normalizedFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
-    parsed?.featureLabelsV2
+    parsed?.featureLabelsV2,
+    parsed
   );
   normalized.featureLabelsV2 = normalizedFeatureLabelsV2;
   normalized.featureLabelsV2Raw = normalizedFeatureLabelsV2Raw;

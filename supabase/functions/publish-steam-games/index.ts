@@ -1189,14 +1189,21 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
 
       const aiFeatureLabelsV2Candidates = aiCanonicalFeatureLabelsV2;
 
-      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2([
-        ...aiFeatureLabelsV2Candidates,
-        ...persistedFeatureLabelsV2,
-      ]);
-
-      const mergedAnalysis = {
+      const mergedAnalysisBase = {
         ...previousAnalysis,
         ...aiAnalysis,
+      };
+
+      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
+        [
+          ...aiFeatureLabelsV2Candidates,
+          ...persistedFeatureLabelsV2,
+        ],
+        mergedAnalysisBase
+      );
+
+      const mergedAnalysis = {
+        ...mergedAnalysisBase,
         featureLabelsV2: finalFeatureLabelsV2,
         featureLabelsV2Raw: finalFeatureLabelsV2Raw,
       };

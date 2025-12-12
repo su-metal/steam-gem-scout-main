@@ -57,9 +57,111 @@ export function normalizeAnalysisFeatureLabels(
 
   return result;
 }
+function collectAnalysisEvidenceTexts(analysis: any): string[] {
+  if (!analysis || typeof analysis !== "object") return [];
+
+  const gatherStrings = (input?: unknown): string[] => {
+    if (!Array.isArray(input)) return [];
+    return input
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+
+  const texts = [
+    ...gatherStrings(analysis.labels),
+    ...gatherStrings(analysis.pros),
+    ...gatherStrings(analysis.cons),
+  ];
+
+  const addAudienceFields = (audience?: any[]) => {
+    if (!Array.isArray(audience)) return;
+    for (const segment of audience) {
+      if (!segment || typeof segment !== "object") continue;
+      for (const key of [
+        "label",
+        "description",
+        "hitReviewOriginal",
+        "hitReviewParaphrased",
+      ]) {
+        const value = (segment as any)[key];
+        if (typeof value === "string" && value.trim()) {
+          texts.push(value.trim());
+        }
+      }
+    }
+  };
+
+  addAudienceFields(analysis.audiencePositive);
+  addAudienceFields(analysis.audienceNeutral);
+  addAudienceFields(analysis.audienceNegative);
+
+  return texts;
+}
+
+const PLAYER_CUSTOMIZATION_GROUP_KEYWORDS: readonly string[][] = [
+  [
+    "キャラクリ",
+    "キャラクター作成",
+    "外見",
+    "見た目",
+    "髪型",
+    "顔",
+    "衣装",
+    "スキン",
+    "コスメ",
+    "appearance",
+    "character creation",
+    "custom character",
+  ],
+  [
+    "ビルド",
+    "スキルツリー",
+    "パーク",
+    "perk",
+    "特性",
+    "クラス",
+    "成長方針",
+    "build",
+    "skill tree",
+    "trait",
+  ],
+  [
+    "ロードアウト",
+    "装備構成",
+    "武器構成",
+    "装備セット",
+    "カスタム",
+    "loadout",
+    "gear setup",
+    "equipment",
+  ],
+];
+
+const normalizedKeywords = PLAYER_CUSTOMIZATION_GROUP_KEYWORDS.map((group) =>
+  group.map((keyword) => keyword.toLowerCase())
+);
+
+function matchesGroup(text: string, keywords: readonly string[]): boolean {
+  const lower = text.toLowerCase();
+  return keywords.some((keyword) => lower.includes(keyword));
+}
+
+export function shouldKeepPlayerCustomization(analysis: any): boolean {
+  const texts = collectAnalysisEvidenceTexts(analysis);
+  if (texts.length === 0) return false;
+
+  const groupHits = normalizedKeywords.map((keywords) =>
+    texts.some((text) => matchesGroup(text, keywords))
+  );
+
+  const matchedGroups = groupHits.filter(Boolean).length;
+  return matchedGroups >= 2;
+}
 
 export function normalizeAnalysisFeatureLabelsV2(
-  raw?: unknown
+  raw?: unknown,
+  analysis?: any
 ): FeatureLabelV2[] {
   const values = flattenFeatureLabelV2Input(raw);
   const seen = new Set<string>();
@@ -76,6 +178,12 @@ export function normalizeAnalysisFeatureLabelsV2(
     result.push(canonical as FeatureLabelV2);
   }
 
+  if (
+    result.includes("player_customization") &&
+    !shouldKeepPlayerCustomization(analysis)
+  ) {
+    return result.filter((label) => label !== "player_customization");
+  }
   return result;
 }
 
