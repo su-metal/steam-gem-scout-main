@@ -78,3 +78,20 @@ export function normalizeAnalysisFeatureLabelsV2(
 
   return result;
 }
+
+export function normalizeAnalysisFeatureLabelsV2Raw(raw?: unknown): string[] {
+  const values = flattenFeatureLabelV2Input(raw);
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of values) {
+    if (!item) continue;
+    const slug = item.trim().toLowerCase();
+    if (!slug) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    result.push(slug);
+  }
+
+  return result;
+}

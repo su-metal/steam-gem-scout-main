@@ -4,7 +4,10 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { MoodVector, buildMoodFromTagsAndAnalysis } from "../_shared/mood.ts";
-import { normalizeAnalysisFeatureLabelsV2 } from "../analyze-game/feature-labels.ts";
+import {
+  normalizeAnalysisFeatureLabelsV2,
+  normalizeAnalysisFeatureLabelsV2Raw,
+} from "../analyze-game/feature-labels.ts";
 
 type Analysis = {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -1108,7 +1111,8 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         aiTagsFromResult.length > 0 ? aiTagsFromResult : existingTagsFromData
       );
 
-      const existingAnalysisFromData = savedAnalysis ?? null;
+      const previousAnalysis =
+        (savedAnalysis ?? {}) as Record<string, unknown>;
 
       const updatedData: Record<string, any> = {
         // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
@@ -1151,20 +1155,50 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
             )
           )
         : [];
-      const rawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2)
-        ? aiAnalysis.featureLabelsV2
-        : Array.isArray((aiResult as any).featureLabelsV2)
-        ? (aiResult as any).featureLabelsV2
-        : persistedFeatureLabelsV2;
+      const persistedFeatureLabelsV2Raw = Array.isArray(
+        previousAnalysis.featureLabelsV2Raw
+      )
+        ? normalizeAnalysisFeatureLabelsV2Raw(
+            previousAnalysis.featureLabelsV2Raw as unknown
+          )
+        : [];
 
-      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
-        rawFeatureLabelsV2
-      );
+      const aiRawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2Raw)
+        ? (aiAnalysis.featureLabelsV2Raw as unknown[]).filter(
+            (label): label is string => typeof label === "string"
+          )
+        : [];
+      const aiCanonicalFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2)
+        ? (aiAnalysis.featureLabelsV2 as unknown[]).filter(
+            (label): label is string => typeof label === "string"
+          )
+        : [];
+      const aiFeatureLabelsV2RawCandidates: string[] = [];
+      aiFeatureLabelsV2RawCandidates.push(...aiRawFeatureLabelsV2);
+      if (
+        aiFeatureLabelsV2RawCandidates.length === 0 &&
+        aiCanonicalFeatureLabelsV2.length > 0
+      ) {
+        aiFeatureLabelsV2RawCandidates.push(...aiCanonicalFeatureLabelsV2);
+      }
+
+      const finalFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw([
+        ...persistedFeatureLabelsV2Raw,
+        ...aiFeatureLabelsV2RawCandidates,
+      ]);
+
+      const aiFeatureLabelsV2Candidates = aiCanonicalFeatureLabelsV2;
+
+      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2([
+        ...aiFeatureLabelsV2Candidates,
+        ...persistedFeatureLabelsV2,
+      ]);
 
       const mergedAnalysis = {
-        ...((existingAnalysisFromData ?? {}) as Record<string, unknown>),
+        ...previousAnalysis,
         ...aiAnalysis,
         featureLabelsV2: finalFeatureLabelsV2,
+        featureLabelsV2Raw: finalFeatureLabelsV2Raw,
       };
       delete (mergedAnalysis as any).featureLabels;
 

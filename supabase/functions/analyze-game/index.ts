@@ -10,7 +10,10 @@ declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
 
-import { normalizeAnalysisFeatureLabelsV2 } from "./feature-labels.ts";
+import {
+  normalizeAnalysisFeatureLabelsV2,
+  normalizeAnalysisFeatureLabelsV2Raw,
+} from "./feature-labels.ts";
 import type { FeatureLabelV2 } from "../_shared/feature-labels.ts";
 import { FEATURE_LABELS_V2 } from "../_shared/feature-labels.ts";
 
@@ -110,6 +113,8 @@ interface HiddenGemAnalysis {
   labels: string[];
   /** FeatureLabel V2 のスラッグ一覧 */
   featureLabelsV2?: FeatureLabelV2[];
+  /** FeatureLabel V2 生ラベル（AIの未正規化出力） */
+  featureLabelsV2Raw?: string[];
   /** VIBE / FeatureLabel 用の内部スラッグ一覧 */
   featureTagSlugs?: string[];
   pros: string[];
@@ -1048,12 +1053,34 @@ visual_novel
 
 SearchResultCard 上部の labels は短いタグピルとして表示される。
 
-- 各 label は日本語 4〜12文字程度。  
-- 文は禁止。名詞・体言止めのみ。  
-- 「〜が好きな人」「〜する人向け」など文末「人」は禁止。  
-- 「、」「。」を含めない。  
-- ゲーム固有の体験を示す1トピックのみを書く。ネガティブなトピックは採用しない。
+- 各 label は日本語 4〜12文字程度。
+- 文は禁止。名詞・体言止めのみ。
+- 「〜が好きな人」「〜する人向け」など文末「人」は禁止。
+- 「、」「。」を含めない。
+- ゲーム固有の体験を示す1トピックのみを書く
+
+必須ルール（UI用途のため厳守）
+
+- labels は “ポジ寄りの売り” だけ。ネガティブ／注意点／賛否が分かれる要素は絶対に入れない。
+- ネガ要素・不満・欠点・注意点・コスパ批判・作業感・反復・不具合・最適化・チーター・課金圧などは
+  cons に集約する（labels に混ぜない）。
+- グレー（賛否が分かれる/好みが割れる）要素も labels に入れない。 そういう内容は audienceNeutral に寄せる。
+
+禁止ワード（labels に含めたら失格）
+
+- 以下の語を含むラベルは出力しない（同義語も含む）：
+- 単調 退屈 作業感 反復 冗長 飽きる 物足りない 薄い 平凡 微妙 賛否 好みが分かれる
+- バグ 不具合 不安定 最適化不足 重い クラッシュ 起動 ランチャー チーター 荒れる
+- 課金 DLC 高い 割高 炎上
+
+出力数
+
 - トピックの数は最低5つ最大6つに制限
+
+追加ガイド（品質を安定させる）
+
+- labels は「購入動機になる強み」を優先（体験の魅力、没入、爽快感、自由度、演出、遊びの幅）。
+- cons と被る観点は labels に入れない（同じ論点をポジ/ネガ両方で出さない）。
 
 ================================================================
 【AUDIENCE BADGES（audienceBadges）】
@@ -1678,10 +1705,14 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     normalized.audienceNegative = audienceNegative;
   }
 
+  const normalizedFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
+    parsed?.featureLabelsV2
+  );
   const normalizedFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
     parsed?.featureLabelsV2
   );
   normalized.featureLabelsV2 = normalizedFeatureLabelsV2;
+  normalized.featureLabelsV2Raw = normalizedFeatureLabelsV2Raw;
 
   const featureTagSlugs = normalizeStringArray(parsed?.featureTagSlugs);
   if (featureTagSlugs.length > 0) {

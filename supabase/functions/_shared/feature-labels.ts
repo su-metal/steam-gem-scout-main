@@ -118,6 +118,7 @@ export type FeatureLabelV2 =
   | "exploration_core"
   | "open_world_structure"
   | "survival_mechanics"
+  | "stealth_mechanics"
   | "real_time_combat"
   | "tactical_turn_combat"
   | "precision_control_platforming"
@@ -175,6 +176,7 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "exploration_core",
   "open_world_structure",
   "survival_mechanics",
+  "stealth_mechanics",
   "real_time_combat",
   "tactical_turn_combat",
   "precision_control_platforming",
@@ -188,6 +190,8 @@ const FEATURE_LABELS_V2_SET = new Set<string>(FEATURE_LABELS_V2);
 export const FEATURE_LABEL_V2_ALIASES: Record<string, FeatureLabelV2> = {
   cozy_atmosphere: "cozy_tone",
   ambient_experience: "ambient_mood",
+  stealth_system: "stealth_mechanics",
+  stealth_gameplay: "stealth_mechanics",
 };
 
 export function isFeatureLabelV2(slug: string): slug is FeatureLabelV2 {

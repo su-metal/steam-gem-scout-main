@@ -10,6 +10,9 @@ import {
   type ExperienceFocusId,
 } from "./experience-focus.ts";
 import { isFeatureLabelV2 } from "../_shared/feature-labels.ts";
+import {
+  normalizeAnalysisFeatureLabelsV2Raw,
+} from "../analyze-game/feature-labels.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -621,6 +624,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
               }
             })()
           : g.analysis ?? {};
+      const analysisRawForResponse = { ...(analysisRaw ?? {}) };
+      delete (analysisRawForResponse as any).featureLabels;
 
       // ★ BaseScore 用に事前に数値化
       const positiveRatio = toNumber(g.positiveRatio, 0);
@@ -731,6 +736,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : [];
       const normalizedAnalysisFeatureLabelsV2 =
         analysisFeatureLabelsV2.length > 0 ? analysisFeatureLabelsV2 : undefined;
+      const analysisFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
+        (analysisRaw.featureLabelsV2Raw ??
+          analysisRaw.featureLabelsV2 ??
+          []) as unknown
+      );
 
       const featureLabels: FeatureLabel[] = Array.isArray(
         g.persistedFeatureLabels
@@ -771,7 +781,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         headerImage: normalizedHeaderImage,
         analysis: {
           // まずは AI 解析結果をそのまま全部載せる（既存フィールドを維持）
-          ...(analysisRaw ?? {}),
+        ...analysisRawForResponse,
 
           // その上で、必要なフィールドだけ「正規化して上書き」する
           hiddenGemVerdict: analysisRaw.hiddenGemVerdict ?? "Unknown",
@@ -793,6 +803,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           stabilityTrend,
           hasImprovedSinceLaunch,
           featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
+          featureLabelsV2Raw: analysisFeatureLabelsV2Raw,
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
           ),
