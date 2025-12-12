@@ -4,7 +4,6 @@ import type {
 } from "../_shared/feature-labels.ts";
 import {
   FEATURE_LABEL_DISPLAY_NAMES,
-  FEATURE_LABELS_V2,
   FEATURE_LABEL_V2_ALIASES,
   isFeatureLabelV2,
   MECHANIC_FEATURE_LABELS,
@@ -57,50 +56,8 @@ export function normalizeAnalysisFeatureLabels(
 
   return result;
 }
-function collectAnalysisEvidenceTexts(analysis: any): string[] {
-  if (!analysis || typeof analysis !== "object") return [];
-
-  const gatherStrings = (input?: unknown): string[] => {
-    if (!Array.isArray(input)) return [];
-    return input
-      .filter((item): item is string => typeof item === "string")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  };
-
-  const texts = [
-    ...gatherStrings(analysis.labels),
-    ...gatherStrings(analysis.pros),
-    ...gatherStrings(analysis.cons),
-  ];
-
-  const addAudienceFields = (audience?: any[]) => {
-    if (!Array.isArray(audience)) return;
-    for (const segment of audience) {
-      if (!segment || typeof segment !== "object") continue;
-      for (const key of [
-        "label",
-        "description",
-        "hitReviewOriginal",
-        "hitReviewParaphrased",
-      ]) {
-        const value = (segment as any)[key];
-        if (typeof value === "string" && value.trim()) {
-          texts.push(value.trim());
-        }
-      }
-    }
-  };
-
-  addAudienceFields(analysis.audiencePositive);
-  addAudienceFields(analysis.audienceNeutral);
-  addAudienceFields(analysis.audienceNegative);
-
-  return texts;
-}
-
-const PLAYER_CUSTOMIZATION_GROUP_KEYWORDS: readonly string[][] = [
-  [
+const FILTERED_FEATURE_LABEL_KEYWORDS: Record<string, readonly string[]> = {
+  player_customization: [
     "キャラクリ",
     "キャラクター作成",
     "外見",
@@ -110,52 +67,190 @@ const PLAYER_CUSTOMIZATION_GROUP_KEYWORDS: readonly string[][] = [
     "衣装",
     "スキン",
     "コスメ",
-    "appearance",
     "character creation",
     "custom character",
-  ],
-  [
-    "ビルド",
-    "スキルツリー",
-    "パーク",
-    "perk",
-    "特性",
-    "クラス",
-    "成長方針",
+    "appearance",
     "build",
     "skill tree",
-    "trait",
-  ],
-  [
-    "ロードアウト",
-    "装備構成",
-    "武器構成",
-    "装備セット",
-    "カスタム",
+    "perk",
     "loadout",
-    "gear setup",
+    "gear",
     "equipment",
   ],
-];
+  base_building: [
+    "拠点",
+    "基地",
+    "建設",
+    "建造",
+    "建築",
+    "ハブ",
+    "フォートレス",
+    "outpost",
+    "camp",
+    "base building",
+    "settlement",
+  ],
+  automation_logic: [
+    "自動化",
+    "automation",
+    "logic",
+    "workflow",
+    "triggers",
+    "システム",
+    "トリガー",
+    "macro",
+  ],
+  automation_processes: [
+    "プロセス",
+    "process",
+    "pipeline",
+    "flow",
+    "sequence",
+    "automation",
+    "自動化",
+  ],
+  colony_management: [
+    "コロニー",
+    "植民地",
+    "入植",
+    "settlement",
+    "colonist",
+    "colony management",
+  ],
+  survival_loop: [
+    "サバイバル",
+    "生存",
+    "survive",
+    "survival loop",
+    "resource loop",
+    "資源",
+    "ループ",
+    "耐える",
+  ],
+};
 
-const normalizedKeywords = PLAYER_CUSTOMIZATION_GROUP_KEYWORDS.map((group) =>
-  group.map((keyword) => keyword.toLowerCase())
-);
+const FILTERED_FEATURE_LABEL_KEYWORDS_LOWER = Object.fromEntries(
+  Object.entries(FILTERED_FEATURE_LABEL_KEYWORDS).map(([label, keywords]) => [
+    label,
+    keywords.map((keyword) => keyword.toLowerCase()),
+  ])
+) as Record<string, readonly string[]>;
 
-function matchesGroup(text: string, keywords: readonly string[]): boolean {
-  const lower = text.toLowerCase();
-  return keywords.some((keyword) => lower.includes(keyword));
+function collectTextFromValue(raw?: unknown): string[] {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (Array.isArray(raw)) {
+    const result: string[] = [];
+    for (const item of raw) {
+      if (typeof item === "string") {
+        const trimmed = item.trim();
+        if (trimmed) {
+          result.push(trimmed);
+        }
+      }
+    }
+    return result;
+  }
+
+  return [];
 }
 
-export function shouldKeepPlayerCustomization(analysis: any): boolean {
-  const texts = collectAnalysisEvidenceTexts(analysis);
-  if (texts.length === 0) return false;
+function collectAudienceTexts(analysis: any): string[] {
+  const result: string[] = [];
+  if (!analysis) return result;
 
-  const groupHits = normalizedKeywords.map((keywords) =>
-    texts.some((text) => matchesGroup(text, keywords))
-  );
+  for (const audienceKey of [
+    "audiencePositive",
+    "audienceNeutral",
+    "audienceNegative",
+  ]) {
+    const audience = analysis[audienceKey];
+    if (!Array.isArray(audience)) continue;
+    for (const segment of audience) {
+      if (!segment || typeof segment !== "object") continue;
+      for (const key of [
+        "label",
+        "description",
+        "hitReviewOriginal",
+        "hitReviewParaphrased",
+        "missReviewOriginal",
+        "missReviewParaphrased",
+      ]) {
+        const value = (segment as any)[key];
+        if (typeof value === "string") {
+          const trimmed = value.trim();
+          if (trimmed) {
+            result.push(trimmed);
+          }
+        }
+      }
+    }
+  }
 
-  const matchedGroups = groupHits.filter(Boolean).length;
+  return result;
+}
+
+function collectSummaryTexts(analysis: any): string[] {
+  const summaries: string[] = [];
+  if (!analysis) return summaries;
+
+  for (const key of ["summary", "reason"]) {
+    const value = analysis[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        summaries.push(trimmed);
+      }
+    }
+  }
+
+  return summaries;
+}
+
+function hasKeywordMatch(texts: string[], keywords: readonly string[]): boolean {
+  if (!keywords || keywords.length === 0) return false;
+  for (const text of texts) {
+    const lower = text.toLowerCase();
+    for (const keyword of keywords) {
+      if (lower.includes(keyword)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function shouldKeepFeatureLabelByEvidence(
+  label: FeatureLabelV2,
+  analysis: any
+): boolean {
+  if (!analysis) return false;
+  const keywords = FILTERED_FEATURE_LABEL_KEYWORDS_LOWER[label];
+  if (!keywords || keywords.length === 0) {
+    return true;
+  }
+
+  const evidenceGroups = [
+    [...collectTextFromValue(analysis?.pros), ...collectTextFromValue(analysis?.cons)],
+    collectTextFromValue(analysis?.labels),
+    collectAudienceTexts(analysis),
+    collectSummaryTexts(analysis),
+  ];
+
+  const matchedGroups = evidenceGroups.reduce((count, texts) => {
+    if (hasKeywordMatch(texts, keywords)) {
+      return count + 1;
+    }
+    return count;
+  }, 0);
+
   return matchedGroups >= 2;
 }
 
@@ -178,13 +273,14 @@ export function normalizeAnalysisFeatureLabelsV2(
     result.push(canonical as FeatureLabelV2);
   }
 
-  if (
-    result.includes("player_customization") &&
-    !shouldKeepPlayerCustomization(analysis)
-  ) {
-    return result.filter((label) => label !== "player_customization");
+  if (!analysis) {
+    return result;
   }
-  return result;
+
+  return result.filter((label) => {
+    if (!FILTERED_FEATURE_LABEL_KEYWORDS[label]) return true;
+    return shouldKeepFeatureLabelByEvidence(label, analysis);
+  });
 }
 
 export function normalizeAnalysisFeatureLabelsV2Raw(raw?: unknown): string[] {
