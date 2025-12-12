@@ -7,47 +7,47 @@ export const VIBES: VibeData[] = [
   {
     id: 'CHILL',
     label: 'Chill',
-    description: 'Low stakes, high relaxation. Atmospheres to get lost in.',
-    color: '#3b82f6', // Blue
+    description: 'Unwind at your own pace and float through cozy atmospheres.',
+    color: '#3b82f6',
     accentColor: '#93c5fd',
-    position: [0, 0, 2.3], // Front
-    tags: ['Cozy', 'Sandbox', 'Nature', 'No Combat']
+    position: [0, 0, 2.3],
+    tags: ['Cozy', 'Ambient', 'Low Pressure', 'Slow Moments']
   },
   {
     id: 'FOCUS',
     label: 'Focus',
-    description: 'Precision, strategy, and flow state. Test your mind.',
-    color: '#8b5cf6', // Violet
+    description: 'Tactically rich systems that reward planning and optimization.',
+    color: '#8b5cf6',
     accentColor: '#c4b5fd',
-    position: [2.0, 0, 1.0], // Right
-    tags: ['Puzzle', 'Strategy', 'Rhythm', 'Programming']
+    position: [2.0, 0, 1.0],
+    tags: ['Strategy', 'Systems', 'Planning', 'Flow']
   },
   {
     id: 'STORY',
     label: 'Story',
-    description: 'Deep narratives and emotional journeys. Cinema you play.',
-    color: '#f59e0b', // Amber
+    description: 'Threaded narratives and emotional journeys with meaningful choices.',
+    color: '#f59e0b',
     accentColor: '#fcd34d',
-    position: [-2.0, 0, 1.0], // Left
-    tags: ['RPG', 'Visual Novel', 'Choice Matters', 'Lore']
+    position: [-2.0, 0, 1.0],
+    tags: ['Story', 'Choices', 'Mystery', 'Lore']
   },
   {
-    id: 'SPEED',
-    label: 'Speed',
-    description: 'Adrenaline, reflexes, and fast-paced action.',
-    color: '#ef4444', // Red
+    id: 'ACTION',
+    label: 'Action',
+    description: 'React, move, and fight at full throttle—intensity on tap.',
+    color: '#ef4444',
     accentColor: '#fca5a5',
-    position: [1.2, 1.6, 0.8], // Top Right
-    tags: ['Racing', 'FPS', 'Platformer', 'Action']
+    position: [1.2, 1.6, 0.8],
+    tags: ['Combat', 'Exploration', 'Intensity', 'Reactiveness']
   },
   {
     id: 'SHORT',
     label: 'Short',
-    description: 'Complete experiences in under 2 hours. Respects your time.',
-    color: '#10b981', // Emerald
+    description: 'Bite-sized runs and tight loops that respect your time.',
+    color: '#10b981',
     accentColor: '#6ee7b7',
-    position: [-1.2, -1.6, 0.8], // Bottom Left
-    tags: ['Indie', 'Arcade', 'Experimental', 'Compact']
+    position: [-1.2, -1.6, 0.8],
+    tags: ['Bite-Size', 'Rounds', 'Instant', 'Arcade']
   }
 ];
 

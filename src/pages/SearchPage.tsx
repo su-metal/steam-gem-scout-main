@@ -180,7 +180,7 @@ const MOOD_AXES: MoodSliderId[] = [
 
 // プリセットからの userMood 計算用（VIBE / Experience Focus 用）
 const PRESET_MOOD_BASE: Record<
-  "Chill" | "Focus" | "Story" | "Speed" | "Short",
+  "Chill" | "Focus" | "Story" | "Action" | "Short",
   Record<MoodSliderId, number>
 > = {
   Chill: {
@@ -204,7 +204,7 @@ const PRESET_MOOD_BASE: Record<
     tension: 0.8,
     operation: 1.2,
   },
-  Speed: {
+  Action: {
     brain: 1.6,
     story: 0.4,
     session: 0.8,
@@ -307,7 +307,7 @@ const VIBE_BG_THEME: Record<
     blob1: "bg-fuchsia-500/22",
     blob2: "bg-amber-400/14",
   },
-  Speed: {
+  Action: {
     pageBg: "bg-[#020308]",
     radial:
       "bg-[radial-gradient(circle_at_50%_0%,_#7c2d12_0%,_#020617_60%)]",
@@ -329,7 +329,7 @@ const VIBE_HEADER_TEXT_CLASS: Record<PrimaryVibeId, string> = {
   Chill: "text-emerald-400",
   Focus: "text-sky-400",
   Story: "text-fuchsia-400",
-  Speed: "text-rose-400",
+  Action: "text-rose-400",
   Short: "text-amber-300",
 };
 
@@ -527,6 +527,8 @@ export default function SearchPage() {
 
   const experienceFocusId =
     (navigationState?.experienceClass as string | undefined) ?? null;
+  const experienceFocusParam =
+    experienceFocusId === "any" ? null : experienceFocusId;
 
   // ▼ ヘッダー用テキストカラー（Vibe に応じて）
   const vibeHeaderTextClass =
@@ -735,7 +737,7 @@ export default function SearchPage() {
           excludeMultiplayerOnly,
           excludeHorror,
           primaryVibeId,
-          experienceFocusId,
+          experienceFocusId: experienceFocusParam,
         },
       });
 

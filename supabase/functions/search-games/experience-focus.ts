@@ -1,41 +1,31 @@
 import type { FeatureLabelV2, Vibe } from "../_shared/feature-labels.ts";
 
 export type ExperienceFocusId =
-  // Chill
-  | "chill-cozy-life-crafting"
+  | "chill-cozy-living"
   | "chill-gentle-exploration"
-  | "chill-light-puzzle"
-  | "chill-relaxed-building"
-  | "chill-ambient-experience"
-  | "chill-any"
-  // Story
-  | "story-story-driven"
-  | "story-character-drama"
+  | "chill-ambient-immersion"
+  | "chill-relaxed-puzzle"
+  | "chill-slow-creation"
+  | "story-narrative-action"
+  | "story-reading-centered-story"
   | "story-mystery-investigation"
-  | "story-emotional-journey"
+  | "story-choice-and-consequence"
   | "story-lore-worldbuilding"
-  | "story-any"
-  // Focus
-  | "focus-turn-based-tactics"
-  | "focus-deckbuilding-strategy"
-  | "focus-grand-strategy"
-  | "focus-automation-factory-strategy"
-  | "focus-colony-management"
-  | "focus-any"
-  // Speed
-  | "speed-action-combat"
-  | "speed-precision-shooter"
-  | "speed-rhythm-music-action"
-  | "speed-sports-arena"
-  | "speed-high-intensity-roguelike"
-  | "speed-any"
-  // Short
-  | "short-run-based-roguelike"
+  | "focus-battle-and-growth"
+  | "focus-tactics-and-planning"
+  | "focus-base-and-systems"
+  | "focus-simulation"
+  | "focus-optimization-builder"
+  | "action-exploration"
+  | "action-combat"
+  | "action-competitive"
+  | "action-tactical-stealth"
+  | "action-crowd-smash"
   | "short-arcade-action"
-  | "short-arcade-shooter"
-  | "short-short-puzzle"
-  | "short-micro-progression"
-  | "short-any";
+  | "short-tactical-decisions"
+  | "short-puzzle-moments"
+  | "short-flow-mastery"
+  | "short-competitive-rounds";
 
 export interface ExperienceFocus {
   id: ExperienceFocusId;
@@ -47,16 +37,15 @@ export interface ExperienceFocus {
 }
 
 export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
-  // 🌿 Chill
   {
-    id: "chill-cozy-life-crafting",
+    id: "chill-cozy-living",
     vibe: "chill",
-    label: "Cozy Life & Crafting",
+    label: "Cozy Living",
     featureLabels: [
       "cozy_experience",
       "cozy_tone",
       "environment_customization",
-      "routine_loop_play",
+      "shared_activity_feel",
     ],
   },
   {
@@ -66,64 +55,68 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     featureLabels: [
       "gentle_exploration",
       "exploration_core",
+      "relaxing_flow",
       "ambient_mood",
-      "atmospheric_world",
     ],
   },
   {
-    id: "chill-light-puzzle",
+    id: "chill-ambient-immersion",
     vibe: "chill",
-    label: "Light Puzzle",
+    label: "Ambient Immersion",
+    featureLabels: [
+      "ambient_mood",
+      "atmospheric_world",
+      "whimsical_vibe",
+      "cozy_tone",
+    ],
+  },
+  {
+    id: "chill-relaxed-puzzle",
+    vibe: "chill",
+    label: "Relaxed Puzzle",
     featureLabels: ["light_puzzleplay", "quick_puzzle", "relaxing_flow"],
   },
   {
-    id: "chill-relaxed-building",
+    id: "chill-slow-creation",
     vibe: "chill",
-    label: "Relaxed Building",
+    label: "Slow Creation",
     featureLabels: [
-      "construction_building",
-      "environment_customization",
-      "cozy_experience",
       "routine_loop_play",
+      "construction_building",
+      "sandbox_creation",
     ],
   },
   {
-    id: "chill-ambient-experience",
-    vibe: "chill",
-    label: "Ambient Experience",
-    featureLabels: ["ambient_mood", "atmospheric_world", "cozy_tone", "whimsical_vibe"],
-  },
-  {
-    id: "chill-any",
-    vibe: "chill",
-    label: "Any",
-    featureLabels: [],
-  },
-
-  // 📖 Story
-  {
-    id: "story-story-driven",
+    id: "story-narrative-action",
     vibe: "story",
-    label: "Story-Driven",
-    featureLabels: ["story_driven", "dialogue_heavy", "worldbuilding_depth"],
+    label: "Narrative Action",
+    featureLabels: ["story_driven", "action_combat", "dialogue_heavy"],
   },
   {
-    id: "story-character-drama",
+    id: "story-reading-centered-story",
     vibe: "story",
-    label: "Character Drama",
-    featureLabels: ["character_drama", "emotional_journey", "dialogue_heavy"],
+    label: "Reading-Centered Story",
+    featureLabels: ["dialogue_heavy", "visual_novel", "emotional_journey"],
   },
   {
     id: "story-mystery-investigation",
     vibe: "story",
-    label: "Mystery & Investigation",
-    featureLabels: ["mystery_investigation", "worldbuilding_depth", "atmospheric_world"],
+    label: "Mystery / Investigation",
+    featureLabels: [
+      "mystery_investigation",
+      "worldbuilding_depth",
+      "sci_fi_atmosphere",
+    ],
   },
   {
-    id: "story-emotional-journey",
+    id: "story-choice-and-consequence",
     vibe: "story",
-    label: "Emotional Journey",
-    featureLabels: ["emotional_journey", "story_driven"],
+    label: "Choice & Consequence",
+    featureLabels: [
+      "branching_narrative_structure",
+      "choice_and_consequence",
+      "dialogue_heavy",
+    ],
   },
   {
     id: "story-lore-worldbuilding",
@@ -132,123 +125,92 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     featureLabels: [
       "worldbuilding_depth",
       "atmospheric_world",
-      "sci_fi_atmosphere",
       "fantasy_atmosphere",
     ],
   },
   {
-    id: "story-any",
-    vibe: "story",
-    label: "Any",
-    featureLabels: [],
-  },
-
-  // 🧠 Focus（Tactical）
-  {
-    id: "focus-turn-based-tactics",
+    id: "focus-battle-and-growth",
     vibe: "focus",
-    label: "Turn-Based Tactics",
-    featureLabels: ["turn_based_tactics", "tactical_turn_combat", "logistics_planning"],
-  },
-  {
-    id: "focus-deckbuilding-strategy",
-    vibe: "focus",
-    label: "Deckbuilding Strategy",
-    featureLabels: ["deckbuilding_strategy", "turn_based_tactics", "micro_progression"],
-  },
-  {
-    id: "focus-grand-strategy",
-    vibe: "focus",
-    label: "Grand Strategy",
+    label: "Battle & Growth",
     featureLabels: [
-      "grand_strategy",
-      "logistics_planning",
-      "resource_management",
-      "colony_management",
+      "character_progression",
+      "skill_tree_systems",
+      "combat_focused",
+      "loot_and_rewards_loop",
     ],
   },
   {
-    id: "focus-automation-factory-strategy",
+    id: "focus-tactics-and-planning",
     vibe: "focus",
-    label: "Automation / Factory Strategy",
-    featureLabels: ["automation_logic", "automation_processes", "resource_management"],
-  },
-  {
-    id: "focus-colony-management",
-    vibe: "focus",
-    label: "Colony Management",
+    label: "Tactics & Planning",
     featureLabels: [
-      "colony_management",
-      "colony_simulation",
-      "resource_management",
+      "turn_based_tactics",
+      "tactical_turn_combat",
       "logistics_planning",
-      "survival_mechanics",
     ],
   },
   {
-    id: "focus-any",
+    id: "focus-base-and-systems",
     vibe: "focus",
-    label: "Any",
-    featureLabels: [],
-  },
-
-  // ⚡ Speed（Adrenaline）
-  {
-    id: "speed-action-combat",
-    vibe: "speed",
-    label: "Action Combat",
-    featureLabels: ["action_combat", "real_time_combat", "high_intensity_challenge"],
+    label: "Base & Systems",
+    featureLabels: ["base_building", "automation_processes", "resource_management"],
   },
   {
-    id: "speed-precision-shooter",
-    vibe: "speed",
-    label: "Precision Shooter",
-    featureLabels: ["precision_shooter", "high_intensity_challenge"],
+    id: "focus-simulation",
+    vibe: "focus",
+    label: "Simulation",
+    featureLabels: ["automation_logic", "colony_management", "sandbox_creation"],
   },
   {
-    id: "speed-rhythm-music-action",
-    vibe: "speed",
-    label: "Rhythm / Music Action",
-    featureLabels: ["rhythm_action", "high_intensity_challenge", "micro_progression"],
+    id: "focus-optimization-builder",
+    vibe: "focus",
+    label: "Optimization / Builder",
+    featureLabels: [
+      "automation_logic",
+      "resource_management",
+      "construction_building",
+    ],
   },
   {
-    id: "speed-sports-arena",
-    vibe: "speed",
-    label: "Sports & Arena",
+    id: "action-exploration",
+    vibe: "action",
+    label: "Exploration",
+    featureLabels: ["exploration_core", "gentle_exploration", "ambient_mood"],
+  },
+  {
+    id: "action-combat",
+    vibe: "action",
+    label: "Combat",
     featureLabels: [
       "action_combat",
       "real_time_combat",
       "high_intensity_challenge",
+    ],
+  },
+  {
+    id: "action-competitive",
+    vibe: "action",
+    label: "Competitive",
+    featureLabels: ["high_intensity_challenge", "precision_shooter", "rhythm_action"],
+  },
+  {
+    id: "action-tactical-stealth",
+    vibe: "action",
+    label: "Tactical / Stealth",
+    featureLabels: [
+      "tactical_turn_combat",
+      "stealth_mechanics",
+      "precision_control_platforming",
+    ],
+  },
+  {
+    id: "action-crowd-smash",
+    vibe: "action",
+    label: "Crowd Smash",
+    featureLabels: [
       "arcade_actionstyle",
-    ],
-  },
-  {
-    id: "speed-high-intensity-roguelike",
-    vibe: "speed",
-    label: "High-Intensity Roguelike",
-    featureLabels: [
-      "roguelike_run_structure",
       "high_intensity_challenge",
       "run_based_structure",
-      "survival_mechanics",
-    ],
-  },
-  {
-    id: "speed-any",
-    vibe: "speed",
-    label: "Any",
-    featureLabels: [],
-  },
-
-  // ⏱ Short（Quick Run）
-  {
-    id: "short-run-based-roguelike",
-    vibe: "short",
-    label: "Run-Based Roguelike",
-    featureLabels: [
-      "run_based_structure",
-      "roguelike_run_structure",
-      "high_intensity_challenge",
     ],
   },
   {
@@ -258,28 +220,32 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     featureLabels: ["arcade_actionstyle", "high_intensity_challenge"],
   },
   {
-    id: "short-arcade-shooter",
+    id: "short-tactical-decisions",
     vibe: "short",
-    label: "Arcade Shooter",
-    featureLabels: ["arcade_shooter", "precision_shooter", "arcade_actionstyle"],
+    label: "Tactical Decisions",
+    featureLabels: ["tactical_turn_combat", "turn_based_tactics"],
   },
   {
-    id: "short-short-puzzle",
+    id: "short-puzzle-moments",
     vibe: "short",
-    label: "Short Puzzle",
+    label: "Puzzle Moments",
     featureLabels: ["quick_puzzle", "light_puzzleplay", "relaxing_flow"],
   },
   {
-    id: "short-micro-progression",
+    id: "short-flow-mastery",
     vibe: "short",
-    label: "Micro Progression",
-    featureLabels: ["micro_progression", "routine_loop_play"],
+    label: "Flow Mastery",
+    featureLabels: ["relaxing_flow", "gentle_exploration", "quick_puzzle"],
   },
   {
-    id: "short-any",
+    id: "short-competitive-rounds",
     vibe: "short",
-    label: "Any",
-    featureLabels: [],
+    label: "Competitive Rounds",
+    featureLabels: [
+      "arcade_actionstyle",
+      "precision_shooter",
+      "high_intensity_challenge",
+    ],
   },
 ];
 
@@ -287,6 +253,6 @@ export const EXPERIENCE_FOCUS_BY_VIBE: Record<Vibe, ExperienceFocus[]> = {
   chill: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "chill"),
   story: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "story"),
   focus: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "focus"),
-  speed: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "speed"),
+  action: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "action"),
   short: EXPERIENCE_FOCUS_LIST.filter((f) => f.vibe === "short"),
 };

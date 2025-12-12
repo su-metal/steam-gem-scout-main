@@ -14,7 +14,7 @@ import {
 
 // --- Types & Data ---
 
-type VibeType = 'Chill' | 'Focus' | 'Story' | 'Speed' | 'Short';
+type VibeType = 'Chill' | 'Focus' | 'Story' | 'Action' | 'Short';
 
 interface VibeData {
   id: VibeType;
@@ -34,26 +34,25 @@ const VIBES: VibeData[] = [
   {
     id: "Chill",
     title: "Zen Mode",
-    subtitle: "Relax & Build",
-    tags: ["Sim", "Atmospheric", "Cozy"],
+    subtitle: "Unwind & Drift",
+    tags: ["Cozy", "Ambient", "Low Pressure"],
     colors: {
       primary: "#00ffa3",
       secondary: "#00b8ff",
       shadow: "#00ffa3",
     },
     icon: Wind,
-    // カードに表示するのは「気分が伝わる3本」だけ
     stats: [
-      { label: "CHILL", value: 100 },       // このプリセットそのもの
-      { label: "VIBES", value: 90 },        // 「らしさ」全体
-      { label: "RELAX", value: 90 },        // 体験イメージ（ゆったり度）
+      { label: "CHILL", value: 100 },
+      { label: "VIBES", value: 90 },
+      { label: "CALM", value: 90 },
     ],
   },
   {
     id: "Focus",
     title: "Tactical",
-    subtitle: "Strategy & Think",
-    tags: ["RTS", "Puzzle", "4X"],
+    subtitle: "Think & Optimize",
+    tags: ["Strategy", "Systems", "Planning"],
     colors: {
       primary: "#0099ff",
       secondary: "#5e00ff",
@@ -63,14 +62,14 @@ const VIBES: VibeData[] = [
     stats: [
       { label: "FOCUS", value: 100 },
       { label: "VIBES", value: 95 },
-      { label: "STRATEGY", value: 95 },     // 頭を使う・考える度合い
+      { label: "THINK", value: 95 },
     ],
   },
   {
     id: "Story",
     title: "Narrative",
-    subtitle: "Deep Immersion",
-    tags: ["RPG", "Lore", "Adventure"],
+    subtitle: "Follow the Thread",
+    tags: ["Story", "Choices", "Mystery"],
     colors: {
       primary: "#cc00ff",
       secondary: "#ff0066",
@@ -80,14 +79,14 @@ const VIBES: VibeData[] = [
     stats: [
       { label: "STORY", value: 100 },
       { label: "VIBES", value: 100 },
-      { label: "NARRATIVE", value: 95 },    // 物語への没入度
+      { label: "IMMERSION", value: 95 },
     ],
   },
   {
-    id: "Speed",
-    title: "Adrenaline",
-    subtitle: "Fast & Furious",
-    tags: ["FPS", "Racing", "Action"],
+    id: "Action",
+    title: "Action",
+    subtitle: "Move & React",
+    tags: ["Combat", "Exploration", "Intensity"],
     colors: {
       primary: "#ff0055",
       secondary: "#ff5e00",
@@ -95,16 +94,16 @@ const VIBES: VibeData[] = [
     },
     icon: Zap,
     stats: [
-      { label: "SPEED", value: 100 },
+      { label: "ACTION", value: 100 },
       { label: "VIBES", value: 95 },
-      { label: "INTENSITY", value: 100 },   // テンション・スピード感
+      { label: "TENSION", value: 100 },
     ],
   },
   {
     id: "Short",
     title: "Quick Run",
     subtitle: "Jump In & Out",
-    tags: ["Roguelike", "Arcade", "Indie"],
+    tags: ["Bite-Size", "Rounds", "Instant"],
     colors: {
       primary: "#ffcc00",
       secondary: "#ff6600",
@@ -114,7 +113,7 @@ const VIBES: VibeData[] = [
     stats: [
       { label: "SHORT", value: 100 },
       { label: "VIBES", value: 90 },
-      { label: "PICK-UP", value: 95 },      // さっと遊べる気軽さ
+      { label: "PICK-UP", value: 95 },
     ],
   },
 ];
@@ -129,43 +128,43 @@ type ExperienceClassOption = {
 
 const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
   Chill: [
-    { id: "cozy-life", label: "Cozy Life & Crafting" },
+    { id: "cozy-living", label: "Cozy Living" },
     { id: "gentle-exploration", label: "Gentle Exploration" },
-    { id: "light-puzzle", label: "Light Puzzle" },
-    { id: "relaxed-building", label: "Relaxed Building / Townmaking" },
-    { id: "Ambient Experience", label: "Ambient Experience" },
+    { id: "ambient-immersion", label: "Ambient Immersion" },
+    { id: "relaxed-puzzle", label: "Relaxed Puzzle" },
+    { id: "slow-creation", label: "Slow Creation" },
     { id: "any", label: "Any" },
   ],
   Focus: [
-    { id: "tactics", label: "Turn-Based Tactics" },
-    { id: "deckbuilding", label: "Deckbuilding Strategy" },
-    { id: "grand-strategy", label: "Grand Strategy" },
-    { id: "automation", label: "Automation / Factory Strategy" },
-    { id: "colony-management", label: "Colony / Management Sim" },
-    { id: "any", label: "Any" }
-  ],
-  Story: [
-    { id: "story-driven", label: "Story-Driven" },
-    { id: "character-drama", label: "Character Drama" },
-    { id: "mystery-investigation", label: "Mystery & Investigation" },
-    { id: "emotional-journey", label: "Emotional Journey" },
-    { id: "lore / worldbuilding", label: "Lore / Worldbuilding" },
+    { id: "battle-and-growth", label: "Battle & Growth" },
+    { id: "tactics-and-planning", label: "Tactics & Planning" },
+    { id: "base-and-systems", label: "Base & Systems" },
+    { id: "simulation", label: "Simulation" },
+    { id: "optimization-builder", label: "Optimization / Builder" },
     { id: "any", label: "Any" },
   ],
-  Speed: [
-    { id: "action-combat", label: "Action Combat" },          // DMC系、ソウル系、高速アクション全般
-    { id: "precision-shooter", label: "Precision Shooter" },      // FPS / TPS
-    { id: "rhythm-music", label: "Rhythm / Music Action" },  // 音ゲー・リズムACT
-    { id: "sports-arena", label: "Sports & Arena" },         // スポーツ＋格闘・アリーナ対戦
-    { id: "high-intensity-rogue", label: "High-Intensity Roguelike" }, // Dead Cells, Hades系
+  Story: [
+    { id: "narrative-action", label: "Narrative Action" },
+    { id: "reading-centered-story", label: "Reading-Centered Story" },
+    { id: "mystery-investigation", label: "Mystery / Investigation" },
+    { id: "choice-and-consequence", label: "Choice & Consequence" },
+    { id: "lore-worldbuilding", label: "Lore / Worldbuilding" },
+    { id: "any", label: "Any" },
+  ],
+  Action: [
+    { id: "exploration", label: "Exploration" },
+    { id: "combat", label: "Combat" },
+    { id: "competitive", label: "Competitive" },
+    { id: "tactical-stealth", label: "Tactical / Stealth" },
+    { id: "crowd-smash", label: "Crowd Smash" },
     { id: "any", label: "Any" },
   ],
   Short: [
-    { id: "run-rogue", label: "Run-Based Roguelike" },
     { id: "arcade-action", label: "Arcade Action" },
-    { id: "arcade-shooter", label: "Arcade Shooter" },
-    { id: "short-puzzle", label: "Short Puzzle" },
-    { id: "mini-games", label: "Mini Games" },
+    { id: "tactical-decisions", label: "Tactical Decisions" },
+    { id: "puzzle-moments", label: "Puzzle Moments" },
+    { id: "flow-mastery", label: "Flow Mastery" },
+    { id: "competitive-rounds", label: "Competitive Rounds" },
     { id: "any", label: "Any" },
   ],
 };
@@ -536,17 +535,18 @@ const ExperienceClassSelector = ({
                 style={
                   isActive
                     ? {
-                      background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.96))`,
-                      borderColor: activeVibe.colors.primary,
-                      color: "#fff",
-                      boxShadow: `0 0 18px ${activeVibe.colors.primary}99`,
-                    }
+                        background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.96))`,
+                        borderColor: activeVibe.colors.primary,
+                        color: "#fff",
+                        boxShadow: `0 0 18px ${activeVibe.colors.primary}99`,
+                      }
                     : isGhost
                       ? {
-                        borderColor: "rgba(190,200,245,0.9)",
-                        color: "rgba(215,225,255,0.98)",
-                        backgroundColor: "transparent",
-                      }
+                          borderColor: "rgba(190,200,245,0.9)",
+                          color: "rgba(215,225,255,0.98)",
+                          backgroundColor: "transparent",
+                          borderStyle: "dashed",
+                        }
                       : undefined
                 }
               >
@@ -736,7 +736,7 @@ const Index: React.FC = () => {
                   subVibes: [],
 
                   // 絞り込みロジック用の Experience Class ID
-                  experienceClass: selectedExperienceClass ?? "any",
+                  experienceClass: effectiveExperienceId,
 
                   // 表示用の Experience Focus ラベル
                   experienceClassLabel: activeExperienceLabel, // "Light Puzzle" など

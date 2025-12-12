@@ -1,7 +1,7 @@
 // supabase/functions/_shared/feature-labels.ts
 
 // ※ すでに別の場所で定義済みなら、ここは現在の実装に合わせて調整してください。
-export type Vibe = "chill" | "story" | "focus" | "speed" | "short";
+export type Vibe = "chill" | "story" | "focus" | "action" | "short";
 
 /**
  * FeatureLabel

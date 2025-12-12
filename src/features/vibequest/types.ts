@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 
-export type VibeType = 'CHILL' | 'FOCUS' | 'STORY' | 'SPEED' | 'SHORT';
+export type VibeType = 'CHILL' | 'FOCUS' | 'STORY' | 'ACTION' | 'SHORT';
 
 export interface VibeData {
   id: VibeType;
