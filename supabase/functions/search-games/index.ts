@@ -165,6 +165,19 @@ function findExperienceFocusById(
   return focus ?? null;
 }
 
+function resolveFocusMatchLabels(
+  featureLabelsV2?: FeatureLabelV2[] | null,
+  featureLabels?: FeatureLabel[] | null
+): string[] {
+  if (Array.isArray(featureLabelsV2) && featureLabelsV2.length > 0) {
+    return featureLabelsV2;
+  }
+  if (Array.isArray(featureLabels) && featureLabels.length > 0) {
+    return featureLabels;
+  }
+  return [];
+}
+
 function computeVibeFocusMatchScore(params: {
   primaryVibe: Vibe | null | undefined;
   experienceFocusId: ExperienceFocusId | null | undefined;
@@ -193,10 +206,7 @@ function computeVibeFocusMatchScore(params: {
   const vibeMatches = focus.vibe === primaryVibe;
 
   const focusSet = new Set<FeatureLabelV2>(focus.featureLabels);
-  const gameLabels =
-    Array.isArray(featureLabelsV2) && featureLabelsV2.length > 0
-      ? featureLabelsV2
-      : featureLabels ?? [];
+  const gameLabels = resolveFocusMatchLabels(featureLabelsV2, featureLabels);
   let overlap = 0;
   for (const label of gameLabels) {
     if (focusSet.has(label as FeatureLabelV2)) {
@@ -705,12 +715,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         typeof analysisRaw.hasImprovedSinceLaunch === "boolean"
           ? analysisRaw.hasImprovedSinceLaunch
           : null;
-      const analysisFeatureLabels = Array.isArray(analysisRaw.featureLabels)
-        ? analysisRaw.featureLabels.filter(
-            (label): label is string => typeof label === "string"
-          )
-        : [];
-
       const analysisFeatureLabelsV2 = Array.isArray(analysisRaw.featureLabelsV2)
         ? Array.from(
             new Set(
@@ -788,7 +792,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
           ),
           stabilityTrend,
           hasImprovedSinceLaunch,
-          featureLabels: analysisFeatureLabels,
           featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
@@ -811,7 +814,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
           (g.mood_scores as MoodVector | undefined | null) ??
           (g.moodScores as MoodVector | undefined | null) ??
           null,
-        featureLabels,
         vibeFocusMatchScore,
         experienceFocusScore: focusScore,
       };

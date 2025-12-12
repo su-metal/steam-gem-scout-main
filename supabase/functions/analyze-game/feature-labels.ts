@@ -5,6 +5,7 @@ import type {
 import {
   FEATURE_LABEL_DISPLAY_NAMES,
   FEATURE_LABELS_V2,
+  FEATURE_LABEL_V2_ALIASES,
   isFeatureLabelV2,
   MECHANIC_FEATURE_LABELS,
   MOOD_FEATURE_LABELS,
@@ -23,7 +24,7 @@ function flattenFeatureLabelInput(
   return [];
 }
 
-function flattenFeatureLabelV2Input(raw?: unknown): unknown[] {
+function flattenFeatureLabelV2Input(raw?: unknown): string[] {
   if (raw === undefined || raw === null) {
     return [];
   }
@@ -31,7 +32,9 @@ function flattenFeatureLabelV2Input(raw?: unknown): unknown[] {
     return [raw];
   }
   if (Array.isArray(raw)) {
-    return raw;
+    return raw.map((item) =>
+      typeof item === "string" ? item : item?.toString() ?? ""
+    );
   }
   return [];
 }
@@ -63,13 +66,14 @@ export function normalizeAnalysisFeatureLabelsV2(
   const result: FeatureLabelV2[] = [];
 
   for (const item of values) {
-    const slug = item?.toString().trim().toLowerCase();
-    if (!slug) continue;
-    if (!isFeatureLabelV2(slug)) continue;
-    if (seen.has(slug)) continue;
+    if (!item) continue;
+    const canonical = FEATURE_LABEL_V2_ALIASES[item.trim().toLowerCase()] ?? item.trim().toLowerCase();
+    if (!canonical) continue;
+    if (!isFeatureLabelV2(canonical)) continue;
+    if (seen.has(canonical)) continue;
 
-    seen.add(slug);
-    result.push(slug as FeatureLabelV2);
+    seen.add(canonical);
+    result.push(canonical as FeatureLabelV2);
   }
 
   return result;

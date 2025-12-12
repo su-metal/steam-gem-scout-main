@@ -4,7 +4,7 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0";
 import { MoodVector, buildMoodFromTagsAndAnalysis } from "../_shared/mood.ts";
-import { normalizeAnalysisFeatureLabels } from "../analyze-game/feature-labels.ts";
+import { normalizeAnalysisFeatureLabelsV2 } from "../analyze-game/feature-labels.ts";
 
 type Analysis = {
   hiddenGemVerdict: "Yes" | "No" | "Unknown";
@@ -998,19 +998,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
       }
 
       const currentData = existing.data as any;
-      const existingFeatureLabels: string[] = Array.isArray(
-        (existing as any).feature_labels
-      )
-        ? (existing as any).feature_labels.filter(
-            (label): label is string =>
-              typeof label === "string" && label.trim().length > 0
-          )
-        : Array.isArray(currentData?.featureLabels)
-        ? (currentData.featureLabels as any[]).filter(
-            (label): label is string =>
-              typeof label === "string" && label.trim().length > 0
-          )
-        : [];
+      const savedAnalysis = currentData?.analysis ?? null;
 
       // ★ AI には reviews も渡すが、DB に保存するときは捨てたいのでここで分離
       const {
@@ -1021,6 +1009,10 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         recentWindowStats,
         ...baseDataForStorage
       } = currentData || {};
+
+      if ((baseDataForStorage as any).analysis) {
+        delete (baseDataForStorage as any).analysis;
+      }
 
       // mood_scores 再計算用に既存スコアを控えておく
   
@@ -1116,8 +1108,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         aiTagsFromResult.length > 0 ? aiTagsFromResult : existingTagsFromData
       );
 
-      const existingAnalysisFromData =
-        (baseDataForStorage as any)?.analysis ?? null;
+      const existingAnalysisFromData = savedAnalysis ?? null;
 
       const updatedData: Record<string, any> = {
         // ★ レビュー配列などを除いたコンパクトな JSON ＋ AI 解析結果だけを保存
@@ -1151,43 +1142,40 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         aiAnalysisRaw && typeof aiAnalysisRaw === "object"
           ? aiAnalysisRaw
           : {};
+      const persistedFeatureLabelsV2 = Array.isArray(
+        (existing as any).feature_labels
+      )
+        ? normalizeAnalysisFeatureLabelsV2(
+            (existing as any).feature_labels.filter(
+              (label): label is string => typeof label === "string"
+            )
+          )
+        : [];
       const rawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2)
         ? aiAnalysis.featureLabelsV2
         : Array.isArray((aiResult as any).featureLabelsV2)
         ? (aiResult as any).featureLabelsV2
-        : [];
-      const rawFeatureLabelsV1: string[] = [
-        ...(Array.isArray((aiResult as any).featureLabels)
-          ? (aiResult as any).featureLabels
-          : []),
-        ...(Array.isArray(aiAnalysis.featureLabels) ? aiAnalysis.featureLabels : []),
-      ];
+        : persistedFeatureLabelsV2;
 
-      const normalizedFeatureLabels = normalizeAnalysisFeatureLabels(
-        rawFeatureLabelsV2.length > 0 ? rawFeatureLabelsV2 : rawFeatureLabelsV1
+      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
+        rawFeatureLabelsV2
       );
-
-      const finalFeatureLabels =
-        normalizedFeatureLabels.length > 0
-          ? normalizedFeatureLabels
-          : existingFeatureLabels;
 
       const mergedAnalysis = {
         ...((existingAnalysisFromData ?? {}) as Record<string, unknown>),
         ...aiAnalysis,
-        featureLabelsV2: finalFeatureLabels,
+        featureLabelsV2: finalFeatureLabelsV2,
       };
       delete (mergedAnalysis as any).featureLabels;
 
       updatedData.analysis = mergedAnalysis;
-      updatedData.featureLabels = finalFeatureLabels;
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")
         .update({
           data: updatedData,
           tags: finalTagsForGame,
-          feature_labels: finalFeatureLabels,
+          feature_labels: finalFeatureLabelsV2,
         })
         .eq("id", existing.id);
 

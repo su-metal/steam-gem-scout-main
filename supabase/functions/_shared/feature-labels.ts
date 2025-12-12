@@ -185,6 +185,11 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
 
 const FEATURE_LABELS_V2_SET = new Set<string>(FEATURE_LABELS_V2);
 
+export const FEATURE_LABEL_V2_ALIASES: Record<string, FeatureLabelV2> = {
+  cozy_atmosphere: "cozy_tone",
+  ambient_experience: "ambient_mood",
+};
+
 export function isFeatureLabelV2(slug: string): slug is FeatureLabelV2 {
   return FEATURE_LABELS_V2_SET.has(slug);
 }
