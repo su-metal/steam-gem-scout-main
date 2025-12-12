@@ -3,6 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Terminal } from "lucide-react";
 import { EXPERIENCE_FOCUS_LIST } from "../../supabase/functions/search-games/experience-focus.ts";
 
+interface SearchResultDebugFocus {
+  requestedId: string | null;
+  normalizedId: string | null;
+  found: boolean;
+  focusLabelCount: number;
+}
+
+interface SearchResultDebugFocusMatch {
+  gameLabelCount: number;
+  overlap: number;
+  matchedLabels: string[];
+}
+
 // Returns the tags that should be displayed on the card
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
   const baseTags =
@@ -48,6 +61,9 @@ interface SearchResultCardProps {
   experienceFocusScore?: number | null;
   experienceFocusId?: string | null;
   vibeAccentTextClass?: string;
+  debugMode?: boolean;
+  debugFocus?: SearchResultDebugFocus;
+  debugFocusMatch?: SearchResultDebugFocusMatch;
 }
 
 // スコア軸のキー
@@ -130,13 +146,16 @@ export const SearchResultCard = ({
   moodScore,
   // ★ 追加（デフォルトは既存デザイン）
   variant = "hud",
-  onSelect,
-  vibeLabel,
-  experienceFocusLabel,
-  experienceFocusScore,
-  experienceFocusId,
-  vibeAccentTextClass,
-}: SearchResultCardProps) => {
+    onSelect,
+    vibeLabel,
+    experienceFocusLabel,
+    experienceFocusScore,
+    experienceFocusId,
+    vibeAccentTextClass,
+    debugMode = false,
+    debugFocus,
+    debugFocusMatch,
+  }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
 
@@ -187,10 +206,6 @@ export const SearchResultCard = ({
       ? Math.max(0, Math.min(1, rawMoodScore))
       : null;
 
-  const debugMode =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("debug") === "1";
-
   const focusDefinition =
     experienceFocusId &&
     EXPERIENCE_FOCUS_LIST.find((focus) => focus.id === experienceFocusId);
@@ -211,24 +226,67 @@ export const SearchResultCard = ({
     typeof experienceFocusScore === "number"
       ? experienceFocusScore.toFixed(2)
       : "n/a";
-  const debugInfo =
+  const focusRequestedId = debugFocus?.requestedId ?? null;
+  const normalizedFocusId = debugFocus?.normalizedId ?? experienceFocusId;
+  const focusFoundText =
+    debugFocus?.found === true
+      ? "yes"
+      : debugFocus?.found === false
+        ? "no"
+        : "n/a";
+  const focusLabelCount =
+    debugFocus?.focusLabelCount ?? focusDefinition?.featureLabels.length ?? 0;
+  const gameLabelCount =
+    debugFocusMatch?.gameLabelCount ?? canonicalFeatureLabelsV2.length;
+  const overlapCount =
+    debugFocusMatch?.overlap ?? matchedFocusLabels.length;
+  const matchedLabelsSource =
+    debugFocusMatch?.matchedLabels && debugFocusMatch.matchedLabels.length > 0
+      ? debugFocusMatch.matchedLabels
+      : matchedFocusLabels.slice(0, 6);
+  const matchedLabelsText =
+    matchedLabelsSource.length > 0
+      ? matchedLabelsSource.join(", ")
+      : "none";
+  const focusIdDisplay = normalizedFocusId ?? "none selected";
+  const requestedFocusDisplay = focusRequestedId ?? "none";
+  const debugOverlay =
     debugMode ? (
-      <div className="mt-3 space-y-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-mono text-white/70">
-        <div className="flex flex-wrap gap-2 font-semibold text-white">
-          <span>Focus score:</span>
+      <div className="pointer-events-none absolute top-2 left-2 z-50 max-w-[240px] rounded-md border border-white/20 bg-black/80 px-3 py-1 text-[10px] font-mono text-white shadow-lg">
+        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200">
+          <span>DEBUG MODE</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/80">
+          <span className="font-semibold text-white">Focus:</span>
+          <span>{focusIdDisplay}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/80">
+          <span className="font-semibold text-white">Requested:</span>
+          <span>{requestedFocusDisplay}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/80">
+          <span className="font-semibold text-white">Score:</span>
           <span className="text-emerald-200">{focusScoreDisplay}</span>
         </div>
-        <div className="flex flex-wrap gap-2 text-white/80">
-          <span>Focus id:</span>
-          <span>{experienceFocusId ?? "n/a"}</span>
+        <div className="flex flex-wrap gap-1 text-white/70">
+          <span className="font-semibold text-white/90">Matched:</span>
+          <span className="text-cyan-300">{matchedLabelsText}</span>
         </div>
         <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="text-white/80">Matched labels:</span>
-          <span className="text-cyan-200">
-            {matchedFocusLabels.length > 0
-              ? matchedFocusLabels.slice(0, 6).join(", ")
-              : "none"}
-          </span>
+          <span className="font-semibold text-white/90">Found:</span>
+          <span>{focusFoundText}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/70">
+          <span className="font-semibold text-white/90">Focus labels:</span>
+          <span>{focusLabelCount}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/70">
+          <span className="font-semibold text-white/90">Game labels:</span>
+          <span>{gameLabelCount}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/70">
+          <span className="font-semibold text-white/90">Overlap:</span>
+          <span>{overlapCount}</span>
         </div>
       </div>
     ) : null;
@@ -510,6 +568,7 @@ export const SearchResultCard = ({
         className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
         onClick={handleClick}
       >
+        {debugOverlay}
         <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-lg border-none transition-all duration-300">
           {/* Animated Border Glow (Behind) */}
           {/* 1st glow */}
@@ -686,7 +745,6 @@ export const SearchResultCard = ({
                     </span>
                   ))}
                 </div>
-                {debugInfo}
 
                 {/* Bottom: price + CTA */}
                 <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
@@ -729,6 +787,7 @@ export const SearchResultCard = ({
       className="group relative w-full h-full cursor-pointer bg-transparent border-none p-0"
       onClick={handleClick}
     >
+      {debugOverlay}
       <div className="group relative flex flex-col w-full h-full bg-[#09090b] rounded-[24px] border-none transition-all duration-300">
         {/* Animated Border Glow (Behind) */}
         {/* 1st glow */}
@@ -901,8 +960,6 @@ export const SearchResultCard = ({
                   </span>
                 ))}
               </div>
-              {debugInfo}
-
               {/* Bottom: price + CTA */}
               <div className="mt-auto flex items-center justify-between border-t border-white/20 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
                 <div className="flex flex-col">

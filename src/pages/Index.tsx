@@ -1,6 +1,6 @@
 // src/pages/Index.tsx
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wind,
@@ -128,43 +128,43 @@ type ExperienceClassOption = {
 
 const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
   Chill: [
-    { id: "cozy-living", label: "Cozy Living" },
-    { id: "gentle-exploration", label: "Gentle Exploration" },
-    { id: "ambient-immersion", label: "Ambient Immersion" },
-    { id: "relaxed-puzzle", label: "Relaxed Puzzle" },
-    { id: "slow-creation", label: "Slow Creation" },
+    { id: "chill-cozy-living", label: "Cozy Living" },
+    { id: "chill-gentle-exploration", label: "Gentle Exploration" },
+    { id: "chill-ambient-immersion", label: "Ambient Immersion" },
+    { id: "chill-relaxed-puzzle", label: "Relaxed Puzzle" },
+    { id: "chill-slow-creation", label: "Slow Creation" },
     { id: "any", label: "Any" },
   ],
   Focus: [
-    { id: "battle-and-growth", label: "Battle & Growth" },
-    { id: "tactics-and-planning", label: "Tactics & Planning" },
-    { id: "base-and-systems", label: "Base & Systems" },
-    { id: "simulation", label: "Simulation" },
-    { id: "optimization-builder", label: "Optimization / Builder" },
+    { id: "focus-battle-and-growth", label: "Battle & Growth" },
+    { id: "focus-tactics-and-planning", label: "Tactics & Planning" },
+    { id: "focus-base-and-systems", label: "Base & Systems" },
+    { id: "focus-simulation", label: "Simulation" },
+    { id: "focus-optimization-builder", label: "Optimization / Builder" },
     { id: "any", label: "Any" },
   ],
   Story: [
-    { id: "narrative-action", label: "Narrative Action" },
-    { id: "reading-centered-story", label: "Reading-Centered Story" },
-    { id: "mystery-investigation", label: "Mystery / Investigation" },
-    { id: "choice-and-consequence", label: "Choice & Consequence" },
-    { id: "lore-worldbuilding", label: "Lore / Worldbuilding" },
+    { id: "story-narrative-action", label: "Narrative Action" },
+    { id: "story-reading-centered-story", label: "Reading-Centered Story" },
+    { id: "story-mystery-investigation", label: "Mystery / Investigation" },
+    { id: "story-choice-and-consequence", label: "Choice & Consequence" },
+    { id: "story-lore-worldbuilding", label: "Lore / Worldbuilding" },
     { id: "any", label: "Any" },
   ],
   Action: [
-    { id: "exploration", label: "Exploration" },
-    { id: "combat", label: "Combat" },
-    { id: "competitive", label: "Competitive" },
-    { id: "tactical-stealth", label: "Tactical / Stealth" },
-    { id: "crowd-smash", label: "Crowd Smash" },
+    { id: "action-exploration", label: "Exploration" },
+    { id: "action-combat", label: "Combat" },
+    { id: "action-competitive", label: "Competitive" },
+    { id: "action-tactical-stealth", label: "Tactical / Stealth" },
+    { id: "action-crowd-smash", label: "Crowd Smash" },
     { id: "any", label: "Any" },
   ],
   Short: [
-    { id: "arcade-action", label: "Arcade Action" },
-    { id: "tactical-decisions", label: "Tactical Decisions" },
-    { id: "puzzle-moments", label: "Puzzle Moments" },
-    { id: "flow-mastery", label: "Flow Mastery" },
-    { id: "competitive-rounds", label: "Competitive Rounds" },
+    { id: "short-arcade-action", label: "Arcade Action" },
+    { id: "short-tactical-decisions", label: "Tactical Decisions" },
+    { id: "short-puzzle-moments", label: "Puzzle Moments" },
+    { id: "short-flow-mastery", label: "Flow Mastery" },
+    { id: "short-competitive-rounds", label: "Competitive Rounds" },
     { id: "any", label: "Any" },
   ],
 };
@@ -535,18 +535,18 @@ const ExperienceClassSelector = ({
                 style={
                   isActive
                     ? {
-                        background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.96))`,
-                        borderColor: activeVibe.colors.primary,
-                        color: "#fff",
-                        boxShadow: `0 0 18px ${activeVibe.colors.primary}99`,
-                      }
+                      background: `radial-gradient(circle at 0% 0%, ${activeVibe.colors.primary}33, rgba(3,6,23,0.96))`,
+                      borderColor: activeVibe.colors.primary,
+                      color: "#fff",
+                      boxShadow: `0 0 18px ${activeVibe.colors.primary}99`,
+                    }
                     : isGhost
                       ? {
-                          borderColor: "rgba(190,200,245,0.9)",
-                          color: "rgba(215,225,255,0.98)",
-                          backgroundColor: "transparent",
-                          borderStyle: "dashed",
-                        }
+                        borderColor: "rgba(190,200,245,0.9)",
+                        color: "rgba(215,225,255,0.98)",
+                        backgroundColor: "transparent",
+                        borderStyle: "dashed",
+                      }
                       : undefined
                 }
               >
@@ -616,6 +616,16 @@ const Index: React.FC = () => {
 
   // 後述の navigate 用
   const navigate = useNavigate();
+  const location = useLocation();
+  const debugMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(location.search).get("debug") === "1";
+  // index.tsx
+  const searchPath =
+    process.env.NODE_ENV === "development"
+      ? "/search?debug=1"
+      : "/search";
+
 
 
   const vibeIndex = wrap(0, VIBES.length, page);
@@ -725,7 +735,7 @@ const Index: React.FC = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() =>
-              navigate("/search", {
+              navigate(searchPath, {
                 state: {
                   // ロジック用：従来どおり id を渡す
                   primaryVibePreset: activeVibe.id,          // "Chill" など

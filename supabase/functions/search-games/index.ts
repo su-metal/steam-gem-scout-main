@@ -48,6 +48,7 @@ interface SearchBody {
   aiTags?: string[];
   primaryVibeId?: Vibe | null;
   experienceFocusId?: ExperienceFocusId | null;
+  debug?: boolean;
 }
 
 type CachedGameRow = {
@@ -158,6 +159,51 @@ const normalizeStringArray = (value: unknown): string[] => {
   }
 
   return normalized;
+};
+
+const EXPERIENCE_FOCUS_ID_SET = new Set(
+  EXPERIENCE_FOCUS_LIST.map((focus) => focus.id)
+);
+
+const LEGACY_EXPERIENCE_FOCUS_ID_MAP: Record<string, ExperienceFocusId> = {
+  "cozy-living": "chill-cozy-living",
+  "gentle-exploration": "chill-gentle-exploration",
+  "ambient-immersion": "chill-ambient-immersion",
+  "relaxed-puzzle": "chill-relaxed-puzzle",
+  "slow-creation": "chill-slow-creation",
+  "battle-and-growth": "focus-battle-and-growth",
+  "tactics-and-planning": "focus-tactics-and-planning",
+  "base-and-systems": "focus-base-and-systems",
+  "simulation": "focus-simulation",
+  "optimization-builder": "focus-optimization-builder",
+  "narrative-action": "story-narrative-action",
+  "reading-centered-story": "story-reading-centered-story",
+  "mystery-investigation": "story-mystery-investigation",
+  "choice-and-consequence": "story-choice-and-consequence",
+  "lore-worldbuilding": "story-lore-worldbuilding",
+  "exploration": "action-exploration",
+  "combat": "action-combat",
+  "competitive": "action-competitive",
+  "tactical-stealth": "action-tactical-stealth",
+  "crowd-smash": "action-crowd-smash",
+  "arcade-action": "short-arcade-action",
+  "tactical-decisions": "short-tactical-decisions",
+  "puzzle-moments": "short-puzzle-moments",
+  "flow-mastery": "short-flow-mastery",
+  "competitive-rounds": "short-competitive-rounds",
+};
+
+const normalizeExperienceFocusId = (
+  value: string | null | undefined
+): ExperienceFocusId | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.toLowerCase();
+  if (EXPERIENCE_FOCUS_ID_SET.has(normalized as ExperienceFocusId)) {
+    return normalized as ExperienceFocusId;
+  }
+  return LEGACY_EXPERIENCE_FOCUS_ID_MAP[normalized] ?? null;
 };
 
 function findExperienceFocusById(
@@ -537,6 +583,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   try {
     const body = (await req.json().catch(() => ({}))) as SearchBody;
+    const requestUrl = new URL(req.url);
+    const queryDebug =
+      requestUrl.searchParams.get("debug") === "1" ||
+      requestUrl.searchParams.get("debug")?.toLowerCase() === "true";
+    const debugMode = queryDebug || body.debug === true;
 
     const genre = body.genre ?? "";
 
@@ -632,7 +683,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .filter((g) => g && g.appId != null);
 
     const primaryVibeId = body.primaryVibeId ?? null;
-    const experienceFocusId = body.experienceFocusId ?? null;
+    const requestedExperienceFocusId = body.experienceFocusId ?? null;
+    const experienceFocusId = normalizeExperienceFocusId(
+      requestedExperienceFocusId
+    );
 
     const mapped = rawGames.map((g) => {
       const analysisRaw =
@@ -763,6 +817,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
           []) as unknown
       );
 
+      const normalizedGameLabels =
+        normalizedAnalysisFeatureLabelsV2 ?? [];
+      const gameLabelCount = normalizedGameLabels.length;
+      const focus = findExperienceFocusById(experienceFocusId);
+      const focusLabelCount = focus?.featureLabels.length ?? 0;
+      const matchedLabelsFull =
+        focus && normalizedGameLabels.length > 0
+          ? focus.featureLabels.filter((label) =>
+              normalizedGameLabels.includes(label)
+            )
+          : [];
+      const matchedLabelsResponse = matchedLabelsFull.slice(0, 6);
+      const debugFocusData = debugMode
+        ? {
+            requestedId: requestedExperienceFocusId,
+            normalizedId: experienceFocusId,
+            found: !!focus,
+            focusLabelCount,
+          }
+        : undefined;
+      const debugFocusMatchData = debugMode
+        ? {
+            gameLabelCount,
+            overlap: matchedLabelsFull.length,
+            matchedLabels: matchedLabelsResponse,
+          }
+        : undefined;
+
       const featureLabels: FeatureLabel[] = Array.isArray(
         g.persistedFeatureLabels
       )
@@ -771,7 +853,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const vibeFocusMatchScore = computeVibeFocusMatchScore({
         primaryVibe: body.primaryVibeId ?? null,
-        experienceFocusId: body.experienceFocusId ?? null,
+        experienceFocusId,
         featureLabels,
         featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
       });
@@ -847,6 +929,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
           null,
         vibeFocusMatchScore,
         experienceFocusScore: focusScore,
+        debugFocus: debugFocusData,
+        debugFocusMatch: debugFocusMatchData,
       };
     });
 

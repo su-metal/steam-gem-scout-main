@@ -30,6 +30,7 @@ import {
   Calendar,
   Wind,
 } from "lucide-react";
+import type { FeatureLabelV2 } from "../../supabase/functions/_shared/feature-labels.ts";
 
 
 interface HiddenGemAnalysis {
@@ -44,6 +45,19 @@ interface HiddenGemAnalysis {
   reviewQualityScore: number;
   statGemScore?: number; // ← 追加（バックエンドのAIスコア）
   aiError?: boolean;
+}
+
+interface SearchResultDebugFocus {
+  requestedId: string | null;
+  normalizedId: string | null;
+  found: boolean;
+  focusLabelCount: number;
+}
+
+interface SearchResultDebugFocusMatch {
+  gameLabelCount: number;
+  overlap: number;
+  matchedLabels: FeatureLabelV2[];
 }
 
 interface RankingGame {
@@ -71,6 +85,8 @@ interface RankingGame {
     thumbnail?: string;
   }[];
   experienceFocusScore?: number | null;
+  debugFocus?: SearchResultDebugFocus;
+  debugFocusMatch?: SearchResultDebugFocusMatch;
 }
 
 // ランダム順生成（将来スコアロジックと組み合わせる前提で分離）
@@ -508,6 +524,8 @@ export default function SearchPage() {
   const navigationType = useNavigationType();
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
+  const debugMode =
+    new URLSearchParams(location.search).get("debug") === "1";
 
   // VIBE / Experience Focus の表示用ラベル
   const currentVibeLabel =
@@ -738,6 +756,7 @@ export default function SearchPage() {
           excludeHorror,
           primaryVibeId,
           experienceFocusId: experienceFocusParam,
+          debug: debugMode,
         },
       });
 
@@ -1309,6 +1328,15 @@ export default function SearchPage() {
                     vibeLabel={currentVibeLabel}
                     experienceFocusLabel={currentExperienceFocusLabel}
                     vibeAccentTextClass={vibeHeaderTextClass}
+                    experienceFocusId={experienceFocusParam}
+                    experienceFocusScore={
+                      typeof game.experienceFocusScore === "number"
+                        ? game.experienceFocusScore
+                        : null
+                    }
+                    debugMode={debugMode}
+                    debugFocus={game.debugFocus}
+                    debugFocusMatch={game.debugFocusMatch}
                     onSelect={handleCardSelect}
                   />
                 </motion.div>
