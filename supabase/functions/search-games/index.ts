@@ -684,7 +684,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const primaryVibeId = body.primaryVibeId ?? null;
     const requestedExperienceFocusId = body.experienceFocusId ?? null;
-    const experienceFocusId = normalizeExperienceFocusId(
+    const normalizedExperienceFocusId = normalizeExperienceFocusId(
       requestedExperienceFocusId
     );
 
@@ -820,7 +820,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const normalizedGameLabels =
         normalizedAnalysisFeatureLabelsV2 ?? [];
       const gameLabelCount = normalizedGameLabels.length;
-      const focus = findExperienceFocusById(experienceFocusId);
+      const focus = findExperienceFocusById(normalizedExperienceFocusId);
       const focusLabelCount = focus?.featureLabels.length ?? 0;
       const matchedLabelsFull =
         focus && normalizedGameLabels.length > 0
@@ -832,7 +832,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const debugFocusData = debugMode
         ? {
             requestedId: requestedExperienceFocusId,
-            normalizedId: experienceFocusId,
+            normalizedId: normalizedExperienceFocusId,
             found: !!focus,
             focusLabelCount,
           }
@@ -853,14 +853,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const vibeFocusMatchScore = computeVibeFocusMatchScore({
         primaryVibe: body.primaryVibeId ?? null,
-        experienceFocusId,
+        experienceFocusId: normalizedExperienceFocusId,
         featureLabels,
         featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
       });
 
       const { focusScore } = computeExperienceFocusScore(
         normalizedAnalysisFeatureLabelsV2,
-        experienceFocusId
+        normalizedExperienceFocusId
       );
 
       return {
