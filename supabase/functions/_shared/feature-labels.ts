@@ -124,7 +124,9 @@ export type FeatureLabelV2 =
   | "precision_control_platforming"
   | "choice_and_consequence"
   | "branching_narrative_structure"
-  | "roguelike_run_structure";
+  | "roguelike_run_structure"
+  | "choice_consequence"
+  | "multiple_endings";
 
 export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "cozy_experience",
@@ -183,6 +185,8 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "choice_and_consequence",
   "branching_narrative_structure",
   "roguelike_run_structure",
+  "choice_consequence",
+  "multiple_endings",
 ];
 
 const FEATURE_LABELS_V2_SET = new Set<string>(FEATURE_LABELS_V2);
@@ -192,6 +196,14 @@ export const FEATURE_LABEL_V2_ALIASES: Record<string, FeatureLabelV2> = {
   ambient_experience: "ambient_mood",
   stealth_system: "stealth_mechanics",
   stealth_gameplay: "stealth_mechanics",
+  branching_story: "choice_consequence",
+  story_branching: "choice_consequence",
+  player_choice: "choice_consequence",
+  choices_matter: "choice_consequence",
+  multiple_endings: "multiple_endings",
+  multi_ending: "multiple_endings",
+  different_endings: "multiple_endings",
+  alternate_endings: "multiple_endings",
 };
 
 export function isFeatureLabelV2(slug: string): slug is FeatureLabelV2 {
