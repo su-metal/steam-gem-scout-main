@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Terminal } from "lucide-react";
+import { EXPERIENCE_FOCUS_LIST } from "../../supabase/functions/search-games/experience-focus.ts";
 
 // Returns the tags that should be displayed on the card
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
@@ -13,6 +14,9 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
 
   return baseTags.slice(0, limit);
 };
+
+console.log(window.location.href, window.location.search, window.location.hash)
+
 
 // gemLabel のバリエーション
 
@@ -42,6 +46,7 @@ interface SearchResultCardProps {
   vibeLabel?: string;
   experienceFocusLabel?: string;   // 追加: 選択中の Experience Focus 表示用
   experienceFocusScore?: number | null;
+  experienceFocusId?: string | null;
   vibeAccentTextClass?: string;
 }
 
@@ -128,6 +133,8 @@ export const SearchResultCard = ({
   onSelect,
   vibeLabel,
   experienceFocusLabel,
+  experienceFocusScore,
+  experienceFocusId,
   vibeAccentTextClass,
 }: SearchResultCardProps) => {
   const navigate = useNavigate();
@@ -179,6 +186,52 @@ export const SearchResultCard = ({
     typeof rawMoodScore === "number" && Number.isFinite(rawMoodScore)
       ? Math.max(0, Math.min(1, rawMoodScore))
       : null;
+
+  const debugMode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debug") === "1";
+
+  const focusDefinition =
+    experienceFocusId &&
+    EXPERIENCE_FOCUS_LIST.find((focus) => focus.id === experienceFocusId);
+  const canonicalFeatureLabelsV2 =
+    Array.isArray((analysisData as any)?.featureLabelsV2) &&
+    (analysisData as any).featureLabelsV2.length > 0
+      ? (analysisData as any).featureLabelsV2
+      : Array.isArray((gameData as any)?.analysis?.featureLabelsV2)
+        ? (gameData as any).analysis.featureLabelsV2
+        : [];
+  const gameLabelSet = new Set(canonicalFeatureLabelsV2);
+  const matchedFocusLabels = focusDefinition?.featureLabels
+    ? focusDefinition.featureLabels.filter((label) =>
+        gameLabelSet.has(label)
+      )
+    : [];
+  const focusScoreDisplay =
+    typeof experienceFocusScore === "number"
+      ? experienceFocusScore.toFixed(2)
+      : "n/a";
+  const debugInfo =
+    debugMode ? (
+      <div className="mt-3 space-y-1 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-mono text-white/70">
+        <div className="flex flex-wrap gap-2 font-semibold text-white">
+          <span>Focus score:</span>
+          <span className="text-emerald-200">{focusScoreDisplay}</span>
+        </div>
+        <div className="flex flex-wrap gap-2 text-white/80">
+          <span>Focus id:</span>
+          <span>{experienceFocusId ?? "n/a"}</span>
+        </div>
+        <div className="flex flex-wrap gap-1 text-white/70">
+          <span className="text-white/80">Matched labels:</span>
+          <span className="text-cyan-200">
+            {matchedFocusLabels.length > 0
+              ? matchedFocusLabels.slice(0, 6).join(", ")
+              : "none"}
+          </span>
+        </div>
+      </div>
+    ) : null;
 
   // --- 統計ベースのサマリ生成 ---
   const hasAISummary =
@@ -633,6 +686,7 @@ export const SearchResultCard = ({
                     </span>
                   ))}
                 </div>
+                {debugInfo}
 
                 {/* Bottom: price + CTA */}
                 <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
@@ -847,6 +901,7 @@ export const SearchResultCard = ({
                   </span>
                 ))}
               </div>
+              {debugInfo}
 
               {/* Bottom: price + CTA */}
               <div className="mt-auto flex items-center justify-between border-t border-white/20 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">

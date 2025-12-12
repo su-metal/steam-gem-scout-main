@@ -114,7 +114,6 @@ export type FeatureLabelV2 =
   | "construction_building"
   | "resource_management"
   | "automation_processes"
-  | "colony_simulation"
   | "exploration_core"
   | "open_world_structure"
   | "survival_mechanics"
@@ -125,8 +124,10 @@ export type FeatureLabelV2 =
   | "choice_and_consequence"
   | "branching_narrative_structure"
   | "roguelike_run_structure"
-  | "choice_consequence"
-  | "multiple_endings";
+  | "multiple_endings"
+  | "ability_gated_exploration"
+  | "shortcut_world_design"
+  | "map_navigation_mastery";
 
 export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "cozy_experience",
@@ -174,7 +175,6 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "construction_building",
   "resource_management",
   "automation_processes",
-  "colony_simulation",
   "exploration_core",
   "open_world_structure",
   "survival_mechanics",
@@ -185,8 +185,10 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "choice_and_consequence",
   "branching_narrative_structure",
   "roguelike_run_structure",
-  "choice_consequence",
   "multiple_endings",
+  "ability_gated_exploration",
+  "shortcut_world_design",
+  "map_navigation_mastery",
 ];
 
 const FEATURE_LABELS_V2_SET = new Set<string>(FEATURE_LABELS_V2);
@@ -196,14 +198,20 @@ export const FEATURE_LABEL_V2_ALIASES: Record<string, FeatureLabelV2> = {
   ambient_experience: "ambient_mood",
   stealth_system: "stealth_mechanics",
   stealth_gameplay: "stealth_mechanics",
-  branching_story: "choice_consequence",
-  story_branching: "choice_consequence",
-  player_choice: "choice_consequence",
-  choices_matter: "choice_consequence",
-  multiple_endings: "multiple_endings",
+  branching_story: "choice_and_consequence",
+  story_branching: "choice_and_consequence",
+  player_choice: "choice_and_consequence",
+  choices_matter: "choice_and_consequence",
   multi_ending: "multiple_endings",
   different_endings: "multiple_endings",
   alternate_endings: "multiple_endings",
+  ability_unlock_exploration: "ability_gated_exploration",
+  metroidvania_progression: "ability_gated_exploration",
+  lock_and_key_exploration: "ability_gated_exploration",
+  shortcuts: "shortcut_world_design",
+  interconnected_world: "shortcut_world_design",
+  map_mastery: "map_navigation_mastery",
+  route_planning: "map_navigation_mastery",
 };
 
 export function isFeatureLabelV2(slug: string): slug is FeatureLabelV2 {

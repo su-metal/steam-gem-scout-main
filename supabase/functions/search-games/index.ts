@@ -234,11 +234,32 @@ interface ExperienceFocusScoreResult {
 }
 
 function computeExperienceFocusScore(
-  _game: unknown,
-  _primaryVibeId: string | null | undefined,
-  _experienceFocusId: string | null | undefined
+  featureLabelsV2: FeatureLabelV2[] | null | undefined,
+  experienceFocusId: ExperienceFocusId | null | undefined
 ): ExperienceFocusScoreResult {
-  return { focusScore: null };
+  if (!experienceFocusId) {
+    return { focusScore: null };
+  }
+
+  const focus = findExperienceFocusById(experienceFocusId);
+  if (!focus || !Array.isArray(focus.featureLabels) || focus.featureLabels.length === 0) {
+    return { focusScore: null };
+  }
+
+  if (!featureLabelsV2 || featureLabelsV2.length === 0) {
+    return { focusScore: 0 };
+  }
+
+  const focusSet = new Set<FeatureLabelV2>(focus.featureLabels);
+  let overlap = 0;
+  for (const label of featureLabelsV2) {
+    if (focusSet.has(label)) {
+      overlap++;
+    }
+  }
+
+  const rawScore = overlap / focus.featureLabels.length;
+  return { focusScore: rawScore };
 }
 
 // --- 可変スコア軸用ヘルパー -------------------------
@@ -756,8 +777,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
 
       const { focusScore } = computeExperienceFocusScore(
-        g,
-        primaryVibeId,
+        normalizedAnalysisFeatureLabelsV2,
         experienceFocusId
       );
 
