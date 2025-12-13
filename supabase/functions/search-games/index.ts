@@ -24,6 +24,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+const QUALITY_GATE_MIN = 0.55;
+
 type SortOption =
   | "recommended"
   | "gem-score"
@@ -451,17 +453,32 @@ const calcMoodMatchScore = (
   return distanceToScore(d, maxD);
 };
 
+const applyStoryFocusedMoodPenalty = (
+  game: any,
+  score: number,
+  storyFocused: boolean
+): number => {
+  if (!storyFocused || score <= 0) return score;
+  if (
+    !game ||
+    !game.moodScores ||
+    typeof game.moodScores.story !== "number" ||
+    game.moodScores.story >= 0.45 ||
+    !isLowStoryGenreGame(game)
+  ) {
+    return score;
+  }
+  return score * 0.3;
+};
+
 const calcFinalRankingScore = (
   baseScore: number,
-  moodScore: number
+  moodScore?: number
 ): number => {
   // base: 品質フィルター / mood: 気分マッチ度（主役）
-  const BASE_WEIGHT = 0.3;
-  const MOOD_WEIGHT = 0.7;
-
-  if (moodScore <= 0) return baseScore;
-
-  return BASE_WEIGHT * baseScore + MOOD_WEIGHT * moodScore;
+  // Legacy scoring stub: mood blending temporarily retired.
+  void moodScore;
+  return baseScore;
 };
 
 // ★ Base Score: 「気分マッチの土台となる品質フィルター」寄りに再設計
@@ -598,12 +615,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const minReviews = body.minReviews ?? 0;
     const minPlaytime = body.minPlaytime ?? 0;
 
-    const aiWeight = body.aiWeight ?? 40;
-    const positiveRatioWeight = body.positiveRatioWeight ?? 30;
-
-    const reviewCountWeight = body.reviewCountWeight ?? 20;
-    const recencyWeight = body.recencyWeight ?? 10;
-
     let userMood: UserMoodPrefs | null = null;
     const moodSource =
       (body.userMood as Partial<Record<MoodSliderId, number>> | undefined) ??
@@ -611,6 +622,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (moodSource && typeof moodSource === "object") {
       userMood = slidersToUserMood(moodSource);
     }
+
+    const storyFocusedMood = isStoryFocusedMood(userMood);
 
     console.log("search-games request body:", body);
 
@@ -738,6 +751,22 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       // scores: game_rankings_cache.data.scores を 0〜1 に正規化
       const scores = normalizeScores(g.scores);
+      const rawQualityValue =
+        typeof g.scores === "object" && g.scores !== null
+          ? (g.scores as Record<string, unknown>).quality
+          : undefined;
+      const normalizedQualityFromRaw =
+        typeof rawQualityValue === "number" && Number.isFinite(rawQualityValue)
+          ? rawQualityValue > 1.000001
+            ? Math.max(0, Math.min(1, rawQualityValue / 100))
+            : Math.max(0, Math.min(1, rawQualityValue))
+          : undefined;
+      const normalizedBaseScoreFallback =
+        typeof baseScore === "number" && Number.isFinite(baseScore)
+          ? Math.max(0, Math.min(100, baseScore)) / 100
+          : undefined;
+      const qualityScoreForGate =
+        normalizedQualityFromRaw ?? normalizedBaseScoreFallback ?? null;
 
       // scoreHighlights: DB 側にあればそのまま使う。無ければデフォルトを組み立てる
       let scoreHighlights: string[] | undefined;
@@ -863,6 +892,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
         normalizedExperienceFocusId
       );
 
+      const rawMoodScore =
+        userMood && typeof userMood === "object"
+          ? calcMoodMatchScore(g.moodScores, userMood)
+          : 0;
+      const moodScore = applyStoryFocusedMoodPenalty(
+        g,
+        rawMoodScore,
+        storyFocusedMood
+      );
+
       return {
         appId: toNumber(g.appId, 0),
         title: g.title ?? `App ${g.appId}`,
@@ -922,6 +961,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         baseScore,
         // ★ 新フィールド群
         scores,
+        qualityScore: qualityScoreForGate,
         scoreHighlights,
         moodScores:
           (g.mood_scores as MoodVector | undefined | null) ??
@@ -929,13 +969,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
           null,
         vibeFocusMatchScore,
         experienceFocusScore: focusScore,
+        moodScore,
         debugFocus: debugFocusData,
         debugFocusMatch: debugFocusMatchData,
       };
     });
 
+    let filteredOutByQualityGate = 0;
+    const gatedGames = mapped.filter((game) => {
+      const quality = typeof game.qualityScore === "number" ? game.qualityScore : null;
+      const gatePass =
+        typeof quality === "number" &&
+        Number.isFinite(quality) &&
+        quality >= QUALITY_GATE_MIN;
+      const gateMeta = {
+        passed: gatePass,
+        quality: typeof quality === "number" ? quality : null,
+        threshold: QUALITY_GATE_MIN,
+        reason: gatePass
+          ? "quality-ok"
+          : typeof quality !== "number" || !Number.isFinite(quality)
+          ? "missing-quality"
+          : "below-threshold",
+      };
+      if (debugMode) {
+        (game as any).debugQualityGate = gateMeta;
+      }
+      if (!gatePass) {
+        filteredOutByQualityGate += 1;
+        return false;
+      }
+      return true;
+    });
+
     // ---- フィルタ ----
-    let filtered = mapped;
+    let filtered = gatedGames;
 
     // ★ aiTags の事前整形（検索ボディから配列を取り出してクリーンアップ）
     const aiTagsFilter =
@@ -973,121 +1041,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // ---- ソート ----
-    const computeScore = (g: any, custom: boolean) => {
-      const analysis = g.analysis ?? {};
-
-      // ===== 重みの決定 =====
-      const wAi = custom ? aiWeight : 40;
-      const wPos = custom ? positiveRatioWeight : 30;
-      const wRev = custom ? reviewCountWeight : 20;
-      const wRec = custom ? recencyWeight : 10;
-
-      const totalWeight = wAi + wPos + wRev + wRec || 1;
-
-      // ===== AIスコア（ベース＋ブースト） =====
-      const rawReviewQuality =
-        typeof analysis.statGemScore === "number"
-          ? analysis.statGemScore
-          : typeof analysis.reviewQualityScore === "number"
-          ? analysis.reviewQualityScore
-          : 5;
-
-      let aiScore = rawReviewQuality / 10; // 0.1〜1.0 くらい
-
-      // Hidden Gem 判定やラベルによる“推しボーナス”
-      let aiBoost = 0;
-
-      // 「Hidden Gem」と判定されているだけでけっこう強い
-      if (analysis.hiddenGemVerdict === "Yes") {
-        aiBoost += 0.15;
-      }
-
-      // 復活系 Hidden Gem はさらに加点
-      if (g.gemLabel === "Improved Hidden Gem") {
-        aiBoost += 0.1;
-      }
-
-      // reviewQualityScore が高いほどちょっとだけ上振れさせる（±0.1 程度）
-      aiBoost += (rawReviewQuality - 5) * 0.02; // 例: 7 → +0.04, 9 → +0.08
-
-      aiScore = Math.min(1, Math.max(0, aiScore + aiBoost));
-
-      // ===== 統計系スコア =====
-
-      // 0〜100% の positiveRatio を 0〜1 に正規化
-      const positiveScore =
-        typeof g.positiveRatio === "number" ? g.positiveRatio / 100 : 0.5;
-
-      // レビュー数は log スケールで「多すぎるタイトル」を抑えめに（0〜1）
-      const totalReviews =
-        typeof g.totalReviews === "number" ? g.totalReviews : 0;
-      const reviewScore = Math.min(Math.log10(totalReviews + 1) / 4, 1); // 0〜1 くらい
-
-      // 新しさスコア（releaseYear が無ければ中間の 0.5 相当）
-      const currentYear = new Date().getFullYear();
-      const releaseYear =
-        typeof g.releaseYear === "number" ? g.releaseYear : currentYear;
-      const yearDiff = Math.max(0, Math.min(5, currentYear - releaseYear)); // 最大5年差まで見る
-      const recencyScore = 1 - yearDiff / 5; // 0〜1（新しいほど1に近い）
-
-      // ===== リスク系ペナルティ =====
-      const bugRisk =
-        typeof analysis.bugRisk === "number" ? analysis.bugRisk : 0;
-      const riskScore =
-        typeof analysis.riskScore === "number" ? analysis.riskScore : 0;
-      const refundMentions =
-        typeof analysis.refundMentions === "number"
-          ? analysis.refundMentions
-          : 0;
-
-      // ざっくり 0〜0.25 の範囲で減点されるイメージ
-      const riskPenalty = Math.min(
-        0.25,
-        bugRisk * 0.01 + riskScore * 0.01 + Math.min(refundMentions, 5) * 0.02
-      );
-
-      // ===== 重み付き合計 → 0〜1 スコア =====
-      let raw =
-        aiScore * wAi +
-        positiveScore * wPos +
-        reviewScore * wRev +
-        recencyScore * wRec;
-
-      let score01 = raw / totalWeight;
-
-      // リスク分を減点
-      score01 = Math.max(0, score01 - riskPenalty);
-
-      // ===== 「さすがにこれは 8点未満はない」系の底上げ =====
-      const isVeryPositive = (g.positiveRatio ?? 0) >= 97;
-      const hasEnoughReviews =
-        (g.totalReviews ?? 0) >= 300 && (g.totalReviews ?? 0) <= 5000;
-      const isHidden = g.isStatisticallyHidden === true;
-      const isStrongGem =
-        analysis.hiddenGemVerdict === "Yes" &&
-        (g.gemLabel === "Hidden Gem" || g.gemLabel === "Improved Hidden Gem");
-
-      // custom=false のときだけ適用（ユーザーがカスタムするときは素のスコアをそのまま）
-      if (
-        !custom &&
-        isVeryPositive &&
-        hasEnoughReviews &&
-        isHidden &&
-        isStrongGem
-      ) {
-        // 最低でも 8/10 相当のスコアに底上げ
-        score01 = Math.max(score01, 0.8);
-      }
-
-      // custom=true のときは 0〜1 スケール、
-      // recommended / gem-score のときは 1〜10 スケールで返す
-      if (custom) {
-        return score01; // 0〜1
-      } else {
-        return score01 * 10; // 0〜10
-      }
-    };
-
     let sorted = filtered;
 
     switch (sort) {
@@ -1109,68 +1062,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
       case "recommended":
       case "gem-score":
       case "gemScore":
-      case "custom": {
-        const isCustom = sort === "custom";
-        const storyFocused = isStoryFocusedMood(userMood); // ★ 追加
-
-        sorted = [...filtered]
-          .map((g) => {
-            const compositeScore = computeScore(g, isCustom) ?? 0;
-
-            const rawMoodScore = userMood
-              ? calcMoodMatchScore(g.moodScores, userMood)
-              : 0;
-
-            let moodScore = rawMoodScore;
-
-            // ★ Narrative（ストーリー重視）モード時の「物語薄いジャンル」ペナルティ
-            if (
-              storyFocused &&
-              moodScore > 0 &&
-              g.moodScores &&
-              typeof g.moodScores.story === "number" &&
-              g.moodScores.story < 0.45 &&
-              isLowStoryGenreGame(g)
-            ) {
-              // かなり強く下げる（例: 70% 減）
-              moodScore *= 0.3;
-            }
-
-            const normalizedBase = isCustom
-              ? compositeScore
-              : compositeScore / 10;
-            const finalNormalized = userMood
-              ? calcFinalRankingScore(normalizedBase, moodScore)
-              : normalizedBase;
-            const finalComposite = isCustom
-              ? finalNormalized
-              : finalNormalized * 10;
-
-            return {
-              ...g,
-              compositeScore,
-              moodScore, // ★ ペナルティ後の値を保存
-              finalScore: finalNormalized,
-              finalCompositeScore: finalComposite,
-            };
-          })
-          .sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
+      case "custom":
+        sorted = [...filtered];
         break;
-      }
       case "vibe_focus_match":
         sorted = [...filtered].sort(
           (a, b) =>
             (b.vibeFocusMatchScore ?? 0) - (a.vibeFocusMatchScore ?? 0)
         );
         break;
-
       default:
         break;
+    }
+    const responseHeaders: Record<string, string> = {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    };
+    if (debugMode) {
+      responseHeaders["X-Debug-QualityGate-Filtered"] =
+        String(filteredOutByQualityGate);
+      responseHeaders["X-Debug-QualityGate-Threshold"] =
+        String(QUALITY_GATE_MIN);
     }
 
     return new Response(JSON.stringify(sorted), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: responseHeaders,
     });
   } catch (err) {
     console.error("search-games unexpected error", err);
