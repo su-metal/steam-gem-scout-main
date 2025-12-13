@@ -876,7 +876,7 @@ audienceNegative が1件以上ある場合、
   ● featureLabelsV2 について
   - featureLabelsV2 は FeatureLabel v2（新語彙）のスラッグ配列です。
   - 要素には、FEATURE_LABELS_V2 に含まれるスラッグだけを使ってください。
-  - 3～7 個程度の要素を目安とし、無理に水増ししない。
+  - 4～7 個程度の要素を目安とし、無理に水増ししない。
   - 該当するラベルがない場合は [] を返してください。
 
 【STORY（物語）系】

@@ -34,6 +34,8 @@ export interface ExperienceFocus {
   label: string;
   /** このFocusで“強く見たい”FeatureLabel群 */
   featureLabels: FeatureLabelV2[];
+  nearStrongLabels?: FeatureLabelV2[];
+  nearBridgeLabels?: FeatureLabelV2[];
 }
 
 export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
@@ -47,6 +49,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "environment_customization",
       "shared_activity_feel",
     ],
+    nearStrongLabels: ["routine_loop_play", "relaxing_flow"],
+    nearBridgeLabels: ["micro_progression"],
   },
   {
     id: "chill-gentle-exploration",
@@ -58,6 +62,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "relaxing_flow",
       "ambient_mood",
     ],
+    nearStrongLabels: ["atmospheric_world", "whimsical_vibe"],
+    nearBridgeLabels: ["light_puzzleplay"],
   },
   {
     id: "chill-ambient-immersion",
@@ -69,12 +75,16 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "whimsical_vibe",
       "cozy_tone",
     ],
+    nearStrongLabels: ["relaxing_flow", "gentle_exploration"],
+    nearBridgeLabels: ["quick_puzzle"],
   },
   {
     id: "chill-relaxed-puzzle",
     vibe: "chill",
     label: "Relaxed Puzzle",
     featureLabels: ["light_puzzleplay", "quick_puzzle", "relaxing_flow"],
+    nearStrongLabels: ["ambient_mood", "cozy_tone"],
+    nearBridgeLabels: ["micro_progression"],
   },
   {
     id: "chill-slow-creation",
@@ -85,18 +95,24 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "construction_building",
       "sandbox_creation",
     ],
+    nearStrongLabels: ["environment_customization", "resource_management"],
+    nearBridgeLabels: ["automation_processes"],
   },
   {
     id: "story-narrative-action",
     vibe: "story",
     label: "Narrative Action",
     featureLabels: ["story_driven", "action_combat", "dialogue_heavy"],
+    nearStrongLabels: ["character_drama", "emotional_journey"],
+    nearBridgeLabels: ["real_time_combat"],
   },
   {
     id: "story-reading-centered-story",
     vibe: "story",
     label: "Reading-Centered Story",
     featureLabels: ["dialogue_heavy", "character_drama", "emotional_journey"],
+    nearStrongLabels: ["story_driven", "worldbuilding_depth"],
+    nearBridgeLabels: ["choice_and_consequence"],
   },
   {
     id: "story-mystery-investigation",
@@ -107,6 +123,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "worldbuilding_depth",
       "sci_fi_atmosphere",
     ],
+    nearStrongLabels: ["dialogue_heavy", "atmospheric_world"],
+    nearBridgeLabels: ["quick_puzzle"],
   },
   {
     id: "story-choice-and-consequence",
@@ -117,6 +135,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "choice_and_consequence",
       "dialogue_heavy",
     ],
+    nearStrongLabels: ["character_drama", "emotional_journey"],
+    nearBridgeLabels: ["mystery_investigation"],
   },
   {
     id: "story-lore-worldbuilding",
@@ -127,6 +147,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "atmospheric_world",
       "fantasy_atmosphere",
     ],
+    nearStrongLabels: ["sci_fi_atmosphere", "ambient_mood"],
+    nearBridgeLabels: ["dialogue_heavy"],
   },
   {
     id: "focus-battle-and-growth",
@@ -138,6 +160,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "high_intensity_challenge",
       "loot_and_rewards_loop",
     ],
+    nearStrongLabels: ["tactical_turn_combat", "resource_management"],
+    nearBridgeLabels: ["action_combat"],
   },
   {
     id: "focus-tactics-and-planning",
@@ -148,18 +172,24 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "tactical_turn_combat",
       "logistics_planning",
     ],
+    nearStrongLabels: ["deckbuilding_strategy", "resource_management"],
+    nearBridgeLabels: ["run_based_structure"],
   },
   {
     id: "focus-base-and-systems",
     vibe: "focus",
     label: "Base & Systems",
     featureLabels: ["construction_building", "automation_processes", "resource_management"],
+    nearStrongLabels: ["colony_management", "automation_logic"],
+    nearBridgeLabels: ["sandbox_creation"],
   },
   {
     id: "focus-simulation",
     vibe: "focus",
     label: "Simulation",
     featureLabels: ["automation_logic", "colony_management", "sandbox_creation"],
+    nearStrongLabels: ["resource_management", "automation_processes"],
+    nearBridgeLabels: ["logistics_planning"],
   },
   {
     id: "focus-optimization-builder",
@@ -170,12 +200,16 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "resource_management",
       "construction_building",
     ],
+    nearStrongLabels: ["automation_processes", "logistics_planning"],
+    nearBridgeLabels: ["micro_progression"],
   },
   {
     id: "action-exploration",
     vibe: "action",
     label: "Exploration",
     featureLabels: ["exploration_core", "gentle_exploration", "ambient_mood"],
+    nearStrongLabels: ["mobility_platforming", "precision_control_platforming"],
+    nearBridgeLabels: ["run_based_structure"],
   },
   {
     id: "action-combat",
@@ -186,12 +220,16 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "real_time_combat",
       "high_intensity_challenge",
     ],
+    nearStrongLabels: ["precision_shooter"],
+    nearBridgeLabels: ["arcade_shooter", "run_based_structure"],
   },
   {
     id: "action-competitive",
     vibe: "action",
     label: "Competitive",
     featureLabels: ["high_intensity_challenge", "precision_shooter", "rhythm_action"],
+    nearStrongLabels: ["real_time_combat"],
+    nearBridgeLabels: ["arcade_shooter", "run_based_structure"],
   },
   {
     id: "action-tactical-stealth",
@@ -202,6 +240,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "stealth_mechanics",
       "precision_control_platforming",
     ],
+    nearStrongLabels: ["logistics_planning", "turn_based_tactics"],
+    nearBridgeLabels: ["mystery_investigation"],
   },
   {
     id: "action-crowd-smash",
@@ -212,30 +252,40 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "high_intensity_challenge",
       "run_based_structure",
     ],
+    nearStrongLabels: ["action_combat", "real_time_combat"],
+    nearBridgeLabels: ["arcade_shooter"],
   },
   {
     id: "short-arcade-action",
     vibe: "short",
     label: "Arcade Action",
     featureLabels: ["arcade_actionstyle", "high_intensity_challenge"],
+    nearStrongLabels: ["arcade_shooter"],
+    nearBridgeLabels: ["action_combat", "run_based_structure"],
   },
   {
     id: "short-tactical-decisions",
     vibe: "short",
     label: "Tactical Decisions",
     featureLabels: ["tactical_turn_combat", "turn_based_tactics"],
+    nearStrongLabels: ["deckbuilding_strategy", "logistics_planning"],
+    nearBridgeLabels: ["run_based_structure"],
   },
   {
     id: "short-puzzle-moments",
     vibe: "short",
     label: "Puzzle Moments",
     featureLabels: ["quick_puzzle", "light_puzzleplay", "relaxing_flow"],
+    nearStrongLabels: ["ambient_mood", "micro_progression"],
+    nearBridgeLabels: ["whimsical_vibe"],
   },
   {
     id: "short-flow-mastery",
     vibe: "short",
     label: "Flow Mastery",
     featureLabels: ["relaxing_flow", "gentle_exploration", "quick_puzzle"],
+    nearStrongLabels: ["rhythm_action", "precision_control_platforming"],
+    nearBridgeLabels: ["mobility_platforming"],
   },
   {
     id: "short-competitive-rounds",
@@ -246,6 +296,8 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "precision_shooter",
       "high_intensity_challenge",
     ],
+    nearStrongLabels: ["real_time_combat", "arcade_shooter"],
+    nearBridgeLabels: ["run_based_structure"],
   },
 ];
 

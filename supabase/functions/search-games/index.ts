@@ -279,6 +279,13 @@ function computeVibeFocusMatchScore(params: {
 
 interface ExperienceFocusScoreResult {
   focusScore: number | null;
+  finalScore: number | null;
+  matchScore: number | null;
+  nearStrongScore: number | null;
+  nearBridgeScore: number | null;
+  matchedLabels: FeatureLabelV2[];
+  nearStrongMatchedLabels: FeatureLabelV2[];
+  nearBridgeMatchedLabels: FeatureLabelV2[];
 }
 
 function computeExperienceFocusScore(
@@ -286,28 +293,105 @@ function computeExperienceFocusScore(
   experienceFocusId: ExperienceFocusId | null | undefined
 ): ExperienceFocusScoreResult {
   if (!experienceFocusId) {
-    return { focusScore: null };
+    return {
+      focusScore: null,
+      finalScore: null,
+      matchScore: null,
+      nearStrongScore: null,
+      nearBridgeScore: null,
+      matchedLabels: [],
+      nearStrongMatchedLabels: [],
+      nearBridgeMatchedLabels: [],
+    };
   }
 
   const focus = findExperienceFocusById(experienceFocusId);
   if (!focus || !Array.isArray(focus.featureLabels) || focus.featureLabels.length === 0) {
-    return { focusScore: null };
+    return {
+      focusScore: null,
+      finalScore: null,
+      matchScore: null,
+      nearStrongScore: null,
+      nearBridgeScore: null,
+      matchedLabels: [],
+      nearStrongMatchedLabels: [],
+      nearBridgeMatchedLabels: [],
+    };
   }
 
-  if (!featureLabelsV2 || featureLabelsV2.length === 0) {
-    return { focusScore: 0 };
+  const gameLabels =
+    Array.isArray(featureLabelsV2) && featureLabelsV2.length > 0
+      ? featureLabelsV2
+      : [];
+
+  if (gameLabels.length === 0) {
+    return {
+      focusScore: 0,
+      finalScore: 0,
+      matchScore: 0,
+      nearStrongScore: 0,
+      nearBridgeScore: 0,
+      matchedLabels: [],
+      nearStrongMatchedLabels: [],
+      nearBridgeMatchedLabels: [],
+    };
   }
 
-  const focusSet = new Set<FeatureLabelV2>(focus.featureLabels);
-  let overlap = 0;
-  for (const label of featureLabelsV2) {
-    if (focusSet.has(label)) {
-      overlap++;
-    }
-  }
+  const gameLabelSet = new Set<FeatureLabelV2>(gameLabels);
+  const focusLabels = focus.featureLabels;
+  const nearStrongLabels = focus.nearStrongLabels ?? [];
+  const nearBridgeLabels = focus.nearBridgeLabels ?? [];
 
-  const rawScore = overlap / focus.featureLabels.length;
-  return { focusScore: rawScore };
+  const matchedLabels = focusLabels.filter((label) =>
+    gameLabelSet.has(label)
+  );
+  const nearStrongMatchedLabels = nearStrongLabels.filter((label) =>
+    gameLabelSet.has(label)
+  );
+  const nearBridgeMatchedLabels = nearBridgeLabels.filter((label) =>
+    gameLabelSet.has(label)
+  );
+
+  const matchHits = matchedLabels.length;
+  const nearStrongHits = nearStrongMatchedLabels.length;
+  const nearBridgeHits = nearBridgeMatchedLabels.length;
+
+  const matchWeight = 1.0;
+  const nearStrongWeight = 0.33;
+  const nearBridgeWeight = 0.25;
+
+  const denom =
+    matchWeight * focusLabels.length +
+    nearStrongWeight * nearStrongLabels.length +
+    nearBridgeWeight * nearBridgeLabels.length;
+
+  const numerator =
+    matchWeight * matchHits +
+    nearStrongWeight * nearStrongHits +
+    nearBridgeWeight * nearBridgeHits;
+
+  const finalScore = denom > 0 ? numerator / denom : 0;
+  const matchScore =
+    focusLabels.length > 0 ? matchHits / focusLabels.length : 0;
+  const nearStrongScore =
+    nearStrongLabels.length > 0
+      ? nearStrongHits / nearStrongLabels.length
+      : 0;
+  const nearBridgeScore =
+    nearBridgeLabels.length > 0
+      ? nearBridgeHits / nearBridgeLabels.length
+      : 0;
+
+  return {
+    focusScore: finalScore,
+    finalScore,
+    matchScore,
+    nearStrongScore,
+    nearBridgeScore,
+    matchedLabels,
+    nearStrongMatchedLabels,
+    nearBridgeMatchedLabels,
+  };
 }
 
 // --- 可変スコア軸用ヘルパー -------------------------
@@ -851,13 +935,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const gameLabelCount = normalizedGameLabels.length;
       const focus = findExperienceFocusById(normalizedExperienceFocusId);
       const focusLabelCount = focus?.featureLabels.length ?? 0;
-      const matchedLabelsFull =
-        focus && normalizedGameLabels.length > 0
-          ? focus.featureLabels.filter((label) =>
-              normalizedGameLabels.includes(label)
-            )
-          : [];
-      const matchedLabelsResponse = matchedLabelsFull.slice(0, 6);
+      const focusResult = computeExperienceFocusScore(
+        normalizedAnalysisFeatureLabelsV2,
+        normalizedExperienceFocusId
+      );
+      const focusScore = focusResult.focusScore;
+      const matchedLabelsResponse = focusResult.matchedLabels.slice(0, 6);
       const debugFocusData = debugMode
         ? {
             requestedId: requestedExperienceFocusId,
@@ -869,8 +952,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const debugFocusMatchData = debugMode
         ? {
             gameLabelCount,
-            overlap: matchedLabelsFull.length,
+            overlap: focusResult.matchedLabels.length,
             matchedLabels: matchedLabelsResponse,
+            matchScore: focusResult.matchScore,
+            nearStrongHits: focusResult.nearStrongMatchedLabels.length,
+            nearBridgeHits: focusResult.nearBridgeMatchedLabels.length,
+            finalScore: focusResult.finalScore,
+            nearStrongMatchedLabels: focusResult.nearStrongMatchedLabels,
+            nearBridgeMatchedLabels: focusResult.nearBridgeMatchedLabels,
+            focusLabelCount,
+            nearStrongLabelCount: focus?.nearStrongLabels?.length ?? 0,
+            nearBridgeLabelCount: focus?.nearBridgeLabels?.length ?? 0,
           }
         : undefined;
 
@@ -886,11 +978,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         featureLabels,
         featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
       });
-
-      const { focusScore } = computeExperienceFocusScore(
-        normalizedAnalysisFeatureLabelsV2,
-        normalizedExperienceFocusId
-      );
 
       const rawMoodScore =
         userMood && typeof userMood === "object"
