@@ -1146,22 +1146,6 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         aiAnalysisRaw && typeof aiAnalysisRaw === "object"
           ? aiAnalysisRaw
           : {};
-      const persistedFeatureLabelsV2 = Array.isArray(
-        (existing as any).feature_labels
-      )
-        ? normalizeAnalysisFeatureLabelsV2(
-            (existing as any).feature_labels.filter(
-              (label): label is string => typeof label === "string"
-            )
-          )
-        : [];
-      const persistedFeatureLabelsV2Raw = Array.isArray(
-        previousAnalysis.featureLabelsV2Raw
-      )
-        ? normalizeAnalysisFeatureLabelsV2Raw(
-            previousAnalysis.featureLabelsV2Raw as unknown
-          )
-        : [];
 
       const aiRawFeatureLabelsV2 = Array.isArray(aiAnalysis.featureLabelsV2Raw)
         ? (aiAnalysis.featureLabelsV2Raw as unknown[]).filter(
@@ -1173,43 +1157,54 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
             (label): label is string => typeof label === "string"
           )
         : [];
-      const aiFeatureLabelsV2RawCandidates: string[] = [];
-      aiFeatureLabelsV2RawCandidates.push(...aiRawFeatureLabelsV2);
-      if (
-        aiFeatureLabelsV2RawCandidates.length === 0 &&
-        aiCanonicalFeatureLabelsV2.length > 0
-      ) {
-        aiFeatureLabelsV2RawCandidates.push(...aiCanonicalFeatureLabelsV2);
-      }
+      const aiFeatureLabelsV2RawSource =
+        aiRawFeatureLabelsV2.length > 0
+          ? aiRawFeatureLabelsV2
+          : aiCanonicalFeatureLabelsV2;
 
-      const finalFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw([
-        ...persistedFeatureLabelsV2Raw,
-        ...aiFeatureLabelsV2RawCandidates,
-      ]);
+      const finalFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
+        aiFeatureLabelsV2RawSource
+      );
 
-      const aiFeatureLabelsV2Candidates = aiCanonicalFeatureLabelsV2;
+      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
+        aiCanonicalFeatureLabelsV2,
+        aiAnalysis
+      );
 
       const mergedAnalysisBase = {
         ...previousAnalysis,
         ...aiAnalysis,
       };
 
-      const finalFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
-        [
-          ...aiFeatureLabelsV2Candidates,
-          ...persistedFeatureLabelsV2,
-        ],
-        mergedAnalysisBase
-      );
+      const normalizedRawSet = new Set<string>(finalFeatureLabelsV2Raw);
+      const rebuiltFeatureLabelsV2Raw = [...finalFeatureLabelsV2Raw];
+      for (const label of finalFeatureLabelsV2) {
+        if (!label || normalizedRawSet.has(label)) continue;
+        normalizedRawSet.add(label);
+        rebuiltFeatureLabelsV2Raw.push(label);
+      }
 
       const mergedAnalysis = {
         ...mergedAnalysisBase,
         featureLabelsV2: finalFeatureLabelsV2,
-        featureLabelsV2Raw: finalFeatureLabelsV2Raw,
+        featureLabelsV2Raw: rebuiltFeatureLabelsV2Raw,
       };
+      const finalAiTags =
+        (Array.isArray(aiAnalysis.aiTags) && aiAnalysis.aiTags.length > 0
+          ? aiAnalysis.aiTags
+          : Array.isArray(previousAnalysis.aiTags) &&
+            previousAnalysis.aiTags.length > 0
+          ? previousAnalysis.aiTags
+          : undefined) ?? undefined;
+      if (finalAiTags) {
+        mergedAnalysis.aiTags = finalAiTags;
+      }
       delete (mergedAnalysis as any).featureLabels;
 
       updatedData.analysis = mergedAnalysis;
+      if (finalAiTags) {
+        updatedData.aiTags = finalAiTags;
+      }
 
       const { error: updateError } = await supabase
         .from("game_rankings_cache")

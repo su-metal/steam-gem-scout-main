@@ -1,8 +1,13 @@
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve: (handler: (req: Request) => Promise<Response> | Response) => void;
 };
 
 interface SteamAppDetails {
@@ -46,7 +51,7 @@ interface SteamReviewsResponse {
   }>;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

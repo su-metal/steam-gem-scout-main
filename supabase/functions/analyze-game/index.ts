@@ -13,6 +13,7 @@ declare const Deno: {
 import {
   normalizeAnalysisFeatureLabelsV2,
   normalizeAnalysisFeatureLabelsV2Raw,
+  applyJrpgStructuralLabels,
 } from "./feature-labels.ts";
 import type { FeatureLabelV2 } from "../_shared/feature-labels.ts";
 import { FEATURE_LABELS_V2 } from "../_shared/feature-labels.ts";
@@ -137,6 +138,10 @@ interface HiddenGemAnalysis {
 
   /** Steam でメジャーな英語タグ（AI生成） */
   aiTags?: string[] | null;
+
+  jrpgEvidence?: Partial<Record<FeatureLabelV2, string[]>>;
+  jrpgLabelsAddedRaw?: FeatureLabelV2[];
+  jrpgPromotedLabels?: FeatureLabelV2[];
 
   /** 代表的な主ジャンル 1 本（任意） */
   aiPrimaryGenre?: string | null;
@@ -835,6 +840,7 @@ audienceNegative が1件以上ある場合、
   - 文ではなく **単語タグ** とし、類義語・重複は避ける。
   - 5〜10 個程度を目安とする。
   - aiPrimaryGenre は「代表ジャンル 1つだけ」（例:  Action, Adventure, RPG, Visual Novel, Strategy など）。複数ジャンルの羅列は禁止。判断できない場合は null 可。
+  - jrpg タグは、複数の明確な証拠（例: コマンド/ターン制の戦闘・メニュー選択、パーティ編成・仲間依存、レベル/経験値成長が中心、一本道のストーリー進行など）をレビューや summary から確認できるときにだけ付ける。根拠が弱いときは付けない。
 
   【タグ生成の優先順位】
   1. 入力 JSON の tags / genres / store 情報に含まれている既存タグを基準にする。
@@ -1705,24 +1711,49 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
     normalized.audienceNegative = audienceNegative;
   }
 
+  const normalizedAiTags = normalizeAiTags(parsed?.aiTags);
+  const analysisWithNormalizedAiTags = {
+    ...parsed,
+    aiTags: normalizedAiTags,
+  };
+  const jrpgStructuralLabels = applyJrpgStructuralLabels(
+    analysisWithNormalizedAiTags
+  );
+  const featureLabelAnalysisContext = {
+    ...analysisWithNormalizedAiTags,
+    jrpgLabelsAddedRaw: jrpgStructuralLabels.labels,
+  };
   const normalizedFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
-    parsed?.featureLabelsV2
+    parsed?.featureLabelsV2,
+    jrpgStructuralLabels.labels
   );
   const normalizedFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
     parsed?.featureLabelsV2,
-    parsed
+    featureLabelAnalysisContext
   );
   normalized.featureLabelsV2 = normalizedFeatureLabelsV2;
   normalized.featureLabelsV2Raw = normalizedFeatureLabelsV2Raw;
+  if (jrpgStructuralLabels.labels.length > 0) {
+    normalized.jrpgLabelsAddedRaw = jrpgStructuralLabels.labels;
+  }
+  if (Object.keys(jrpgStructuralLabels.evidence).length > 0) {
+    normalized.jrpgEvidence = jrpgStructuralLabels.evidence;
+  }
+  if (
+    featureLabelAnalysisContext.jrpgPromotedLabels &&
+    featureLabelAnalysisContext.jrpgPromotedLabels.length > 0
+  ) {
+    normalized.jrpgPromotedLabels =
+      featureLabelAnalysisContext.jrpgPromotedLabels;
+  }
 
   const featureTagSlugs = normalizeStringArray(parsed?.featureTagSlugs);
   if (featureTagSlugs.length > 0) {
     normalized.featureTagSlugs = featureTagSlugs;
   }
 
-  const aiTags = normalizeAiTags(parsed?.aiTags);
-  if (aiTags.length > 0) {
-    normalized.aiTags = aiTags;
+  if (normalizedAiTags.length > 0) {
+    normalized.aiTags = normalizedAiTags;
   }
 
   if (typeof parsed?.aiPrimaryGenre === "string") {

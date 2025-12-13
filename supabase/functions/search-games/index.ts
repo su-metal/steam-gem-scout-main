@@ -25,6 +25,9 @@ const corsHeaders = {
 };
 
 const QUALITY_GATE_MIN = 0.55;
+const EXPERIENCE_FOCUS_MATCH_CAP = 4;
+const EXPERIENCE_FOCUS_NEAR_STRONG_CAP = 3;
+const EXPERIENCE_FOCUS_NEAR_BRIDGE_CAP = 3;
 
 type SortOption =
   | "recommended"
@@ -286,6 +289,12 @@ interface ExperienceFocusScoreResult {
   matchedLabels: FeatureLabelV2[];
   nearStrongMatchedLabels: FeatureLabelV2[];
   nearBridgeMatchedLabels: FeatureLabelV2[];
+  matchLabelCount: number;
+  nearStrongLabelCount: number;
+  nearBridgeLabelCount: number;
+  matchDenom: number;
+  nearStrongDenom: number;
+  nearBridgeDenom: number;
 }
 
 function computeExperienceFocusScore(
@@ -302,6 +311,12 @@ function computeExperienceFocusScore(
       matchedLabels: [],
       nearStrongMatchedLabels: [],
       nearBridgeMatchedLabels: [],
+      matchLabelCount: 0,
+      nearStrongLabelCount: 0,
+      nearBridgeLabelCount: 0,
+      matchDenom: 0,
+      nearStrongDenom: 0,
+      nearBridgeDenom: 0,
     };
   }
 
@@ -316,6 +331,12 @@ function computeExperienceFocusScore(
       matchedLabels: [],
       nearStrongMatchedLabels: [],
       nearBridgeMatchedLabels: [],
+      matchLabelCount: 0,
+      nearStrongLabelCount: 0,
+      nearBridgeLabelCount: 0,
+      matchDenom: 0,
+      nearStrongDenom: 0,
+      nearBridgeDenom: 0,
     };
   }
 
@@ -334,6 +355,18 @@ function computeExperienceFocusScore(
       matchedLabels: [],
       nearStrongMatchedLabels: [],
       nearBridgeMatchedLabels: [],
+      matchLabelCount: focus.featureLabels.length,
+      nearStrongLabelCount: focus.nearStrongLabels?.length ?? 0,
+      nearBridgeLabelCount: focus.nearBridgeLabels?.length ?? 0,
+      matchDenom: Math.min(focus.featureLabels.length, EXPERIENCE_FOCUS_MATCH_CAP),
+      nearStrongDenom: Math.min(
+        focus.nearStrongLabels?.length ?? 0,
+        EXPERIENCE_FOCUS_NEAR_STRONG_CAP
+      ),
+      nearBridgeDenom: Math.min(
+        focus.nearBridgeLabels?.length ?? 0,
+        EXPERIENCE_FOCUS_NEAR_BRIDGE_CAP
+      ),
     };
   }
 
@@ -356,14 +389,28 @@ function computeExperienceFocusScore(
   const nearStrongHits = nearStrongMatchedLabels.length;
   const nearBridgeHits = nearBridgeMatchedLabels.length;
 
+  const matchLabelCount = focusLabels.length;
+  const nearStrongLabelCount = nearStrongLabels.length;
+  const nearBridgeLabelCount = nearBridgeLabels.length;
+
+  const matchDenom = Math.min(matchLabelCount, EXPERIENCE_FOCUS_MATCH_CAP);
+  const nearStrongDenom = Math.min(
+    nearStrongLabelCount,
+    EXPERIENCE_FOCUS_NEAR_STRONG_CAP
+  );
+  const nearBridgeDenom = Math.min(
+    nearBridgeLabelCount,
+    EXPERIENCE_FOCUS_NEAR_BRIDGE_CAP
+  );
+
   const matchWeight = 1.0;
   const nearStrongWeight = 0.33;
   const nearBridgeWeight = 0.25;
 
   const denom =
-    matchWeight * focusLabels.length +
-    nearStrongWeight * nearStrongLabels.length +
-    nearBridgeWeight * nearBridgeLabels.length;
+    matchWeight * matchDenom +
+    nearStrongWeight * nearStrongDenom +
+    nearBridgeWeight * nearBridgeDenom;
 
   const numerator =
     matchWeight * matchHits +
@@ -371,16 +418,14 @@ function computeExperienceFocusScore(
     nearBridgeWeight * nearBridgeHits;
 
   const finalScore = denom > 0 ? numerator / denom : 0;
-  const matchScore =
-    focusLabels.length > 0 ? matchHits / focusLabels.length : 0;
-  const nearStrongScore =
-    nearStrongLabels.length > 0
-      ? nearStrongHits / nearStrongLabels.length
-      : 0;
-  const nearBridgeScore =
-    nearBridgeLabels.length > 0
-      ? nearBridgeHits / nearBridgeLabels.length
-      : 0;
+  const matchFraction = matchDenom > 0 ? matchHits / matchDenom : 0;
+  const nearStrongFraction =
+    nearStrongDenom > 0 ? nearStrongHits / nearStrongDenom : 0;
+  const nearBridgeFraction =
+    nearBridgeDenom > 0 ? nearBridgeHits / nearBridgeDenom : 0;
+  const matchScore = Math.min(1, matchFraction);
+  const nearStrongScore = Math.min(1, nearStrongFraction);
+  const nearBridgeScore = Math.min(1, nearBridgeFraction);
 
   return {
     focusScore: finalScore,
@@ -391,6 +436,12 @@ function computeExperienceFocusScore(
     matchedLabels,
     nearStrongMatchedLabels,
     nearBridgeMatchedLabels,
+    matchLabelCount,
+    nearStrongLabelCount,
+    nearBridgeLabelCount,
+    matchDenom,
+    nearStrongDenom,
+    nearBridgeDenom,
   };
 }
 
@@ -924,11 +975,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : [];
       const normalizedAnalysisFeatureLabelsV2 =
         analysisFeatureLabelsV2.length > 0 ? analysisFeatureLabelsV2 : undefined;
+      const baseRawSource = (
+        analysisRaw.featureLabelsV2Raw ??
+        analysisRaw.featureLabelsV2 ??
+        []
+      ) as unknown;
       const analysisFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
-        (analysisRaw.featureLabelsV2Raw ??
-          analysisRaw.featureLabelsV2 ??
-          []) as unknown
+        baseRawSource
       );
+      const analysisFeatureLabelsV2RawSet = new Set<string>(
+        analysisFeatureLabelsV2Raw
+      );
+      const analysisFeatureLabelsV2RawUnified = [...analysisFeatureLabelsV2Raw];
+      if (normalizedAnalysisFeatureLabelsV2) {
+        for (const label of normalizedAnalysisFeatureLabelsV2) {
+          if (!label || analysisFeatureLabelsV2RawSet.has(label)) continue;
+          analysisFeatureLabelsV2RawSet.add(label);
+          analysisFeatureLabelsV2RawUnified.push(label);
+        }
+      }
 
       const normalizedGameLabels =
         normalizedAnalysisFeatureLabelsV2 ?? [];
@@ -963,6 +1028,32 @@ Deno.serve(async (req: Request): Promise<Response> => {
             focusLabelCount,
             nearStrongLabelCount: focus?.nearStrongLabels?.length ?? 0,
             nearBridgeLabelCount: focus?.nearBridgeLabels?.length ?? 0,
+            caps: {
+              match: EXPERIENCE_FOCUS_MATCH_CAP,
+              nearStrong: EXPERIENCE_FOCUS_NEAR_STRONG_CAP,
+              nearBridge: EXPERIENCE_FOCUS_NEAR_BRIDGE_CAP,
+            },
+            denoms: {
+              match: focusResult.matchDenom,
+              nearStrong: focusResult.nearStrongDenom,
+              nearBridge: focusResult.nearBridgeDenom,
+            },
+            labelCountsBeforeCap: {
+              match: focusResult.matchLabelCount,
+              nearStrong: focusResult.nearStrongLabelCount,
+              nearBridge: focusResult.nearBridgeLabelCount,
+            },
+          }
+        : undefined;
+      const labelsConsistency = debugMode
+        ? {
+            v2Count: normalizedAnalysisFeatureLabelsV2?.length ?? 0,
+            rawCount: analysisFeatureLabelsV2RawUnified.length,
+            rawContainsAllV2: normalizedAnalysisFeatureLabelsV2
+              ? normalizedAnalysisFeatureLabelsV2.every((label) =>
+                  analysisFeatureLabelsV2RawSet.has(label)
+                )
+              : true,
           }
         : undefined;
 
@@ -1031,7 +1122,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
           stabilityTrend,
           hasImprovedSinceLaunch,
           featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
-          featureLabelsV2Raw: analysisFeatureLabelsV2Raw,
+          featureLabelsV2Raw: analysisFeatureLabelsV2RawUnified,
+          labelsConsistency,
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
           ),

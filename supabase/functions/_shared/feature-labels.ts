@@ -118,6 +118,10 @@ export type FeatureLabelV2 =
   | "open_world_structure"
   | "survival_mechanics"
   | "stealth_mechanics"
+  | "party_based_combat"
+  | "command_menu_combat"
+  | "level_up_growth"
+  | "linear_story_progression"
   | "real_time_combat"
   | "tactical_turn_combat"
   | "precision_control_platforming"
@@ -179,6 +183,10 @@ export const FEATURE_LABELS_V2: readonly FeatureLabelV2[] = [
   "open_world_structure",
   "survival_mechanics",
   "stealth_mechanics",
+  "party_based_combat",
+  "command_menu_combat",
+  "level_up_growth",
+  "linear_story_progression",
   "real_time_combat",
   "tactical_turn_combat",
   "precision_control_platforming",

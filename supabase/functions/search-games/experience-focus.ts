@@ -134,6 +134,7 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
       "branching_narrative_structure",
       "choice_and_consequence",
       "dialogue_heavy",
+      "story_driven",
     ],
     nearStrongLabels: ["character_drama", "emotional_journey"],
     nearBridgeLabels: ["mystery_investigation"],

@@ -156,6 +156,57 @@ const FILTERED_FEATURE_LABEL_KEYWORDS: Record<string, readonly string[]> = {
     "true ending",
     "bad ending",
   ],
+  party_based_combat: [
+    "party",
+    "party members",
+    "companions",
+    "仲間",
+    "パーティ",
+    "party-based",
+    "party based",
+  ],
+  command_menu_combat: [
+    "command",
+    "menu",
+    "select actions",
+    "コマンド",
+    "atb",
+    "turn-based",
+    "turn based",
+  ],
+  level_up_growth: [
+    "level",
+    "exp",
+    "experience",
+    "experience points",
+    "レベル",
+    "経験値",
+    "growth",
+    "stat gain",
+  ],
+  linear_story_progression: [
+    "linear",
+    "chapters",
+    "chapter",
+    "一本道",
+    "chapter-based",
+    "story progression",
+    "章",
+    "episode",
+  ],
+  branching_narrative_structure: [
+    "branching",
+    "choice",
+    "choices matter",
+    "choice matters",
+    "branching story",
+    "route",
+    "routes",
+    "branching narrative",
+    "branching decisions",
+    "branching plot",
+    "multiple endings",
+  ],
 };
 
 const FILTERED_FEATURE_LABEL_KEYWORDS_LOWER = Object.fromEntries(
@@ -164,6 +215,36 @@ const FILTERED_FEATURE_LABEL_KEYWORDS_LOWER = Object.fromEntries(
     keywords.map((keyword) => keyword.toLowerCase()),
   ])
 ) as Record<string, readonly string[]>;
+
+const JRPG_STRUCTURAL_LABELS: FeatureLabelV2[] = [
+  "party_based_combat",
+  "command_menu_combat",
+  "level_up_growth",
+  "linear_story_progression",
+];
+const JRPG_STRUCTURAL_LABEL_SET = new Set<FeatureLabelV2>(JRPG_STRUCTURAL_LABELS);
+
+function hasJrpgAiTag(analysis?: any): boolean {
+  if (!analysis || !Array.isArray(analysis.aiTags)) return false;
+  return analysis.aiTags.some(
+    (tag: string) =>
+      typeof tag === "string" && tag.trim().toLowerCase() === "jrpg"
+  );
+}
+
+function shouldBypassJrpgEvidenceGuard(
+  label: FeatureLabelV2,
+  analysis?: any
+): boolean {
+  if (!analysis) return false;
+  if (!hasJrpgAiTag(analysis)) return false;
+  if (!JRPG_STRUCTURAL_LABEL_SET.has(label)) return false;
+  if (label === "linear_story_progression") return false;
+  const jrpgCandidates = Array.isArray(analysis.jrpgLabelsAddedRaw)
+    ? analysis.jrpgLabelsAddedRaw
+    : [];
+  return jrpgCandidates.includes(label);
+}
 
 function collectTextFromValue(raw?: unknown): string[] {
   if (raw === undefined || raw === null) {
@@ -243,44 +324,98 @@ function collectSummaryTexts(analysis: any): string[] {
   return summaries;
 }
 
-function hasKeywordMatch(texts: string[], keywords: readonly string[]): boolean {
-  if (!keywords || keywords.length === 0) return false;
-  for (const text of texts) {
-    const lower = text.toLowerCase();
-    for (const keyword of keywords) {
-      if (lower.includes(keyword)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
+export type FeatureLabelEvidenceResult = {
+  keep: boolean;
+  hits: EvidenceHitMap;
+};
 
 export function shouldKeepFeatureLabelByEvidence(
   label: FeatureLabelV2,
   analysis: any
-): boolean {
-  if (!analysis) return false;
+): FeatureLabelEvidenceResult {
+  if (!analysis) {
+    return { keep: false, hits: {} };
+  }
   const keywords = FILTERED_FEATURE_LABEL_KEYWORDS_LOWER[label];
   if (!keywords || keywords.length === 0) {
-    return true;
+    return { keep: true, hits: {} };
   }
 
-  const evidenceGroups = [
-    [...collectTextFromValue(analysis?.pros), ...collectTextFromValue(analysis?.cons)],
-    collectTextFromValue(analysis?.labels),
-    collectAudienceTexts(analysis),
-    collectSummaryTexts(analysis),
+  const evidenceGroups: {
+    name: EvidenceGroupName;
+    texts: string[];
+  }[] = [
+    {
+      name: "prosCons",
+      texts: [
+        ...collectTextFromValue(analysis?.pros),
+        ...collectTextFromValue(analysis?.cons),
+      ],
+    },
+    { name: "labels", texts: collectTextFromValue(analysis?.labels) },
+    { name: "audience", texts: collectAudienceTexts(analysis) },
+    { name: "summary", texts: collectSummaryTexts(analysis) },
   ];
 
-  const matchedGroups = evidenceGroups.reduce((count, texts) => {
-    if (hasKeywordMatch(texts, keywords)) {
-      return count + 1;
-    }
-    return count;
-  }, 0);
+  const hits: EvidenceHitMap = {};
+  let matchedGroups = 0;
 
-  return matchedGroups >= 2;
+  for (const group of evidenceGroups) {
+    const matchedKeywords = collectEvidenceKeywordMatches(
+      group.texts,
+      keywords
+    );
+    if (matchedKeywords.length > 0) {
+      matchedGroups += 1;
+      hits[group.name] = matchedKeywords;
+    }
+  }
+
+  let keep = matchedGroups >= 2;
+
+  if (label === "branching_narrative_structure") {
+    const hasProsCons = (hits.prosCons?.length ?? 0) > 0;
+    const hasLabels = (hits.labels?.length ?? 0) > 0;
+    const hasAudience = (hits.audience?.length ?? 0) > 0;
+    if (!hasProsCons || (!hasLabels && !hasAudience)) {
+      keep = false;
+    }
+  }
+
+  if (
+    label === "branching_narrative_structure" &&
+    keep &&
+    analysis &&
+    typeof analysis === "object"
+  ) {
+    (analysis as any).branchingEvidenceHits = hits;
+  }
+
+  return { keep, hits };
+}
+
+type EvidenceGroupName = "prosCons" | "labels" | "audience" | "summary";
+type EvidenceHitMap = Partial<Record<EvidenceGroupName, string[]>>;
+
+function collectEvidenceKeywordMatches(
+  texts: string[],
+  keywords: readonly string[]
+): string[] {
+  const hits = new Set<string>();
+  if (!keywords || keywords.length === 0) return [];
+
+  for (const text of texts) {
+    if (!text) continue;
+    const lowerText = text.toLowerCase();
+    for (const keyword of keywords) {
+      if (!keyword) continue;
+      if (lowerText.includes(keyword)) {
+        hits.add(keyword);
+      }
+    }
+  }
+
+  return Array.from(hits);
 }
 
 export function normalizeAnalysisFeatureLabelsV2(
@@ -306,13 +441,34 @@ export function normalizeAnalysisFeatureLabelsV2(
     return result;
   }
 
-  return result.filter((label) => {
+  const promotedLabels: FeatureLabelV2[] = [];
+  const promotedSet = new Set<FeatureLabelV2>();
+
+  const filtered = result.filter((label) => {
+    if (shouldBypassJrpgEvidenceGuard(label, analysis)) {
+      if (!promotedSet.has(label)) {
+        promotedSet.add(label);
+        promotedLabels.push(label);
+      }
+      return true;
+    }
+
     if (!FILTERED_FEATURE_LABEL_KEYWORDS[label]) return true;
-    return shouldKeepFeatureLabelByEvidence(label, analysis);
+    const evidence = shouldKeepFeatureLabelByEvidence(label, analysis);
+    return evidence.keep;
   });
+
+  if (analysis && typeof analysis === "object") {
+    (analysis as any).jrpgPromotedLabels = promotedLabels;
+  }
+
+  return filtered;
 }
 
-export function normalizeAnalysisFeatureLabelsV2Raw(raw?: unknown): string[] {
+export function normalizeAnalysisFeatureLabelsV2Raw(
+  raw?: unknown,
+  extra?: FeatureLabelV2[]
+): string[] {
   const values = flattenFeatureLabelV2Input(raw);
   const seen = new Set<string>();
   const result: string[] = [];
@@ -326,5 +482,167 @@ export function normalizeAnalysisFeatureLabelsV2Raw(raw?: unknown): string[] {
     result.push(slug);
   }
 
+  if (Array.isArray(extra)) {
+    for (const item of extra) {
+      if (!item) continue;
+      const canonical = item.trim().toLowerCase();
+      if (!canonical) continue;
+      if (!isFeatureLabelV2(canonical)) continue;
+      if (seen.has(canonical)) continue;
+      seen.add(canonical);
+      result.push(canonical);
+    }
+  }
+
   return result;
+}
+
+type JrpgStructuralDefinition = {
+  label: FeatureLabelV2;
+  keywords: string[];
+  tagKeywords?: string[];
+  minEvidence?: number;
+};
+
+export type JrpgStructuralLabelsResult = {
+  labels: FeatureLabelV2[];
+  evidence: Partial<Record<FeatureLabelV2, string[]>>;
+};
+
+const JRPG_STRUCTURAL_DEFINITIONS: JrpgStructuralDefinition[] = [
+  {
+    label: "party_based_combat",
+    keywords: ["party", "party members", "companions", "仲間", "パーティ"],
+    tagKeywords: ["party-based"],
+    minEvidence: 1,
+  },
+  {
+    label: "command_menu_combat",
+    keywords: [
+      "command",
+      "menu",
+      "select action",
+      "select actions",
+      "コマンド",
+      "atb",
+      "turn-based",
+      "turn based",
+    ],
+    tagKeywords: ["turn-based"],
+    minEvidence: 1,
+  },
+  {
+    label: "level_up_growth",
+    keywords: [
+      "level",
+      "exp",
+      "experience",
+      "experience points",
+      "レベル",
+      "経験値",
+      "growth",
+    ],
+    minEvidence: 1,
+  },
+  {
+    label: "linear_story_progression",
+    keywords: [
+      "linear",
+      "chapters",
+      "chapter",
+      "一本道",
+      "chapter-based",
+      "story progression",
+      "章",
+      "episode",
+    ],
+    minEvidence: 2,
+  },
+];
+
+function collectJrpgTexts(analysis?: any): string[] {
+  if (!analysis) return [];
+  const texts: string[] = [];
+  texts.push(...collectTextFromValue(analysis?.summary));
+  texts.push(...collectTextFromValue(analysis?.reason));
+  texts.push(...collectTextFromValue(analysis?.pros));
+  texts.push(...collectTextFromValue(analysis?.cons));
+  texts.push(...collectTextFromValue(analysis?.labels));
+  texts.push(...collectAudienceTexts(analysis));
+  return texts;
+}
+
+function collectKeywordMatches(
+  texts: string[],
+  keywords: readonly string[]
+): string[] {
+  const matches: string[] = [];
+  if (!keywords || keywords.length === 0) return matches;
+  for (const text of texts) {
+    if (!text) continue;
+    const lowerText = text.toLowerCase();
+    for (const keyword of keywords) {
+      if (!keyword) continue;
+      const lowerKeyword = keyword.toLowerCase();
+      if (lowerText.includes(lowerKeyword)) {
+        matches.push(text);
+        break;
+      }
+    }
+  }
+  return matches;
+}
+
+export function applyJrpgStructuralLabels(
+  analysis?: any
+): JrpgStructuralLabelsResult {
+  if (!hasJrpgAiTag(analysis)) {
+    return { labels: [], evidence: {} };
+  }
+
+  const texts = collectJrpgTexts(analysis);
+  const tagSlugs = new Set<string>();
+  if (Array.isArray(analysis?.featureTagSlugs)) {
+    for (const tag of analysis.featureTagSlugs) {
+      if (typeof tag === "string") {
+        const normalized = tag.trim().toLowerCase();
+        if (normalized) tagSlugs.add(normalized);
+      }
+    }
+  }
+  if (Array.isArray(analysis?.tags)) {
+    for (const tag of analysis.tags) {
+      if (typeof tag === "string") {
+        const normalized = tag.trim().toLowerCase();
+        if (normalized) tagSlugs.add(normalized);
+      }
+    }
+  }
+
+  const labels: FeatureLabelV2[] = [];
+  const evidence: Partial<Record<FeatureLabelV2, string[]>> = {};
+  const seen = new Set<string>();
+
+  for (const def of JRPG_STRUCTURAL_DEFINITIONS) {
+    const textMatches = collectKeywordMatches(texts, def.keywords);
+    const tagMatches: string[] = [];
+    if (def.tagKeywords) {
+      for (const tagKeyword of def.tagKeywords) {
+        if (tagSlugs.has(tagKeyword.toLowerCase())) {
+          tagMatches.push(`Steam tag: ${tagKeyword}`);
+        }
+      }
+    }
+    const combined = [...textMatches, ...tagMatches];
+    const requiredEvidence = def.minEvidence ?? 1;
+    if (combined.length >= requiredEvidence) {
+      if (!seen.has(def.label)) {
+        labels.push(def.label);
+        seen.add(def.label);
+      }
+      evidence[def.label] = combined;
+    }
+  }
+
+  return { labels, evidence };
 }
