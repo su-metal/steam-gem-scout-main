@@ -205,7 +205,9 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
       status,
       textPreview: text.slice(0, 800),
     });
-    throw new Error(`OpenAI parse failed (HTTP ${status}): ${text.slice(0, 800)}`);
+    throw new Error(
+      `OpenAI parse failed (HTTP ${status}): ${text.slice(0, 800)}`
+    );
   }
 
   const content =
@@ -230,9 +232,7 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
     console.error("[generate-facts] model content not json", {
       rawTextPreview: rawText.slice(0, 800),
     });
-    throw new Error(
-      `Model output is not valid JSON: ${rawText.slice(0, 800)}`
-    );
+    throw new Error(`Model output is not valid JSON: ${rawText.slice(0, 800)}`);
   }
 
   return {
@@ -387,6 +387,21 @@ Deno.serve(async (req: Request) => {
   console.log("[generate-facts] guarded", {
     savedTagCount: guarded.tags.length,
     savedTags: guarded.tags,
+  });
+
+  console.log("[generate-facts] guard diff", {
+    rawTagsCount: Array.isArray(raw?.tags) ? raw.tags.length : 0,
+    rawTags: Array.isArray(raw?.tags) ? raw.tags.slice(0, 20) : [],
+    guardedCount: Array.isArray(guarded?.tags) ? guarded.tags.length : 0,
+    guardedTags: Array.isArray(guarded?.tags) ? guarded.tags : [],
+    rejected:
+      Array.isArray(raw?.tags) && Array.isArray(guarded?.tags)
+        ? raw.tags
+            .map((t: any) => String(t).trim().toLowerCase())
+            .filter((t: string) => t)
+            .filter((t: string) => !guarded.tags.includes(t))
+            .slice(0, 40)
+        : [],
   });
 
   const now = new Date().toISOString();
