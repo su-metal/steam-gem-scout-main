@@ -216,13 +216,80 @@ const FILTERED_FEATURE_LABEL_KEYWORDS_LOWER = Object.fromEntries(
   ])
 ) as Record<string, readonly string[]>;
 
-const JRPG_STRUCTURAL_LABELS: FeatureLabelV2[] = [
+export const JRPG_STRUCTURAL_LABELS: FeatureLabelV2[] = [
   "party_based_combat",
   "command_menu_combat",
   "level_up_growth",
   "linear_story_progression",
 ];
 const JRPG_STRUCTURAL_LABEL_SET = new Set<FeatureLabelV2>(JRPG_STRUCTURAL_LABELS);
+
+export type JrpgPromotionGate = {
+  allowed: boolean;
+  reason:
+    | "strong_series"
+    | "strong_series_allow_e0"
+    | "structural_evidence"
+    | "insufficient_evidence";
+  strong: boolean;
+  allowE0: boolean;
+  evidenceCount: number;
+  threshold: number;
+};
+
+export function evaluateJrpgPromotionGate(analysis?: any): JrpgPromotionGate {
+  const strong = analysis?.jrpgSeriesSignal === "strong";
+  const allowE0 = analysis?.jrpgAllowE0 === true;
+  const evidenceCount =
+    typeof analysis?.jrpgStructuralEvidenceCount === "number"
+      ? analysis.jrpgStructuralEvidenceCount
+      : 0;
+  const threshold = strong ? (allowE0 ? 0 : 1) : 2;
+
+  if (strong && allowE0) {
+    return {
+      allowed: true,
+      reason: "strong_series_allow_e0",
+      strong,
+      allowE0,
+      evidenceCount,
+      threshold,
+    };
+  }
+  if (strong) {
+    return {
+      allowed: true,
+      reason: "strong_series",
+      strong,
+      allowE0,
+      evidenceCount,
+      threshold,
+    };
+  }
+  if (evidenceCount >= 2) {
+    return {
+      allowed: true,
+      reason: "structural_evidence",
+      strong,
+      allowE0,
+      evidenceCount,
+      threshold,
+    };
+  }
+
+  return {
+    allowed: false,
+    reason: "insufficient_evidence",
+    strong,
+    allowE0,
+    evidenceCount,
+    threshold,
+  };
+}
+
+function isJrpgPromotionAllowed(analysis?: any): boolean {
+  return evaluateJrpgPromotionGate(analysis).allowed;
+}
 
 function hasJrpgAiTag(analysis?: any): boolean {
   if (!analysis || !Array.isArray(analysis.aiTags)) return false;
@@ -458,8 +525,48 @@ export function normalizeAnalysisFeatureLabelsV2(
     return evidence.keep;
   });
 
+  let promotedPost: FeatureLabelV2[] = [];
   if (analysis && typeof analysis === "object") {
-    (analysis as any).jrpgPromotedLabels = promotedLabels;
+    const rawSource: unknown =
+      Array.isArray((analysis as any).featureLabelsV2Raw) &&
+      (analysis as any).featureLabelsV2Raw.length > 0
+        ? (analysis as any).featureLabelsV2Raw
+        : raw;
+
+    const rawValues = Array.isArray(rawSource) ? rawSource : [];
+    const rawSet = new Set<string>(
+      rawValues
+        .map((item: unknown) =>
+          typeof item === "string" ? item.trim().toLowerCase() : ""
+        )
+        .filter(Boolean)
+    );
+
+    const candidates: FeatureLabelV2[] = [];
+    for (const label of JRPG_STRUCTURAL_LABELS) {
+      if (rawSet.has(label) && isFeatureLabelV2(label)) {
+        candidates.push(label);
+      }
+    }
+
+    const gate = evaluateJrpgPromotionGate(analysis);
+    if (gate.allowed && candidates.length > 0) {
+      const existing = new Set<string>(filtered);
+      for (const label of candidates) {
+        if (promotedPost.length >= 2) break;
+        if (existing.has(label)) continue;
+        existing.add(label);
+        filtered.push(label);
+        promotedPost.push(label);
+      }
+    } else {
+      promotedPost = promotedLabels;
+    }
+
+    (analysis as any).jrpgPromotionCandidates = candidates;
+    (analysis as any).jrpgPromotedLabels = promotedPost;
+    (analysis as any).jrpgPromotionGate = gate;
+    (analysis as any).jrpgPromotionAttempted = candidates.length > 0;
   }
 
   return filtered;

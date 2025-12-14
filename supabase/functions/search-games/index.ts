@@ -11,6 +11,8 @@ import {
 } from "./experience-focus.ts";
 import { isFeatureLabelV2 } from "../_shared/feature-labels.ts";
 import {
+  JRPG_STRUCTURAL_LABELS,
+  evaluateJrpgPromotionGate,
   normalizeAnalysisFeatureLabelsV2Raw,
 } from "../analyze-game/feature-labels.ts";
 
@@ -230,6 +232,96 @@ function resolveFocusMatchLabels(
     return featureLabels;
   }
   return [];
+}
+
+const JRPG_STRUCTURAL_LABEL_SET = new Set(JRPG_STRUCTURAL_LABELS);
+
+type JrpgPromotionDebug = {
+  rawStructural: FeatureLabelV2[];
+  analysisCanonicalStructural: FeatureLabelV2[];
+  responseCanonicalStructural: FeatureLabelV2[];
+  persistedStructural: FeatureLabelV2[];
+  candidates: FeatureLabelV2[];
+  promoted: FeatureLabelV2[];
+  gate: ReturnType<typeof evaluateJrpgPromotionGate>;
+  dropReason: string | null;
+  beforeCount: number;
+  afterCount: number;
+};
+
+function toStructuralLabels(values: unknown): FeatureLabelV2[] {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set<string>();
+  const result: FeatureLabelV2[] = [];
+  for (const item of values) {
+    if (typeof item !== "string") continue;
+    const slug = item.trim().toLowerCase();
+    if (!slug || seen.has(slug)) continue;
+    if (!JRPG_STRUCTURAL_LABEL_SET.has(slug as FeatureLabelV2)) continue;
+    seen.add(slug);
+    result.push(slug as FeatureLabelV2);
+  }
+  return result;
+}
+
+function buildJrpgPromotionDebug(params: {
+  analysisRaw: any;
+  normalizedCanonical: FeatureLabelV2[] | undefined;
+  rawUnified: string[];
+  persistedFeatureLabels: FeatureLabel[] | undefined;
+}): JrpgPromotionDebug {
+  const rawStructural = toStructuralLabels(params.rawUnified);
+  const analysisCanonicalStructural = toStructuralLabels(
+    params.analysisRaw?.featureLabelsV2
+  );
+  const responseCanonicalStructural = toStructuralLabels(
+    params.normalizedCanonical ?? []
+  );
+  const persistedStructural = toStructuralLabels(
+    params.persistedFeatureLabels ?? []
+  );
+
+  const gate = evaluateJrpgPromotionGate(params.analysisRaw);
+  const candidatesFromAnalysis = toStructuralLabels(
+    params.analysisRaw?.jrpgPromotionCandidates ??
+      params.analysisRaw?.featureLabelsV2Raw ??
+      []
+  );
+  const candidates =
+    candidatesFromAnalysis.length > 0 ? candidatesFromAnalysis : rawStructural;
+  const promoted = toStructuralLabels(params.analysisRaw?.jrpgPromotedLabels);
+
+  let dropReason: string | null = null;
+  if (rawStructural.length === 0) {
+    dropReason = "no_structural_raw";
+  } else if (!gate.allowed) {
+    dropReason = "gate_blocked";
+  } else if (responseCanonicalStructural.length === 0) {
+    dropReason = "filtered_or_removed";
+  } else if (
+    responseCanonicalStructural.length <
+    Math.min(candidates.length, 2)
+  ) {
+    dropReason = "cap_or_dedup";
+  }
+
+  const beforeCount = Array.isArray(params.analysisRaw?.featureLabelsV2)
+    ? params.analysisRaw.featureLabelsV2.length
+    : 0;
+  const afterCount = params.normalizedCanonical?.length ?? 0;
+
+  return {
+    rawStructural,
+    analysisCanonicalStructural,
+    responseCanonicalStructural,
+    persistedStructural,
+    candidates,
+    promoted,
+    gate,
+    dropReason,
+    beforeCount,
+    afterCount,
+  };
 }
 
 function computeVibeFocusMatchScore(params: {
@@ -733,13 +825,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
+  let debugMode = false;
   try {
     const body = (await req.json().catch(() => ({}))) as SearchBody;
     const requestUrl = new URL(req.url);
     const queryDebug =
       requestUrl.searchParams.get("debug") === "1" ||
       requestUrl.searchParams.get("debug")?.toLowerCase() === "true";
-    const debugMode = queryDebug || body.debug === true;
+    debugMode = queryDebug || body.debug === true;
 
     const genre = body.genre ?? "";
 
@@ -849,6 +942,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
           : g.analysis ?? {};
       const analysisRawForResponse = { ...(analysisRaw ?? {}) };
       delete (analysisRawForResponse as any).featureLabels;
+      if (!debugMode) {
+        delete (analysisRawForResponse as any).jrpgPromotionGate;
+      }
 
       // ★ BaseScore 用に事前に数値化
       const positiveRatio = toNumber(g.positiveRatio, 0);
@@ -1056,6 +1152,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
               : true,
           }
         : undefined;
+      const persistedFeatureLabelsFromDb: FeatureLabel[] =
+        Array.isArray(g.persistedFeatureLabels) && g.persistedFeatureLabels.length
+          ? g.persistedFeatureLabels
+          : [];
+      const jrpgDebug = debugMode
+        ? buildJrpgPromotionDebug({
+            analysisRaw,
+            normalizedCanonical: normalizedAnalysisFeatureLabelsV2,
+            rawUnified: analysisFeatureLabelsV2RawUnified,
+            persistedFeatureLabels: persistedFeatureLabelsFromDb,
+          })
+        : undefined;
 
       const featureLabels: FeatureLabel[] = Array.isArray(
         g.persistedFeatureLabels
@@ -1124,6 +1232,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
           featureLabelsV2Raw: analysisFeatureLabelsV2RawUnified,
           labelsConsistency,
+          ...(debugMode && jrpgDebug ? { jrpgDebug } : {}),
           currentStateReliability: normalizeReliability(
             analysisRaw.currentStateReliability
           ),
@@ -1270,12 +1379,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   } catch (err) {
     console.error("search-games unexpected error", err);
-    return new Response(
-      JSON.stringify({ error: "Unexpected error in search-games" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    const detail =
+      debugMode && err
+        ? typeof err === "object" && err !== null
+          ? (err as any).stack ?? (err as any).message ?? String(err)
+          : String(err)
+        : undefined;
+    const payload: Record<string, unknown> = {
+      error: "Unexpected error in search-games",
+    };
+    if (detail) {
+      payload.detail = detail;
+    }
+    return new Response(JSON.stringify(payload), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

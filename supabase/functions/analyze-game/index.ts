@@ -16,7 +16,7 @@ import {
   applyJrpgStructuralLabels,
 } from "./feature-labels.ts";
 import type { FeatureLabelV2 } from "../_shared/feature-labels.ts";
-import { FEATURE_LABELS_V2 } from "../_shared/feature-labels.ts";
+import { FEATURE_LABELS_V2, isFeatureLabelV2 } from "../_shared/feature-labels.ts";
 
 const ANALYZE_GAME_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +27,198 @@ const ANALYZE_GAME_CORS_HEADERS = {
 const FEATURE_LABELS_V2_PROMPT = FEATURE_LABELS_V2.map(
   (label) => `"${label}"`
 ).join(", ");
+
+const JRPG_STRONG_SERIES_ALLOW_E0 = [
+  "dragon quest",
+  "final fantasy",
+  "persona",
+  "shin megami tensei",
+  "tales of",
+  "yakuza",
+] as const;
+const JRPG_STRONG_SERIES_ALLOW_E0_SET = new Set<string>(JRPG_STRONG_SERIES_ALLOW_E0);
+
+function isStrongSeriesE0Allowed(matches?: string[] | null): boolean {
+  if (!matches || matches.length === 0) return false;
+  return matches.some((match) => {
+    if (!match) return false;
+    return JRPG_STRONG_SERIES_ALLOW_E0_SET.has(match.toLowerCase());
+  });
+}
+
+const JRPG_SERIES_STRONG: string[] = [
+  "dragon quest",
+  "final fantasy",
+  "chrono trigger",
+  "chrono cross",
+  "nier",
+  "octopath traveler",
+  "bravely",
+  "kingdom hearts",
+  "persona",
+  "shin megami tensei",
+  "smt",
+  "the legend of heroes",
+  "trails",
+  "ys",
+  "tales of",
+  "xenoblade",
+  "breath of fire",
+  "suikoden",
+  "ni no kuni",
+  "phantasy star",
+];
+
+const JRPG_KEYWORDS_STRONG: string[] = [
+  "jrpg",
+  "j-rpg",
+  "japanese role-playing",
+  "japanese role playing",
+  "classic jrpg",
+  "traditional jrpg",
+  "turn-based jrpg",
+];
+
+const JRPG_KEYWORDS_WEAK: string[] = [
+  "classic rpg",
+  "traditional rpg",
+  "party",
+  "party members",
+  "level grinding",
+  "level up",
+  "experience points",
+  "menu-based combat",
+  "command-based",
+  "turn-based combat",
+  "world map",
+  "random encounters",
+];
+
+const JRPG_NEGATIVE_HINTS: string[] = [
+  "wizardry",
+  "blobber",
+  "dungeon crawler",
+  "western rpg",
+  "crpg",
+];
+
+type JrpgSeriesSignal = "strong" | "weak" | null;
+
+function normalizeHaystack(input: string): string {
+  return input.toLowerCase();
+}
+
+function includesAny(hay: string, needles: string[]): string[] {
+  const hits: string[] = [];
+  for (const needle of needles) {
+    if (!needle) continue;
+    if (hay.includes(needle)) {
+      hits.push(needle);
+    }
+  }
+  return hits;
+}
+
+function getJrpgSeriesSignal(
+  title: string | undefined,
+  textHints: string[]
+): { signal: JrpgSeriesSignal; matched: string[] } {
+  const hay = normalizeHaystack(
+    [title ?? "", ...textHints.filter(Boolean)].join("\n")
+  );
+  const neg = includesAny(hay, JRPG_NEGATIVE_HINTS);
+  const strongHits = [
+    ...includesAny(hay, JRPG_SERIES_STRONG),
+    ...includesAny(hay, JRPG_KEYWORDS_STRONG),
+  ];
+  if (strongHits.length > 0) {
+    return { signal: "strong", matched: Array.from(new Set(strongHits)) };
+  }
+
+  const weakHits = includesAny(hay, JRPG_KEYWORDS_WEAK);
+  if (weakHits.length > 0 && neg.length === 0) {
+    return { signal: "weak", matched: Array.from(new Set(weakHits)) };
+  }
+
+  return { signal: null, matched: [] };
+}
+
+const JRPG_STRUCTURAL_PROMOTE_TARGETS: FeatureLabelV2[] = [
+  "command_menu_combat",
+  "party_based_combat",
+  "level_up_growth",
+  "linear_story_progression",
+];
+
+function promoteJrpgStructuralLabels(
+  canonical: FeatureLabelV2[] | undefined,
+  raw: string[] | undefined,
+  analysis: HiddenGemAnalysis
+): {
+  result: FeatureLabelV2[];
+  promoted: FeatureLabelV2[];
+  candidates: FeatureLabelV2[];
+  beforeCount: number;
+} {
+  const strongSignal = analysis.jrpgSeriesSignal === "strong";
+  const allowE0 = analysis.jrpgAllowE0 === true;
+  const enoughEvidence =
+    typeof analysis.jrpgStructuralEvidenceCount === "number" &&
+    analysis.jrpgStructuralEvidenceCount >= 2;
+  const gate = strongSignal || allowE0 || enoughEvidence;
+
+  const beforeCount = canonical ? canonical.length : 0;
+  const rawSet = Array.isArray(raw)
+    ? new Set<string>(
+        raw
+          .map((item) =>
+            typeof item === "string" ? item.trim().toLowerCase() : ""
+          )
+          .filter(Boolean)
+      )
+    : new Set<string>();
+  const candidates: FeatureLabelV2[] = Array.isArray(raw)
+    ? JRPG_STRUCTURAL_PROMOTE_TARGETS.filter((label) => rawSet.has(label))
+    : [];
+  if (!gate || candidates.length === 0) {
+    return {
+      result: canonical ? [...canonical] : [],
+      promoted: [],
+      candidates,
+      beforeCount,
+    };
+  }
+
+  const base = canonical ? [...canonical] : [];
+  const seen = new Set<string>(base);
+  const promoted: FeatureLabelV2[] = [];
+
+  for (const label of candidates) {
+    if (promoted.length >= 2) break;
+    if (!isFeatureLabelV2(label)) continue;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    base.push(label);
+    promoted.push(label);
+  }
+
+  return { result: base, promoted, candidates, beforeCount };
+}
+
+function hasTextKeywords(texts: string[], keywords: string[]): boolean {
+  if (!Array.isArray(texts) || texts.length === 0) return false;
+  for (const text of texts) {
+    if (!text) continue;
+    const lower = text.toLowerCase();
+    for (const keyword of keywords) {
+      if (!keyword) continue;
+      if (lower.includes(keyword)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 interface ReviewWindowStats {
   /** 対象期間内のレビュー件数 */
@@ -142,9 +334,21 @@ interface HiddenGemAnalysis {
   jrpgEvidence?: Partial<Record<FeatureLabelV2, string[]>>;
   jrpgLabelsAddedRaw?: FeatureLabelV2[];
   jrpgPromotedLabels?: FeatureLabelV2[];
+  jrpgPromotionAttempted?: boolean;
+  jrpgPromotionCandidates?: FeatureLabelV2[];
+  jrpgPromotionBeforeCount?: number;
+  jrpgPromotionAfterCount?: number;
 
   /** 代表的な主ジャンル 1 本（任意） */
   aiPrimaryGenre?: string | null;
+
+  jrpgSeriesSignal?: "strong" | "weak" | null;
+  jrpgSeriesMatched?: string[];
+  jrpgStructuralEvidenceCount?: number;
+  jrpgTagAdded?: boolean;
+  jrpgAllowE0?: boolean;
+  jrpgEvidenceThresholdUsed?: number;
+  jrpgTagDecisionReason?: string;
 
   /**
    * 初期バージョンと比較して改善したと判断されるかどうか。
@@ -1316,6 +1520,129 @@ IMPORTANT:
         analysis = normalizeAnalysisPayload(parsed);
         analysis.aiTags = sanitizeAiTagsForStoryHeavy(analysis.aiTags);
 
+        const textHints: string[] = [];
+        if (typeof parsed?.summary === "string") {
+          textHints.push(parsed.summary);
+        }
+        if (Array.isArray(parsed?.labels)) {
+          textHints.push(parsed.labels.join("\n"));
+        }
+        if (Array.isArray(parsed?.pros)) {
+          textHints.push(parsed.pros.join("\n"));
+        }
+        if (Array.isArray(parsed?.cons)) {
+          textHints.push(parsed.cons.join("\n"));
+        }
+
+        const { signal: jrpgSeriesSignal, matched: jrpgSeriesMatched } =
+          getJrpgSeriesSignal(gameData.title, textHints);
+
+        const structuralEvidenceCount =
+          typeof analysis.jrpgStructuralEvidenceCount === "number"
+            ? analysis.jrpgStructuralEvidenceCount
+            : 0;
+
+        const strongSignal = jrpgSeriesSignal === "strong";
+        const weakSignal = jrpgSeriesSignal === "weak";
+        const allowE0 = strongSignal && isStrongSeriesE0Allowed(jrpgSeriesMatched);
+        const threshold = strongSignal ? (allowE0 ? 0 : 1) : 2;
+
+        const decisionReason = strongSignal
+          ? allowE0
+            ? "strong_series_whitelist_e0"
+            : "strong_series_e1"
+          : weakSignal
+          ? "weak_series_e2"
+          : "no_signal";
+
+        const shouldAddJrpgTag = structuralEvidenceCount >= threshold;
+
+        const aiTagsFromAnalysis = Array.isArray(analysis.aiTags)
+          ? [...analysis.aiTags]
+          : [];
+        const hasExistingJrpgTag = aiTagsFromAnalysis.some(
+          (tag) =>
+            typeof tag === "string" &&
+            tag.trim().toLowerCase() === "jrpg"
+        );
+        let jrpgTagAdded = false;
+        if (!hasExistingJrpgTag && shouldAddJrpgTag) {
+          aiTagsFromAnalysis.push("JRPG");
+          jrpgTagAdded = true;
+        }
+
+        if (aiTagsFromAnalysis.length > 0) {
+          analysis.aiTags = aiTagsFromAnalysis;
+        } else {
+          delete (analysis as any).aiTags;
+        }
+
+        const finalHasJrpg = aiTagsFromAnalysis.some(
+          (tag) =>
+            typeof tag === "string" &&
+            tag.trim().toLowerCase() === "jrpg"
+        );
+        analysis.jrpgSeriesSignal = jrpgSeriesSignal;
+        analysis.jrpgSeriesMatched = jrpgSeriesMatched;
+        analysis.jrpgTagAdded = finalHasJrpg;
+        analysis.jrpgAllowE0 = allowE0;
+        analysis.jrpgEvidenceThresholdUsed = threshold;
+        analysis.jrpgTagDecisionReason = decisionReason;
+
+        const fallbackLabels = new Set<FeatureLabelV2>();
+        if (
+          jrpgTagAdded &&
+          analysis.jrpgTagDecisionReason === "strong_series_whitelist_e0"
+        ) {
+          fallbackLabels.add("command_menu_combat");
+          fallbackLabels.add("level_up_growth");
+          if (hasTextKeywords(textHints, [
+            "party",
+            "仲間",
+            "複数キャラクター",
+            "メンバー",
+            "キャラ編成",
+          ])) {
+            fallbackLabels.add("party_based_combat");
+          }
+        if (hasTextKeywords(textHints, [
+            "一本道",
+            "linear",
+            "ストーリー主導",
+            "chapters",
+            "シナリオ進行",
+          ])) {
+            fallbackLabels.add("linear_story_progression");
+          }
+        }
+
+        if (fallbackLabels.size > 0) {
+          const existingJrpgLabels = new Set<FeatureLabelV2>(
+            Array.isArray(analysis.jrpgLabelsAddedRaw)
+              ? analysis.jrpgLabelsAddedRaw
+              : []
+          );
+          for (const label of fallbackLabels) {
+            existingJrpgLabels.add(label);
+          }
+          analysis.jrpgLabelsAddedRaw = Array.from(existingJrpgLabels);
+
+          const baseRaw = Array.isArray(analysis.featureLabelsV2Raw)
+            ? analysis.featureLabelsV2Raw
+            : [];
+          const combinedRaw = normalizeAnalysisFeatureLabelsV2Raw([
+            ...baseRaw,
+            ...fallbackLabels,
+          ]);
+          analysis.featureLabelsV2Raw = combinedRaw;
+          analysis.featureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
+            combinedRaw,
+            analysis
+          );
+        }
+
+        finalizeJrpgFeatureLabels(analysis);
+
         // -----------------------------
         // 復活フラグ / 安定評価フラグ のガード処理
         // -----------------------------
@@ -1719,20 +2046,35 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   const jrpgStructuralLabels = applyJrpgStructuralLabels(
     analysisWithNormalizedAiTags
   );
+  normalized.jrpgStructuralEvidenceCount = jrpgStructuralLabels.labels.length;
+
+  const baseFeatureLabelsInput =
+    parsed?.featureLabelsV2 ?? parsed?.featureLabelsV2Raw;
   const featureLabelAnalysisContext = {
     ...analysisWithNormalizedAiTags,
     jrpgLabelsAddedRaw: jrpgStructuralLabels.labels,
+    jrpgStructuralEvidenceCount: jrpgStructuralLabels.labels.length,
   };
   const normalizedFeatureLabelsV2Raw = normalizeAnalysisFeatureLabelsV2Raw(
-    parsed?.featureLabelsV2,
+    baseFeatureLabelsInput,
     jrpgStructuralLabels.labels
   );
   const normalizedFeatureLabelsV2 = normalizeAnalysisFeatureLabelsV2(
-    parsed?.featureLabelsV2,
+    baseFeatureLabelsInput,
     featureLabelAnalysisContext
   );
-  normalized.featureLabelsV2 = normalizedFeatureLabelsV2;
+  const structuralPromote = promoteJrpgStructuralLabels(
+    normalizedFeatureLabelsV2,
+    normalizedFeatureLabelsV2Raw,
+    normalized
+  );
+  normalized.featureLabelsV2 = structuralPromote.result;
   normalized.featureLabelsV2Raw = normalizedFeatureLabelsV2Raw;
+  normalized.jrpgPromotedLabels = structuralPromote.promoted;
+  normalized.jrpgPromotionAttempted = structuralPromote.candidates.length > 0;
+  normalized.jrpgPromotionCandidates = structuralPromote.candidates;
+  normalized.jrpgPromotionBeforeCount = structuralPromote.beforeCount;
+  normalized.jrpgPromotionAfterCount = structuralPromote.result.length;
   if (jrpgStructuralLabels.labels.length > 0) {
     normalized.jrpgLabelsAddedRaw = jrpgStructuralLabels.labels;
   }
@@ -1764,6 +2106,44 @@ function normalizeAnalysisPayload(parsed: any): HiddenGemAnalysis {
   }
 
   return normalized;
+}
+
+function finalizeJrpgFeatureLabels(analysis: HiddenGemAnalysis) {
+  if (!analysis || typeof analysis !== "object") return;
+
+  const rawSource: unknown =
+    Array.isArray(analysis.featureLabelsV2Raw) &&
+    analysis.featureLabelsV2Raw.length > 0
+      ? analysis.featureLabelsV2Raw
+      : analysis.featureLabelsV2 ?? [];
+
+  const extraJrpgRaw =
+    Array.isArray(analysis.jrpgLabelsAddedRaw) &&
+    analysis.jrpgLabelsAddedRaw.length > 0
+      ? (analysis.jrpgLabelsAddedRaw as FeatureLabelV2[])
+      : undefined;
+
+  const normalizedRaw = normalizeAnalysisFeatureLabelsV2Raw(
+    rawSource,
+    extraJrpgRaw
+  );
+  const beforeCount = Array.isArray(analysis.featureLabelsV2)
+    ? analysis.featureLabelsV2.length
+    : 0;
+
+  analysis.featureLabelsV2Raw = normalizedRaw;
+
+  const canonical = normalizeAnalysisFeatureLabelsV2(normalizedRaw, analysis);
+  analysis.featureLabelsV2 = canonical;
+
+  const promotionCandidates = Array.isArray(
+    (analysis as any).jrpgPromotionCandidates
+  )
+    ? (analysis as any).jrpgPromotionCandidates
+    : [];
+  analysis.jrpgPromotionAttempted = promotionCandidates.length > 0;
+  analysis.jrpgPromotionBeforeCount = beforeCount;
+  analysis.jrpgPromotionAfterCount = canonical.length;
 }
 
 function normalizeAudienceSegmentList(value: unknown): AudienceSegment[] {
