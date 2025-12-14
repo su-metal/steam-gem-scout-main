@@ -20,6 +20,12 @@ type ImportApiResponse = {
   results: ImportResult[];
 };
 
+type GenerateFactsResponse = {
+  appId: number;
+  saved: boolean;
+  reason?: string;
+};
+
 type FilterImportCandidate = {
   appId: number;
   title: string;
@@ -47,6 +53,13 @@ export function ImportSteamGamesPage() {
 
   // ★ ここから AI 解析オプション用の state を追加
   const [runAiAfterImport, setRunAiAfterImport] = useState(false);
+  const [runFactsAfterPublish, setRunFactsAfterPublish] = useState(false);
+  const [factsForce, setFactsForce] = useState(false);
+  const [isFactsRunning, setIsFactsRunning] = useState(false);
+  // ★ Facts 生成オプション（generate-facts）
+  const [runFactsAfterImport, setRunFactsAfterImport] = useState(false);
+
+
 
   // 新規：条件インポート
   const [recentDays, setRecentDays] = useState("90");
@@ -129,6 +142,48 @@ export function ImportSteamGamesPage() {
     };
   };
 
+  // generate-facts を叩く（詳細ログ付き）
+  const runGenerateFactsForAppId = async (
+    appId: number,
+    force = false,
+    debug = false
+  ): Promise<GenerateFactsResponse> => {
+    const { data, error } = await supabase.functions.invoke<any>("generate-facts", {
+      body: { appId, force, debug },
+    });
+
+    if (error) {
+      const ctx: any = (error as any)?.context;
+      let bodyText = "";
+      try {
+        bodyText = await ctx?.response?.text?.();
+      } catch {
+        // ignore
+      }
+
+      console.error("generate-facts error", {
+        appId,
+        message: (error as any)?.message,
+        status: ctx?.status,
+        bodyText,
+      });
+
+      return {
+        appId,
+        saved: false,
+        reason: bodyText || (error as any)?.message || "invoke-error",
+      };
+    }
+
+    console.log("generate-facts success", { appId, data });
+    return (data as GenerateFactsResponse) ?? {
+      appId,
+      saved: false,
+      reason: "no-response",
+    };
+  };
+
+
   const handleSingleImport = async () => {
     const ids = parseAppIds(singleAppId);
     if (ids.length === 0) {
@@ -145,15 +200,28 @@ export function ImportSteamGamesPage() {
       const appId = ids[0];
       const result = await runImportForAppId(appId);
 
+      // ingest が成功したときだけ facts を回す（SSOT: factsは別工程）
+      let factsRes: GenerateFactsResponse | null = null;
+      if (runFactsAfterImport && result.status === "ok") {
+        factsRes = await runGenerateFactsForAppId(appId, factsForce);
+      }
+
       setResults((prev) => [result, ...prev]);
+
       toast({
         title: result.status === "ok" ? "Import completed" : "Import failed",
         description:
           result.status === "ok"
-            ? `AppID ${appId} has been imported.`
+            ? `AppID ${appId} has been imported.${factsRes
+              ? factsRes.saved
+                ? " Facts generated."
+                : ` Facts skipped/failed: ${factsRes.reason ?? "Unknown"}`
+              : ""
+            }`
             : `AppID ${appId} failed: ${result.error ?? "Unknown error"}`,
         variant: result.status === "ok" ? "default" : "destructive",
       });
+
     } finally {
       setIsLoading(false);
     }
@@ -178,6 +246,10 @@ export function ImportSteamGamesPage() {
       for (const appId of ids) {
         const result = await runImportForAppId(appId);
         newResults.push(result);
+
+        if (runFactsAfterImport && result.status === "ok") {
+          await runGenerateFactsForAppId(appId, factsForce);
+        }
       }
 
       setResults((prev) => [...newResults, ...prev]);
@@ -392,6 +464,20 @@ export function ImportSteamGamesPage() {
         skippedExisting: data.skippedExisting,
       });
 
+      // publish 後に facts を回す（A案）
+      if (runFactsAfterPublish) {
+        setIsFactsRunning(true);
+        try {
+          // 安全優先：逐次（後で Promise.all にして高速化できる）
+          for (const id of selectedAppIds) {
+            await runGenerateFactsForAppId(id, factsForce);
+          }
+        } finally {
+          setIsFactsRunning(false);
+        }
+      }
+
+
       toast({
         title: "Filtered import completed",
         description: `Imported ${data.inserted} games (total candidates: ${data.totalCandidates}).`,
@@ -450,6 +536,29 @@ export function ImportSteamGamesPage() {
             <Button onClick={handleSingleImport} disabled={isLoading}>
               {isLoading ? "Importing..." : "Import game"}
             </Button>
+          </div>
+          {/* generate-facts オプション */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={runFactsAfterImport}
+                onChange={(e) => setRunFactsAfterImport(e.target.checked)}
+              />
+              <span>After import, generate facts (generate-facts)</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={factsForce}
+                onChange={(e) => setFactsForce(e.target.checked)}
+                disabled={!runFactsAfterImport}
+              />
+              <span>force overwrite</span>
+            </label>
           </div>
         </div>
 
@@ -613,6 +722,26 @@ export function ImportSteamGamesPage() {
               />
               <span>After import, run AI analysis for candidates</span>
             </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={runFactsAfterPublish}
+                onChange={(e) => setRunFactsAfterPublish(e.target.checked)}
+              />
+              <span>After publish, generate facts (generate-facts)</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={factsForce}
+                onChange={(e) => setFactsForce(e.target.checked)}
+                disabled={!runFactsAfterPublish}
+              />
+              <span>force overwrite facts</span>
+            </label>
+
 
             <div className="text-xs text-muted-foreground">
               Backend will run AI analysis for the imported games when checked.

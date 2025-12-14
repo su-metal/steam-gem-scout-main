@@ -33,7 +33,6 @@ export const FACT_TAGS = [
   "creative_manipulation",
   "open_ended_goal",
   "logical_puzzle_core",
-  "job_simulation_loop"
 ] as const;
 
 export type FactTag = (typeof FACT_TAGS)[number];
@@ -76,9 +75,44 @@ export function computeBand(
     };
   }
 
-  const allMust =
-    rule.must.length === 0 ? true : matchedMust.length >= rule.must.length;
-  if (allMust && matchedBoost.length >= 2) {
+  const mustHits = matchedMust.length;
+  const mustNeed = rule.must.length;
+  const boostHits = matchedBoost.length;
+
+  if (mustNeed > 0) {
+    if (mustHits === mustNeed && boostHits >= 2) {
+      return {
+        band: "on",
+        matchedMust,
+        matchedBoost,
+        matchedBan,
+      };
+    }
+    if (mustHits === mustNeed && boostHits >= 1) {
+      return {
+        band: "near",
+        matchedMust,
+        matchedBoost,
+        matchedBan,
+      };
+    }
+    if (boostHits >= 2) {
+      return {
+        band: "discovery",
+        matchedMust,
+        matchedBoost,
+        matchedBan,
+      };
+    }
+    return {
+      band: "off",
+      matchedMust,
+      matchedBoost,
+      matchedBan,
+    };
+  }
+
+  if (boostHits >= 3) {
     return {
       band: "on",
       matchedMust,
@@ -86,8 +120,7 @@ export function computeBand(
       matchedBan,
     };
   }
-
-  if (allMust && matchedBoost.length >= 1) {
+  if (boostHits >= 2) {
     return {
       band: "near",
       matchedMust,
@@ -95,8 +128,7 @@ export function computeBand(
       matchedBan,
     };
   }
-
-  if (!allMust && matchedBoost.length >= 2) {
+  if (boostHits >= 1) {
     return {
       band: "discovery",
       matchedMust,
@@ -240,13 +272,13 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "focus-operational-sim": {
     id: "focus-operational-sim",
     vibe: "focus",
-    must: ["job_simulation_loop"],
+    must: ["resource_management"],
     boost: [
       "systems_interaction_depth",
-      "resource_management",
       "planning_required",
+      "automation_core",
     ],
-    ban: ["high_input_pressure"], 
+    ban: ["high_input_pressure"],
   },
 
   "focus-optimization-builder": {
