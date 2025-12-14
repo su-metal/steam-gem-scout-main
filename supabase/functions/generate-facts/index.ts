@@ -3,7 +3,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // 既存のFactsカタログ（SSOT）
-import { FACT_TAGS } from "../_shared/facts-v11.ts";
+import { FACT_TAGS, type FactTag } from "../_shared/facts-v11.ts";
 
 // facts-v11.ts 側に isFactTag が無い前提で、ここで確定ガードを作る
 const FACT_TAG_SET = new Set<string>(
@@ -12,6 +12,20 @@ const FACT_TAG_SET = new Set<string>(
 function isFactTag(t: string) {
   return FACT_TAG_SET.has(String(t).trim().toLowerCase());
 }
+
+const MAX_FACT_TAGS = 10;
+
+const EVIDENCE_REQUIRED_TAGS = new Set<FactTag>([
+  "automation_core",
+  "branching_narrative",
+  "choice_has_consequence",
+  "session_based_play",
+  "time_pressure",
+  "high_input_pressure",
+  "free_movement_exploration",
+  "open_ended_goal",
+  "resource_management",
+]);
 
 type GenerateFactsRequest = {
   appId: number | string;
@@ -174,6 +188,10 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
     "Evidence keys must match the returned tags (lowercase).",
     "If a tag clearly applies but no direct quote is available in the corpus, output the tag with an empty evidence array.",
     "Every returned tag MUST have at least 1 evidence item when available.",
+    `For these tags you must provide at least 1 evidence quote; otherwise omit the tag: ${Array.from(
+      EVIDENCE_REQUIRED_TAGS
+    ).join(", ")}.`,
+    "automation_core is ONLY for factory/logistics/production lines/self-running automated systems. Do NOT use it for crafting/upgrades/stealth/planning or figurative automation.",
     "Evidence quotes must be short excerpts copied from the corpus (no paraphrase).",
     "Otherwise, omit the tag.",
     "Return at most 10 tags, prioritizing the most meaningful ones.",
@@ -206,7 +224,33 @@ Selection policy:
 - If the game is a narrative RPG, do NOT automatically add branching_narrative / choice_has_consequence unless choices materially change outcomes (routes/endings/quests/flags).
 `;
 
-  const promptIntro = `${glossaryIntro}\n${productRules}\n${negativeRules}\n${selectionPolicy}`;
+  const evidenceRequirementInstruction = `
+Evidence requirement:
+- For the following tags you MUST provide at least 1 evidence quote; otherwise omit the tag: ${Array.from(
+    EVIDENCE_REQUIRED_TAGS
+  ).join(", ")}.
+`;
+
+  const automationInstruction = `
+automation_core is ONLY for factory/logistics/production lines/self-running automated systems. Do NOT use it for crafting/upgrades/stealth/planning or figurative “automation”.
+`;
+
+  const disambiguationRules = `
+Disambiguation rules (avoid false positives):
+- free_movement_exploration:
+  Only if exploration/traversal is a PRIMARY loop (open world roaming, exploration-first structure, traversal as core activity).
+  Do NOT select just because the game has towns/fields/world map or "go on an adventure" marketing text.
+
+- open_ended_goal:
+  Only if players set their own goals with no fixed main objective (sandbox, self-directed play).
+  Do NOT select for RPGs with a main quest/story progression, even if there is optional content.
+
+- resource_management:
+  Only if scarcity/allocation/budgeting is CENTRAL and repeatedly constrains play (limited supplies, strict economy, survival resources).
+  Do NOT select just because the game has items, gold, equipment, or inventory.
+`;
+
+  const promptIntro = `${glossaryIntro}\n${productRules}\n${negativeRules}\n${selectionPolicy}\n${evidenceRequirementInstruction}\n${automationInstruction}`;
 
   const glossaryBody =
     `
@@ -340,12 +384,13 @@ logical_puzzle_core:
   // ここで必ず定義（messagesより上）
   const fullSystem = [
     system,
-    "",
-    promptIntro,
-    "",
-    "Glossary (definitions + keyword hints):",
+    productRules,
+    negativeRules,
+    selectionPolicy,
+    disambiguationRules,
+    glossaryIntro,
     glossaryBody,
-  ].join("\n");
+  ].join("\n\n");
 
   const body = {
     model,
@@ -427,8 +472,6 @@ function guardFacts(raw: {
   tags: string[];
   evidence: Record<string, EvidenceItem[]>;
 }) {
-  const MAX_TAGS = 8;
-
   const normalizedTags = (raw.tags ?? [])
     .map((t) => normalizeTagKey(t))
     .filter((t) => t.length > 0);
@@ -449,8 +492,10 @@ function guardFacts(raw: {
 
   const evidenceMap = normalizeEvidenceMap(raw.evidence);
   const outEvidence: Record<string, EvidenceItem[]> = {};
+  const evidenceCountsByTag: Record<string, number> = {};
   const withEvidence: string[] = [];
   const withoutEvidence: string[] = [];
+  const rejectedNoEvidenceRequired: string[] = [];
 
   for (const t of candidates) {
     const ev = Array.isArray(evidenceMap[t]) ? evidenceMap[t] : [];
@@ -463,6 +508,12 @@ function guardFacts(raw: {
       }))
       .filter((entry) => entry.source.length > 0 && entry.quote.length > 0);
 
+    evidenceCountsByTag[t] = cleanedEv.length;
+    if (EVIDENCE_REQUIRED_TAGS.has(t as FactTag) && cleanedEv.length === 0) {
+      rejectedNoEvidenceRequired.push(t);
+      continue;
+    }
+
     outEvidence[t] = cleanedEv;
     if (cleanedEv.length > 0) {
       withEvidence.push(t);
@@ -471,7 +522,7 @@ function guardFacts(raw: {
     }
   }
 
-  const outTags = [...withEvidence, ...withoutEvidence].slice(0, MAX_TAGS);
+  const outTags = [...withEvidence, ...withoutEvidence].slice(0, MAX_FACT_TAGS);
   const finalEvidence: Record<string, EvidenceItem[]> = {};
   for (const tag of outTags) {
     finalEvidence[tag] = outEvidence[tag] ?? [];
@@ -482,6 +533,8 @@ function guardFacts(raw: {
     evidence: finalEvidence,
     rawTags: normalizedTags,
     rejectedNotInCatalog,
+    rejectedNoEvidenceRequired,
+    evidenceCountsByTag,
   };
 }
 
@@ -602,6 +655,7 @@ Deno.serve(async (req: Request) => {
     rawTags: guarded.rawTags,
     guardedTags: guarded.tags,
     rejectedNotInCatalog: guarded.rejectedNotInCatalog,
+    rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
   });
 
   const now = new Date().toISOString();
@@ -615,6 +669,10 @@ Deno.serve(async (req: Request) => {
       model: raw.model ?? "unknown",
       rawTags: guarded.rawTags,
       rejectedNotInCatalog: guarded.rejectedNotInCatalog,
+      catalogMisses: guarded.rejectedNotInCatalog,
+      acceptedTags: guarded.tags,
+      rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
+      evidenceCountsByTag: guarded.evidenceCountsByTag,
       evidence: guarded.evidence,
       sources: {
         steam: {
@@ -675,6 +733,8 @@ Deno.serve(async (req: Request) => {
         rawTags: guarded.rawTags,
         guardedTags: guarded.tags,
         rejectedNotInCatalog: guarded.rejectedNotInCatalog,
+        rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
+        evidenceCountsByTag: guarded.evidenceCountsByTag,
       },
     });
   }

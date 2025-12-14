@@ -179,7 +179,12 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     id: "story-narrative-action",
     vibe: "story",
     must: ["narrative_driven_progression"],
-    boost: ["real_time_control", "high_input_pressure"],
+    boost: [
+      "real_time_control",
+      "high_input_pressure",
+      "stealth_core",
+      "high_stakes_failure",
+    ],
     ban: ["reading_heavy_interaction"],
   },
   "story-reading-centered-story": {
