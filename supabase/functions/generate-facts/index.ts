@@ -47,6 +47,27 @@ function normalizeBool(v: unknown, fallback = false) {
   return typeof v === "boolean" ? v : fallback;
 }
 
+function normalizeTagKey(input: unknown): string {
+  return String(input ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[;:,.'"]+$/, "")
+    .replace(/[\s_-]+/g, "_");
+}
+
+function normalizeEvidenceMap(
+  rawEvidence: Record<string, EvidenceItem[]> | undefined
+): Record<string, EvidenceItem[]> {
+  const normalized: Record<string, EvidenceItem[]> = {};
+  if (!rawEvidence || typeof rawEvidence !== "object") return normalized;
+  for (const [key, value] of Object.entries(rawEvidence)) {
+    const normalizedKey = normalizeTagKey(key);
+    if (!normalizedKey || !Array.isArray(value)) continue;
+    normalized[normalizedKey] = value;
+  }
+  return normalized;
+}
+
 function parseAppId(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
   if (typeof v === "string") {
@@ -121,7 +142,7 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
       properties: {
         tags: {
           type: "array",
-          items: { type: "string" },
+          items: { type: "string", enum: allowedTags },
           description: "Allowed tag ids only (lowercase).",
         },
         evidence: {
@@ -150,10 +171,161 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
     "You are a facts extractor for Steam games.",
     "Return ONLY JSON that matches the provided JSON Schema.",
     "Select tags ONLY from the provided allowed tag list.",
-    "Every returned tag MUST have at least 1 evidence item.",
+    "Evidence keys must match the returned tags (lowercase).",
+    "If a tag clearly applies but no direct quote is available in the corpus, output the tag with an empty evidence array.",
+    "Every returned tag MUST have at least 1 evidence item when available.",
     "Evidence quotes must be short excerpts copied from the corpus (no paraphrase).",
-    "If unsure, omit the tag.",
+    "Otherwise, omit the tag.",
+    "Return at most 10 tags, prioritizing the most meaningful ones.",
   ].join("\n");
+
+  const productRules = `
+Product rules (read carefully):
+- Facts are concrete gameplay experience signals, NOT genre labels and NOT story themes.
+- Choose tags only when they are clearly supported by the provided inputs (reviews/summary/features/etc).
+- Prefer tags that reflect repeatable player actions/constraints (controls, pressure, loops, exploration structure).
+- If uncertain between two tags, pick the closest one from the glossary; do NOT invent new tags.
+- Output MUST be conservative: include a tag only if you can justify it with evidence; otherwise omit it.
+`;
+
+  const negativeRules = `
+Critical disambiguation rules (avoid false positives):
+- job_simulation_loop means a core "work/job simulation loop" (e.g., doing jobs/tasks as the main repeated activity, shift-based work, running a job like chef/barista/office/driver, etc.).
+- Do NOT select job_simulation_loop for "job/class/vocation" systems in RPGs (e.g., Warrior/Mage/Thief, class change, vocation/job system). That is NOT a work-sim loop.
+- For RPG class/vocation systems, prefer narrative_driven_progression or open_ended_goal (if applicable), but never job_simulation_loop unless the game is actually about working as a job.
+`;
+
+  const glossaryIntro =
+    "Tag glossary: Choose ONLY from the allowed tags. Pick the closest tag based on these definitions. Do NOT invent new tags. If none apply, return an empty array.";
+
+  const selectionPolicy = `
+Selection policy:
+- Return at most 10 tags.
+- Prefer tags with strong, repeated evidence. If many apply, choose the most distinctive ones.
+- Avoid overlapping tags that describe the same thing; pick the sharper signal.
+- If the game is a narrative RPG, do NOT automatically add branching_narrative / choice_has_consequence unless choices materially change outcomes (routes/endings/quests/flags).
+`;
+
+  const promptIntro = `${glossaryIntro}\n${productRules}\n${negativeRules}\n${selectionPolicy}`;
+
+  const glossaryBody =
+    `
+real_time_control:
+  Real-time moment-to-moment control; outcomes depend on continuous player input.
+  Keywords: real-time, twitch, reflex, live control, constant input, APM
+
+high_input_pressure:
+  Requires frequent and precise inputs; low input rate is punished.
+  Keywords: high APM, hectic, demanding controls, micromanagement, fast clicking
+
+high_stakes_failure:
+  Mistakes cause major loss or irreversible setbacks.
+  Keywords: permadeath, severe penalty, wipe, harsh punishment, ironman
+
+time_pressure:
+  Time limits or urgency force quick decisions.
+  Keywords: timer, countdown, deadline, race against time, urgency
+
+enemy_density_high:
+  Many enemies are present simultaneously.
+  Keywords: hordes, swarms, waves, crowded fights, mob pressure
+
+precision_timing_required:
+  Success depends on tight timing windows.
+  Keywords: parry, perfect timing, i-frames, frame-perfect, rhythm timing
+
+stealth_core:
+  Avoidance and concealment are core progression methods.
+  Keywords: stealth, sneaking, detection meter, silent takedown
+
+line_of_sight_matters:
+  Visibility and sightlines govern detection or advantage.
+  Keywords: line of sight, vision cones, visibility, spotted, cover
+
+position_advantage_design:
+  Positioning provides decisive advantages.
+  Keywords: positioning, flanking, high ground, cover, chokepoints
+
+route_selection_matters:
+  Route choice meaningfully changes risk or outcome.
+  Keywords: branching paths, route choice, alternate routes
+
+free_movement_exploration:
+  Free roaming and spatial exploration drive play.
+  Keywords: free roam, exploration, wandering, traversal
+
+map_reveal_progression:
+  Progression tied to uncovering the map.
+  Keywords: fog of war, map discovery, reveal areas
+
+non_hostile_environment:
+  World is largely safe or non-violent.
+  Keywords: peaceful, safe world, non-combat, relaxing
+
+planning_required:
+  Success depends on planning before execution.
+  Keywords: planning, preparation, layout planning, prioritization
+
+systems_interaction_depth:
+  Multiple systems interact in complex, emergent ways.
+  Keywords: deep systems, emergent gameplay, synergies
+
+resource_management:
+  Managing scarce resources is central.
+  Keywords: economy, inventory, budgeting, allocation, scarcity
+
+automation_core:
+  Building self-running systems is core gameplay.
+  Keywords: automation, factory, production lines, logistics, pipelines
+
+optimization_required:
+  Efficiency optimization is required for success.
+  Keywords: optimization, min-max, throughput, efficiency tuning
+
+narrative_driven_progression:
+  Progression is driven primarily by story.
+  Keywords: story-driven, narrative focus, plot progression
+
+reading_heavy_interaction:
+  Reading text is a primary interaction.
+  Keywords: text-heavy, dialogue-heavy, visual novel
+
+branching_narrative:
+  Story branches into different paths or endings.
+  Keywords: multiple endings, branching story, narrative routes
+
+choice_has_consequence:
+  Choices meaningfully change outcomes.
+  Keywords: decisions matter, consequences, moral choices
+
+lore_optional_depth:
+  Deep lore is optional but available.
+  Keywords: lore-rich, codex, worldbuilding, logs
+
+low_pressure_play:
+  Low stress and forgiving pacing.
+  Keywords: chill, cozy, relaxing, casual-friendly
+
+session_based_play:
+  Play is divided into short, repeatable sessions.
+  Keywords: runs, rounds, matches, short sessions
+
+pause_friendly:
+  Easy to pause or stop at any time.
+  Keywords: pause anytime, interruptible, save anytime
+
+creative_manipulation:
+  Creativity emerges from system manipulation.
+  Keywords: sandbox, experimentation, creative solutions
+
+open_ended_goal:
+  Goals are self-directed rather than fixed.
+  Keywords: sandbox, self-directed, no fixed objective
+
+logical_puzzle_core:
+  Core gameplay is logical problem solving.
+  Keywords: logic puzzle, deduction, reasoning
+`.trim() + "\n";
 
   const user = [
     `appId: ${args.appId}`,
@@ -165,11 +337,21 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
     args.corpus,
   ].join("\n");
 
+  // ここで必ず定義（messagesより上）
+  const fullSystem = [
+    system,
+    "",
+    promptIntro,
+    "",
+    "Glossary (definitions + keyword hints):",
+    glossaryBody,
+  ].join("\n");
+
   const body = {
     model,
     temperature: 0,
     messages: [
-      { role: "system", content: system },
+      { role: "system", content: fullSystem }, // ← system ではなく fullSystem
       { role: "user", content: user },
     ],
     response_format: {
@@ -245,41 +427,62 @@ function guardFacts(raw: {
   tags: string[];
   evidence: Record<string, EvidenceItem[]>;
 }) {
-  const MAX_TAGS = 24;
+  const MAX_TAGS = 8;
 
   const normalizedTags = (raw.tags ?? [])
-    .map((t) => String(t).trim().toLowerCase())
+    .map((t) => normalizeTagKey(t))
     .filter((t) => t.length > 0);
 
-  const outTags: string[] = [];
-  const outEvidence: Record<string, EvidenceItem[]> = {};
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+  const rejectedNotInCatalog: string[] = [];
 
   for (const t of normalizedTags) {
-    if (!isFactTag(t)) continue;
-
-    const ev = raw.evidence?.[t];
-    if (!Array.isArray(ev) || ev.length === 0) continue;
-
-    const cleanedEv = ev
-      .map((x) => ({
-        source: String((x as any)?.source ?? "").trim(),
-        quote: String((x as any)?.quote ?? "").trim(),
-        confidence:
-          typeof (x as any)?.confidence === "number"
-            ? (x as any).confidence
-            : undefined,
-      }))
-      .filter((x) => x.source && x.quote);
-
-    if (cleanedEv.length === 0) continue;
-
-    outTags.push(t);
-    outEvidence[t] = cleanedEv;
-
-    if (outTags.length >= MAX_TAGS) break;
+    if (!isFactTag(t)) {
+      rejectedNotInCatalog.push(t);
+      continue;
+    }
+    if (seen.has(t)) continue;
+    seen.add(t);
+    candidates.push(t);
   }
 
-  return { tags: outTags, evidence: outEvidence };
+  const evidenceMap = normalizeEvidenceMap(raw.evidence);
+  const outEvidence: Record<string, EvidenceItem[]> = {};
+  const withEvidence: string[] = [];
+  const withoutEvidence: string[] = [];
+
+  for (const t of candidates) {
+    const ev = Array.isArray(evidenceMap[t]) ? evidenceMap[t] : [];
+    const cleanedEv = ev
+      .map((e) => ({
+        source: e?.source ? String(e.source).trim() : "",
+        quote: e?.quote ? String(e.quote).trim() : "",
+        confidence:
+          typeof e?.confidence === "number" ? e.confidence : undefined,
+      }))
+      .filter((entry) => entry.source.length > 0 && entry.quote.length > 0);
+
+    outEvidence[t] = cleanedEv;
+    if (cleanedEv.length > 0) {
+      withEvidence.push(t);
+    } else {
+      withoutEvidence.push(t);
+    }
+  }
+
+  const outTags = [...withEvidence, ...withoutEvidence].slice(0, MAX_TAGS);
+  const finalEvidence: Record<string, EvidenceItem[]> = {};
+  for (const tag of outTags) {
+    finalEvidence[tag] = outEvidence[tag] ?? [];
+  }
+
+  return {
+    tags: outTags,
+    evidence: finalEvidence,
+    rawTags: normalizedTags,
+    rejectedNotInCatalog,
+  };
 }
 
 // serve import をやめて Deno.serve を使う（型も Request で確定）
@@ -383,25 +586,22 @@ Deno.serve(async (req: Request) => {
     rawTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : null,
   });
 
-  const guarded = guardFacts({ tags: raw.tags, evidence: raw.evidence });
+  const guarded = guardFacts({
+    tags: Array.isArray(raw?.tags) ? raw.tags : [],
+    evidence:
+      raw?.evidence && typeof raw.evidence === "object"
+        ? (raw.evidence as Record<string, EvidenceItem[]>)
+        : {},
+  });
   console.log("[generate-facts] guarded", {
     savedTagCount: guarded.tags.length,
     savedTags: guarded.tags,
   });
 
   console.log("[generate-facts] guard diff", {
-    rawTagsCount: Array.isArray(raw?.tags) ? raw.tags.length : 0,
-    rawTags: Array.isArray(raw?.tags) ? raw.tags.slice(0, 20) : [],
-    guardedCount: Array.isArray(guarded?.tags) ? guarded.tags.length : 0,
-    guardedTags: Array.isArray(guarded?.tags) ? guarded.tags : [],
-    rejected:
-      Array.isArray(raw?.tags) && Array.isArray(guarded?.tags)
-        ? raw.tags
-            .map((t: any) => String(t).trim().toLowerCase())
-            .filter((t: string) => t)
-            .filter((t: string) => !guarded.tags.includes(t))
-            .slice(0, 40)
-        : [],
+    rawTags: guarded.rawTags,
+    guardedTags: guarded.tags,
+    rejectedNotInCatalog: guarded.rejectedNotInCatalog,
   });
 
   const now = new Date().toISOString();
@@ -413,6 +613,8 @@ Deno.serve(async (req: Request) => {
       version: "v1.1",
       generatedAt: now,
       model: raw.model ?? "unknown",
+      rawTags: guarded.rawTags,
+      rejectedNotInCatalog: guarded.rejectedNotInCatalog,
       evidence: guarded.evidence,
       sources: {
         steam: {
@@ -421,6 +623,7 @@ Deno.serve(async (req: Request) => {
           storeApiUrl: steam.url,
         },
       },
+      updatedAt: now,
       notes: "facts-only",
     },
   };
@@ -469,8 +672,9 @@ Deno.serve(async (req: Request) => {
       facts: guarded.tags,
       debug: {
         corpusChars: corpus.length,
-        rawTagCount: raw.tags?.length ?? 0,
-        savedTagCount: guarded.tags.length,
+        rawTags: guarded.rawTags,
+        guardedTags: guarded.tags,
+        rejectedNotInCatalog: guarded.rejectedNotInCatalog,
       },
     });
   }

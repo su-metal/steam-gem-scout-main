@@ -33,6 +33,9 @@ export const FACT_TAGS = [
   "creative_manipulation",
   "open_ended_goal",
   "logical_puzzle_core",
+  "job_simulation_loop",
+  "low_precision_input",
+  "power_scaling_over_time",
 ] as const;
 
 export type FactTag = (typeof FACT_TAGS)[number];
@@ -80,36 +83,19 @@ export function computeBand(
   const boostHits = matchedBoost.length;
 
   if (mustNeed > 0) {
-    if (mustHits === mustNeed && boostHits >= 2) {
-      return {
-        band: "on",
-        matchedMust,
-        matchedBoost,
-        matchedBan,
-      };
+    // mustが重いFocus（must>=2）は、must全達成時点で十分強いのでONを緩める
+    const onBoostNeed = mustNeed >= 2 ? 1 : 2;
+
+    if (mustHits === mustNeed && boostHits >= onBoostNeed) {
+      return { band: "on", matchedMust, matchedBoost, matchedBan };
     }
     if (mustHits === mustNeed && boostHits >= 1) {
-      return {
-        band: "near",
-        matchedMust,
-        matchedBoost,
-        matchedBan,
-      };
+      return { band: "near", matchedMust, matchedBoost, matchedBan };
     }
     if (boostHits >= 2) {
-      return {
-        band: "discovery",
-        matchedMust,
-        matchedBoost,
-        matchedBan,
-      };
+      return { band: "discovery", matchedMust, matchedBoost, matchedBan };
     }
-    return {
-      band: "off",
-      matchedMust,
-      matchedBoost,
-      matchedBan,
-    };
+    return { band: "off", matchedMust, matchedBoost, matchedBan };
   }
 
   if (boostHits >= 3) {
@@ -272,11 +258,12 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "focus-operational-sim": {
     id: "focus-operational-sim",
     vibe: "focus",
-    must: ["resource_management"],
+    must: ["job_simulation_loop"],
     boost: [
       "systems_interaction_depth",
       "planning_required",
       "automation_core",
+      "resource_management",
     ],
     ban: ["high_input_pressure"],
   },
@@ -300,9 +287,9 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     boost: [
       "map_reveal_progression",
       "non_hostile_environment",
-      "open_ended_goal",
+      "route_selection_matters",
     ],
-    ban: ["high_input_pressure"],
+    ban: ["high_input_pressure", "time_pressure"],
   },
   "action-combat": {
     id: "action-combat",
@@ -311,42 +298,43 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     boost: [
       "high_input_pressure",
       "enemy_density_high",
-      "high_stakes_failure",
       "precision_timing_required",
     ],
-    ban: ["low_pressure_play"],
+    ban: ["stealth_core", "time_pressure"],
   },
   "action-pressure": {
     id: "action-pressure",
     vibe: "action",
-    must: ["real_time_control"],
+    must: ["high_stakes_failure"],
     boost: [
       "high_input_pressure",
-      "high_stakes_failure",
       "time_pressure",
-      "enemy_density_high",
       "precision_timing_required",
     ],
-    ban: ["low_pressure_play"],
+    ban: ["low_pressure_play", "pause_friendly"],
   },
   "action-positioning": {
     id: "action-positioning",
     vibe: "action",
-    must: ["real_time_control"],
+    must: ["position_advantage_design"],
     boost: [
       "stealth_core",
       "line_of_sight_matters",
-      "position_advantage_design",
+      "planning_required",
       "route_selection_matters",
     ],
-    ban: ["non_hostile_environment"],
+    ban: ["enemy_density_high", "time_pressure"],
   },
   "action-crowd-smash": {
     id: "action-crowd-smash",
     vibe: "action",
     must: ["enemy_density_high"],
-    boost: ["high_input_pressure", "real_time_control", "time_pressure"],
-    ban: ["low_pressure_play"],
+    boost: [
+      "low_precision_input",
+      "real_time_control",
+      "power_scaling_over_time",
+    ],
+    ban: ["stealth_core", "planning_required"],
   },
   "short-arcade-action": {
     id: "short-arcade-action",
