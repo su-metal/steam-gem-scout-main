@@ -11,6 +11,13 @@ import {
 } from "./experience-focus.ts";
 import { isFeatureLabelV2 } from "../_shared/feature-labels.ts";
 import {
+  FACT_FOCUS_RULES,
+  computeBand,
+  isFactTag,
+  type FactTag,
+  type MatchBand,
+} from "../_shared/facts-v11.ts";
+import {
   JRPG_STRUCTURAL_LABELS,
   evaluateJrpgPromotionGate,
   normalizeAnalysisFeatureLabelsV2Raw,
@@ -31,6 +38,13 @@ const EXPERIENCE_FOCUS_MATCH_CAP = 4;
 const EXPERIENCE_FOCUS_NEAR_STRONG_CAP = 3;
 const EXPERIENCE_FOCUS_NEAR_BRIDGE_CAP = 3;
 
+const MATCH_BAND_ORDER: Record<MatchBand, number> = {
+  on: 3,
+  near: 2,
+  discovery: 1,
+  off: 0,
+};
+
 type SortOption =
   | "recommended"
   | "gem-score"
@@ -38,7 +52,8 @@ type SortOption =
   | "positive-ratio"
   | "most-reviews"
   | "newest"
-  | "custom";
+  | "custom"
+  | "facts_focus_match";
 
 interface SearchBody {
   genre?: string;
@@ -181,7 +196,8 @@ const LEGACY_EXPERIENCE_FOCUS_ID_MAP: Record<string, ExperienceFocusId> = {
   "battle-and-growth": "focus-battle-and-growth",
   "tactics-and-planning": "focus-tactics-and-planning",
   "base-and-systems": "focus-base-and-systems",
-  "simulation": "focus-simulation",
+  "simulation": "focus-operational-sim",      // ★変更
+  "focus-simulation": "focus-operational-sim",// ★追加（念のため）
   "optimization-builder": "focus-optimization-builder",
   "narrative-action": "story-narrative-action",
   "reading-centered-story": "story-reading-centered-story",
@@ -190,8 +206,8 @@ const LEGACY_EXPERIENCE_FOCUS_ID_MAP: Record<string, ExperienceFocusId> = {
   "lore-worldbuilding": "story-lore-worldbuilding",
   "exploration": "action-exploration",
   "combat": "action-combat",
-  "competitive": "action-competitive",
-  "tactical-stealth": "action-tactical-stealth",
+  "competitive": "action-pressure",
+  "tactical-stealth": "action-positioning",
   "crowd-smash": "action-crowd-smash",
   "arcade-action": "short-arcade-action",
   "tactical-decisions": "short-tactical-decisions",
@@ -393,6 +409,21 @@ function computeExperienceFocusScore(
   featureLabelsV2: FeatureLabelV2[] | null | undefined,
   experienceFocusId: ExperienceFocusId | null | undefined
 ): ExperienceFocusScoreResult {
+  /**
+   * NOTE (2025-12-14):
+   * experienceFocusScore は FeatureLabelV2 ベースの旧ロジック。
+   *
+   * 現行の Experience Focus 判定の主役は
+   * Facts v1.1 に基づく `factsMatch.selectedFocusBand` であり、
+   * このスコアは以下の目的のためだけに一時的に残している：
+   *
+   * - 既存UI・並び順への影響を段階的に切り離すため
+   * - Facts が未投入のタイトルとの比較・検証用
+   *
+   * Facts が十分に行き渡った段階で、
+   * experienceFocusScore / computeExperienceFocusScore は削除予定。
+   * 新規ロジックや最終判定には使用してはならない。
+   */
   if (!experienceFocusId) {
     return {
       focusScore: null,
@@ -946,6 +977,47 @@ Deno.serve(async (req: Request): Promise<Response> => {
         delete (analysisRawForResponse as any).jrpgPromotionGate;
       }
 
+      const rawFacts =
+        (g as any).facts ??
+        (g as any).factTags ??
+        (g as any).data?.facts ??
+        (g as any).data?.factTags ??
+        [];
+      const facts: FactTag[] = normalizeStringArray(rawFacts)
+        .map((x) => x.toLowerCase())
+        .filter((x): x is FactTag => isFactTag(x));
+
+      let factsMatch: Record<string, unknown> | null = null;
+      if (normalizedExperienceFocusId) {
+        const rule = FACT_FOCUS_RULES[normalizedExperienceFocusId];
+        if (rule) {
+          const res = computeBand(facts, rule);
+          factsMatch = {
+            experienceFocusId: normalizedExperienceFocusId,
+            selectedFocusBand: res.band,
+            matchedFacts: {
+              must: res.matchedMust,
+              boost: res.matchedBoost,
+              ban: res.matchedBan,
+            },
+            ...(debugMode ? { factsCount: facts.length } : {}),
+          };
+
+          if (debugMode) {
+            const focusDefs = EXPERIENCE_FOCUS_LIST.filter(
+              (f) => f.vibe === rule.vibe
+            );
+            const allFocusBands: Record<string, MatchBand> = {};
+            for (const f of focusDefs) {
+              const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
+              if (!r) continue;
+              allFocusBands[f.id] = computeBand(facts, r).band;
+            }
+            (factsMatch as any).allFocusBands = allFocusBands;
+          }
+        }
+      }
+
       // ★ BaseScore 用に事前に数値化
       const positiveRatio = toNumber(g.positiveRatio, 0);
       const totalReviews = toNumber(g.totalReviews, 0);
@@ -1206,6 +1278,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         screenshots: Array.isArray(g.screenshots) ? g.screenshots : [],
         reviewScoreDesc: g.reviewScoreDesc ?? "",
         headerImage: normalizedHeaderImage,
+        factsMatch,
         analysis: {
           // まずは AI 解析結果をそのまま全部載せる（既存フィールドを維持）
         ...analysisRawForResponse,
@@ -1358,6 +1431,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
           (a, b) =>
             (b.vibeFocusMatchScore ?? 0) - (a.vibeFocusMatchScore ?? 0)
         );
+        break;
+      case "facts_focus_match":
+        sorted = [...filtered].sort((a, b) => {
+          const aBand = (a.factsMatch?.selectedFocusBand ?? "off") as MatchBand;
+          const bBand = (b.factsMatch?.selectedFocusBand ?? "off") as MatchBand;
+          const aRank = MATCH_BAND_ORDER[aBand];
+          const bRank = MATCH_BAND_ORDER[bBand];
+          if (aRank !== bRank) {
+            return bRank - aRank;
+          }
+          const aScore = typeof a.baseScore === "number" ? a.baseScore : 0;
+          const bScore = typeof b.baseScore === "number" ? b.baseScore : 0;
+          return bScore - aScore;
+        });
         break;
       default:
         break;

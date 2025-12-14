@@ -14,12 +14,12 @@ export type ExperienceFocusId =
   | "focus-battle-and-growth"
   | "focus-tactics-and-planning"
   | "focus-base-and-systems"
-  | "focus-simulation"
+  | "focus-operational-sim"
   | "focus-optimization-builder"
   | "action-exploration"
   | "action-combat"
-  | "action-competitive"
-  | "action-tactical-stealth"
+  | "action-pressure"
+  | "action-positioning"
   | "action-crowd-smash"
   | "short-arcade-action"
   | "short-tactical-decisions"
@@ -180,18 +180,27 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     id: "focus-base-and-systems",
     vibe: "focus",
     label: "Base & Systems",
-    featureLabels: ["construction_building", "automation_processes", "resource_management"],
+    featureLabels: [
+      "construction_building",
+      "automation_processes",
+      "resource_management",
+    ],
     nearStrongLabels: ["colony_management", "automation_logic"],
     nearBridgeLabels: ["sandbox_creation"],
   },
   {
-    id: "focus-simulation",
+    id: "focus-operational-sim",
     vibe: "focus",
-    label: "Simulation",
-    featureLabels: ["automation_logic", "colony_management", "sandbox_creation"],
-    nearStrongLabels: ["resource_management", "automation_processes"],
-    nearBridgeLabels: ["logistics_planning"],
+    label: "Operational Sim",
+    // featureLabels / nearStrongLabels / nearBridgeLabels は現行のものをそのまま移植でOK
+    featureLabels: [
+    ],
+    nearStrongLabels: [
+    ],
+    nearBridgeLabels: [
+    ],
   },
+
   {
     id: "focus-optimization-builder",
     vibe: "focus",
@@ -225,21 +234,25 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     nearBridgeLabels: ["arcade_shooter", "run_based_structure"],
   },
   {
-    id: "action-competitive",
+    id: "action-pressure",
     vibe: "action",
-    label: "Competitive",
-    featureLabels: ["high_intensity_challenge", "precision_shooter", "rhythm_action"],
-    nearStrongLabels: ["real_time_combat"],
-    nearBridgeLabels: ["arcade_shooter", "run_based_structure"],
+    label: "Pressure",
+    featureLabels: [
+      "high_intensity_challenge",
+      "real_time_combat",
+      "action_combat",
+    ],
+    nearStrongLabels: ["precision_shooter", "arcade_shooter"],
+    nearBridgeLabels: ["run_based_structure"],
   },
   {
-    id: "action-tactical-stealth",
+    id: "action-positioning",
     vibe: "action",
-    label: "Tactical / Stealth",
+    label: "Positioning",
     featureLabels: [
+      "precision_control_platforming",
       "tactical_turn_combat",
       "stealth_mechanics",
-      "precision_control_platforming",
     ],
     nearStrongLabels: ["logistics_planning", "turn_based_tactics"],
     nearBridgeLabels: ["mystery_investigation"],

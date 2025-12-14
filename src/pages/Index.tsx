@@ -133,31 +133,31 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "chill-ambient-immersion", label: "Ambient Immersion" },
     { id: "chill-relaxed-puzzle", label: "Relaxed Puzzle" },
     { id: "chill-slow-creation", label: "Slow Creation" },
-    { id: "any", label: "Any" },
+
   ],
   Focus: [
     { id: "focus-battle-and-growth", label: "Battle & Growth" },
     { id: "focus-tactics-and-planning", label: "Tactics & Planning" },
     { id: "focus-base-and-systems", label: "Base & Systems" },
-    { id: "focus-simulation", label: "Simulation" },
+    { id: "focus-operational-sim", label: "Operational Sim" }, // ★変更
     { id: "focus-optimization-builder", label: "Optimization / Builder" },
     { id: "any", label: "Any" },
   ],
+
   Story: [
     { id: "story-narrative-action", label: "Narrative Action" },
     { id: "story-reading-centered-story", label: "Reading-Centered Story" },
     { id: "story-mystery-investigation", label: "Mystery / Investigation" },
     { id: "story-choice-and-consequence", label: "Choice & Consequence" },
     { id: "story-lore-worldbuilding", label: "Lore / Worldbuilding" },
-    { id: "any", label: "Any" },
+
   ],
   Action: [
     { id: "action-exploration", label: "Exploration" },
     { id: "action-combat", label: "Combat" },
-    { id: "action-competitive", label: "Competitive" },
-    { id: "action-tactical-stealth", label: "Tactical / Stealth" },
+    { id: "action-pressure", label: "Pressure" },
+    { id: "action-positioning", label: "Positioning" },
     { id: "action-crowd-smash", label: "Crowd Smash" },
-    { id: "any", label: "Any" },
   ],
   Short: [
     { id: "short-arcade-action", label: "Arcade Action" },
@@ -165,7 +165,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "short-puzzle-moments", label: "Puzzle Moments" },
     { id: "short-flow-mastery", label: "Flow Mastery" },
     { id: "short-competitive-rounds", label: "Competitive Rounds" },
-    { id: "any", label: "Any" },
+
   ],
 };
 
