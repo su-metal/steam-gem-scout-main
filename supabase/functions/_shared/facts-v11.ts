@@ -253,11 +253,11 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "focus-base-and-systems": {
     id: "focus-base-and-systems",
     vibe: "focus",
-    must: ["automation_core"],
+    must: ["systems_interaction_depth"],
     boost: [
       "resource_management",
-      "systems_interaction_depth",
       "planning_required",
+      "automation_core",
     ],
     ban: ["high_input_pressure"],
   },

@@ -141,7 +141,6 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
     { id: "focus-base-and-systems", label: "Base & Systems" },
     { id: "focus-operational-sim", label: "Operational Sim" }, // ★変更
     { id: "focus-optimization-builder", label: "Optimization / Builder" },
-    { id: "any", label: "Any" },
   ],
 
   Story: [
