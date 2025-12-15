@@ -13,9 +13,10 @@ import { isFeatureLabelV2 } from "../_shared/feature-labels.ts";
 import {
   FACT_FOCUS_RULES,
   computeBand,
-  isFactTag,
+  isPersistedFactTag,
   type FactTag,
   type MatchBand,
+  type PersistedFactTag,
 } from "../_shared/facts-v11.ts";
 import {
   JRPG_STRUCTURAL_LABELS,
@@ -983,9 +984,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         (g as any).data?.facts ??
         (g as any).data?.factTags ??
         [];
-      const facts: FactTag[] = normalizeStringArray(rawFacts)
+      const facts: PersistedFactTag[] = normalizeStringArray(rawFacts)
         .map((x) => x.toLowerCase())
-        .filter((x): x is FactTag => isFactTag(x));
+        .filter((x): x is PersistedFactTag => isPersistedFactTag(x));
 
       const baseFactSet = new Set<FactTag>(facts);
       const derivedFacts = new Set<FactTag>(baseFactSet);

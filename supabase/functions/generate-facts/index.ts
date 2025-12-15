@@ -3,23 +3,22 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // 既存のFactsカタログ（SSOT）
-import { FACT_TAGS, type FactTag } from "../_shared/facts-v11.ts";
+import {
+  FACT_TAGS,
+  PERSISTED_FACT_TAGS,
+  type FactTag,
+  type PersistedFactTag,
+  isFactTag,
+  isNeverPersistFactTag,
+} from "../_shared/facts-v11.ts";
 
-// facts-v11.ts 側に isFactTag が無い前提で、ここで確定ガードを作る
-const FACT_TAG_SET = new Set<string>(
-  (FACT_TAGS as readonly string[]).map((t) => String(t).trim().toLowerCase())
-);
-const FACT_TAG_LIST = FACT_TAGS as readonly FactTag[];
-const YESNO_FACT_PROPERTIES = FACT_TAG_LIST.reduce<Record<string, { type: "boolean" }>>(
-  (acc, tag) => {
-    acc[tag] = { type: "boolean" };
-    return acc;
-  },
-  {}
-);
-function isFactTag(t: string) {
-  return FACT_TAG_SET.has(String(t).trim().toLowerCase());
-}
+const FACT_TAG_LIST = PERSISTED_FACT_TAGS as readonly PersistedFactTag[];
+const YESNO_FACT_PROPERTIES = FACT_TAG_LIST.reduce<
+  Record<PersistedFactTag, { type: "boolean" }>
+>((acc, tag) => {
+  acc[tag] = { type: "boolean" };
+  return acc;
+}, {});
 
 const MAX_FACT_TAGS = 10;
 
@@ -34,7 +33,6 @@ const EVIDENCE_OPTIONAL_TAGS = new Set<FactTag>([
   "automation_core",
   "optimization_required",
   "resource_management",
-  "systems_interaction_depth",
   "free_movement_exploration",
   "job_simulation_loop",
 ]);
@@ -43,13 +41,13 @@ type FactSourceId = "steam" | "igdb" | "wikipedia" | "pcgw" | "reddit";
 
 const FACT_SOURCE_POLICY_VERSION = "v1";
 
-const FACT_TAG_SOURCES: Record<FactTag, readonly FactSourceId[]> = FACT_TAGS.reduce(
+const FACT_TAG_SOURCES: Record<PersistedFactTag, readonly FactSourceId[]> = FACT_TAGS.reduce(
   (acc, tag) => {
     acc[tag] = ["steam"];
     return acc;
   },
-  {} as Record<FactTag, readonly FactSourceId[]>
-) as Record<FactTag, readonly FactSourceId[]>;
+  {} as Record<PersistedFactTag, readonly FactSourceId[]>
+);
 
 type GenerationMode = "tags" | "yesno";
 
@@ -155,6 +153,13 @@ function normalizeTagKey(input: unknown): string {
     .replace(/[\s_-]+/g, "_");
 }
 
+function filterNeverPersistTags(tags: unknown[] | undefined): string[] {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .map((tag) => normalizeTagKey(tag))
+    .filter((tag) => tag.length > 0 && !isNeverPersistFactTag(tag));
+}
+
 function normalizeEvidenceMap(
   rawEvidence: Record<string, EvidenceItem[]> | undefined
 ): Record<string, EvidenceItem[]> {
@@ -244,7 +249,7 @@ async function generateFactsViaLLM(args: {
   const isYesNo = mode === "yesno";
 
   // カタログ（facts-v11.ts の FACT_TAGS）をプロンプトで“列挙”して幻覚を抑える
-  const allowedTags = Array.from(FACT_TAG_SET).sort();
+  const allowedTags = Array.from(FACT_TAGS).sort();
 
   // Structured Outputs: json_schema で固定（スキーマに必ず一致）
   // Docs: response_format = { type:"json_schema", json_schema:{...} } :contentReference[oaicite:1]{index=1}
@@ -320,6 +325,7 @@ async function generateFactsViaLLM(args: {
     ).join(", ")}.`,
     "automation_core is ONLY for factory/logistics/production lines/self-running automated systems. Do NOT use it for crafting/upgrades/stealth/planning or figurative automation.",
     "Evidence quotes must be short excerpts copied from the corpus (no paraphrase).",
+    "Derived-only tags (e.g., systems_interaction_depth) must not be emitted; they are calculated separately.",
     "Otherwise, omit the tag.",
     "Return at most 10 tags, prioritizing the most meaningful ones.",
   ].join("\n");
@@ -733,12 +739,20 @@ function guardFacts(raw: {
   const normalizedTags = (raw.tags ?? [])
     .map((t) => normalizeTagKey(t))
     .filter((t) => t.length > 0);
+  const rejectedNeverPersist: string[] = [];
+  const filteredNormalizedTags = normalizedTags.filter((tag) => {
+    if (isNeverPersistFactTag(tag)) {
+      rejectedNeverPersist.push(tag);
+      return false;
+    }
+    return true;
+  });
 
   const seen = new Set<string>();
   const candidates: string[] = [];
   const rejectedNotInCatalog: string[] = [];
 
-  for (const t of normalizedTags) {
+  for (const t of filteredNormalizedTags) {
     if (!isFactTag(t)) {
       rejectedNotInCatalog.push(t);
       continue;
@@ -791,8 +805,9 @@ function guardFacts(raw: {
   return {
     tags: outTags,
     evidence: finalEvidence,
-    rawTags: normalizedTags,
+    rawTags: filteredNormalizedTags,
     rejectedNotInCatalog,
+    rejectedNeverPersist,
     rejectedNoEvidenceRequired,
     keptWithoutEvidence,
     evidenceCountsByTag,
@@ -947,17 +962,18 @@ Deno.serve(async (req: Request) => {
       details: (e as any)?.message ?? String(e),
     });
   }
+  const sanitizedLLMRawTags = filterNeverPersistTags(raw?.tags);
   console.log("[generate-facts] llm raw", {
     model: raw?.model,
     mode,
-    rawTagCount: Array.isArray(raw?.tags) ? raw.tags.length : null,
-    rawTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : null,
+    rawTagCount: sanitizedLLMRawTags.length,
+    rawTagsPreview: sanitizedLLMRawTags.slice(0, 10),
   });
 
   if (mode === "yesno") {
     console.log("[generate-facts] yn_v1 preview", {
-      trueCount: Array.isArray(raw?.tags) ? raw.tags.length : 0,
-      trueTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : [],
+      trueCount: sanitizedLLMRawTags.length,
+      trueTagsPreview: sanitizedLLMRawTags.slice(0, 10),
       confidence: raw?.yesnoConfidence ?? null,
       missingAllowedSourceTags: tagsMissingAllowedSources.slice(0, 10),
       ynTypeErrorCount: Array.isArray(raw?.yesnoTypeErrors)
@@ -994,6 +1010,7 @@ Deno.serve(async (req: Request) => {
     rawTags: guarded.rawTags,
     guardedTags: guarded.tags,
     rejectedNotInCatalog: guarded.rejectedNotInCatalog,
+    rejectedNeverPersist: guarded.rejectedNeverPersist,
     rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
     keptWithoutEvidence: guarded.keptWithoutEvidence,
   });
@@ -1016,6 +1033,7 @@ Deno.serve(async (req: Request) => {
       model: raw.model ?? "unknown",
       rawTags: guarded.rawTags,
       rejectedNotInCatalog: guarded.rejectedNotInCatalog,
+      rejectedNeverPersist: guarded.rejectedNeverPersist,
       catalogMisses: guarded.rejectedNotInCatalog,
       acceptedTags: guarded.tags,
       rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
@@ -1035,8 +1053,7 @@ Deno.serve(async (req: Request) => {
       },
       updatedAt: now,
       notes: "facts-only",
-      ynRawPreview:
-        mode === "yesno" && Array.isArray(raw?.tags) ? raw.tags : undefined,
+      ynRawPreview: mode === "yesno" ? sanitizedLLMRawTags : undefined,
       narrativeForcedFalse,
       ynTypeErrors:
         mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)

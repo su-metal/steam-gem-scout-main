@@ -3,7 +3,7 @@ import type { Vibe } from "./feature-labels.ts";
 
 export type MatchBand = "on" | "near" | "discovery" | "off";
 
-export const FACT_TAGS = [
+export const PERSISTED_FACT_TAGS = [
   "real_time_control",
   "high_input_pressure",
   "high_stakes_failure",
@@ -18,7 +18,6 @@ export const FACT_TAGS = [
   "map_reveal_progression",
   "non_hostile_environment",
   "planning_required",
-  "systems_interaction_depth",
   "resource_management",
   "automation_core",
   "optimization_required",
@@ -38,9 +37,39 @@ export const FACT_TAGS = [
   "power_scaling_over_time",
 ] as const;
 
-export type FactTag = (typeof FACT_TAGS)[number];
+export const DERIVED_FACT_TAGS = ["systems_interaction_depth"] as const;
+export const NEVER_PERSIST_FACT_TAGS = ["systems_interaction_depth"] as const;
 
-const FACT_TAG_SET = new Set<string>(FACT_TAGS);
+export const FACT_TAGS = PERSISTED_FACT_TAGS;
+
+export type PersistedFactTag = (typeof PERSISTED_FACT_TAGS)[number];
+export type DerivedFactTag = (typeof DERIVED_FACT_TAGS)[number];
+export type NeverPersistFactTag = (typeof NEVER_PERSIST_FACT_TAGS)[number];
+export type FactTag = PersistedFactTag | DerivedFactTag;
+
+const PERSISTED_FACT_TAG_SET = new Set<string>(PERSISTED_FACT_TAGS);
+const DERIVED_FACT_TAG_SET = new Set<string>(DERIVED_FACT_TAGS);
+const NEVER_PERSIST_FACT_TAG_SET = new Set<string>(NEVER_PERSIST_FACT_TAGS);
+const ALL_FACT_TAG_SET = new Set<string>([
+  ...PERSISTED_FACT_TAGS,
+  ...DERIVED_FACT_TAGS,
+]);
+
+export function isFactTag(x: string): x is FactTag {
+  return ALL_FACT_TAG_SET.has(x);
+}
+
+export function isPersistedFactTag(x: string): x is PersistedFactTag {
+  return PERSISTED_FACT_TAG_SET.has(x);
+}
+
+export function isDerivedFactTag(x: string): x is DerivedFactTag {
+  return DERIVED_FACT_TAG_SET.has(x);
+}
+
+export function isNeverPersistFactTag(x: string): x is NeverPersistFactTag {
+  return NEVER_PERSIST_FACT_TAG_SET.has(x);
+}
 
 export interface FocusRule {
   id: ExperienceFocusId;
@@ -48,10 +77,6 @@ export interface FocusRule {
   must: FactTag[];
   boost: FactTag[];
   ban: FactTag[];
-}
-
-export function isFactTag(x: string): x is FactTag {
-  return FACT_TAG_SET.has(x);
 }
 
 export function computeBand(
