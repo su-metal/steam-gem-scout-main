@@ -35,6 +35,7 @@ export const PERSISTED_FACT_TAGS = [
   "job_simulation_loop",
   "low_precision_input",
   "power_scaling_over_time",
+  "battle_loop_core",
 ] as const;
 
 export const DERIVED_FACT_TAGS = ["systems_interaction_depth"] as const;
@@ -259,9 +260,13 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "focus-battle-and-growth": {
     id: "focus-battle-and-growth",
     vibe: "focus",
-    must: ["planning_required", "resource_management"],
-    boost: ["high_input_pressure", "high_stakes_failure", "automation_core"],
-    ban: ["non_hostile_environment"], // automation_core を削除
+    must: ["battle_loop_core", "power_scaling_over_time"],
+    boost: ["planning_required", "resource_management"],
+    ban: [
+      "automation_core",
+      "systems_interaction_depth",
+      "optimization_required",
+    ],
   },
 
   "focus-tactics-and-planning": {
@@ -279,11 +284,7 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     id: "focus-base-and-systems",
     vibe: "focus",
     must: ["systems_interaction_depth"],
-    boost: [
-      "resource_management",
-      "planning_required",
-      "automation_core",
-    ],
+    boost: ["resource_management", "planning_required", "automation_core"],
     ban: ["high_input_pressure"],
   },
   "focus-operational-sim": {
