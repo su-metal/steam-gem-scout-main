@@ -160,6 +160,23 @@ function normalizeTags(raw: any): string[] {
   return deduped.slice(0, 32);
 }
 
+function parseJsonMaybe<T>(v: unknown): T | null {
+  if (v == null) return null;
+  if (typeof v === "object") return v as T;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function hasOwn(obj: any, key: string) {
+  return obj != null && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY") ?? "";
@@ -775,71 +792,70 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
       }
 
       // 既存行がある場合は、analysis / gemLabel / headerImage を引き継ぐ
-      if (existing && existing.data && typeof existing.data === "object") {
-        const previousData = existing.data as any;
-        const persistedFeatureLabels: string[] = Array.isArray(
-          (existing as any).feature_labels
-        )
-          ? (existing as any).feature_labels.filter(
-              (label): label is string =>
-                typeof label === "string" && label.trim().length > 0
+      if (existing && existing.data) {
+        const previousData = parseJsonMaybe<any>(existing.data);
+        if (previousData) {
+          const persistedFeatureLabels: string[] = Array.isArray(
+            (existing as any).feature_labels
           )
-          : [];
-        const dataFeatureLabels: string[] = Array.isArray(
-          previousData.featureLabels
-        )
-          ? (previousData.featureLabels as any[]).filter(
-              (label): label is string =>
-                typeof label === "string" && label.trim().length > 0
-            )
-          : [];
-        const analysisFeatureLabels: string[] =
-          previousData?.analysis &&
-          Array.isArray((previousData as any).analysis?.featureLabels)
-            ? ((previousData as any).analysis.featureLabels as any[])
-                .map((label: any) =>
-                  typeof label === "string" ? label.trim() : ""
-                )
-                .filter((label: string) => label.length > 0)
+            ? (existing as any).feature_labels.filter(
+                (label): label is string =>
+                  typeof label === "string" && label.trim().length > 0
+              )
             : [];
-        const carriedFeatureLabels =
-          analysisFeatureLabels.length > 0
-            ? analysisFeatureLabels
-            : dataFeatureLabels.length > 0
-            ? dataFeatureLabels
-            : persistedFeatureLabels;
+          const dataFeatureLabels: string[] = Array.isArray(
+            previousData.featureLabels
+          )
+            ? (previousData.featureLabels as any[]).filter(
+                (label): label is string =>
+                  typeof label === "string" && label.trim().length > 0
+              )
+            : [];
+          const analysisFeatureLabels: string[] =
+            previousData?.analysis &&
+            Array.isArray(previousData?.analysis?.featureLabels)
+              ? (previousData.analysis.featureLabels as any[])
+                  .map((label: any) =>
+                    typeof label === "string" ? label.trim() : ""
+                  )
+                  .filter((label: string) => label.length > 0)
+              : [];
+          const carriedFeatureLabels =
+            analysisFeatureLabels.length > 0
+              ? analysisFeatureLabels
+              : dataFeatureLabels.length > 0
+              ? dataFeatureLabels
+              : persistedFeatureLabels;
 
-        rankingGameForUpdate = {
-          ...rankingGame,
-          analysis:
-            previousData.analysis !== undefined
+          rankingGameForUpdate = {
+            ...rankingGame,
+            analysis: hasOwn(previousData, "analysis")
               ? previousData.analysis
               : rankingGame.analysis,
-          gemLabel:
-            previousData.gemLabel !== undefined
+            gemLabel: hasOwn(previousData, "gemLabel")
               ? previousData.gemLabel
               : rankingGame.gemLabel,
-          mood_scores:
-            previousData.mood_scores !== undefined
+            mood_scores: hasOwn(previousData, "mood_scores")
               ? previousData.mood_scores
               : rankingGame.mood_scores,
-          // 最新の解析結果に基づく featureLabels を優先的に保持する
-          featureLabels:
-            carriedFeatureLabels.length > 0
-              ? carriedFeatureLabels
-              : (rankingGame as any).featureLabels,
-          // headerImage は既存があれば優先し、無い場合は今回計算したものを使う
-          headerImage:
-            previousData.headerImage ??
-            previousData.header_image ??
-            (rankingGame as any).headerImage ??
-            (rankingGame as any).header_image,
-          header_image:
-            previousData.header_image ??
-            previousData.headerImage ??
-            (rankingGame as any).header_image ??
-            (rankingGame as any).headerImage,
-        };
+            featureLabels:
+              carriedFeatureLabels.length > 0
+                ? carriedFeatureLabels
+                : (rankingGame as any).featureLabels,
+            headerImage: hasOwn(previousData, "headerImage")
+              ? previousData.headerImage
+              : hasOwn(previousData, "header_image")
+              ? previousData.header_image
+              : (rankingGame as any).headerImage ??
+                (rankingGame as any).header_image,
+            header_image: hasOwn(previousData, "header_image")
+              ? previousData.header_image
+              : hasOwn(previousData, "headerImage")
+              ? previousData.headerImage
+              : (rankingGame as any).header_image ??
+                (rankingGame as any).headerImage,
+          };
+        }
       }
 
       // 🔽 ここから追加：検索・フィルタ用 tags を組み立てる
@@ -992,7 +1008,7 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         continue;
       }
 
-      if (!existing || !existing.data || typeof existing.data !== "object") {
+      if (!existing) {
         console.warn(
           "runAiAnalysisForAppIds: no existing row for appId",
           appId
@@ -1000,7 +1016,14 @@ async function runAiAnalysisForAppIds(appIds: number[]): Promise<void> {
         continue;
       }
 
-      const currentData = existing.data as any;
+      const currentData = parseJsonMaybe<any>(existing.data);
+      if (!currentData) {
+        console.warn(
+          "runAiAnalysisForAppIds: invalid existing.data for appId",
+          appId
+        );
+        continue;
+      }
       const savedAnalysis = currentData?.analysis ?? null;
 
       // ★ AI には reviews も渡すが、DB に保存するときは捨てたいのでここで分離
