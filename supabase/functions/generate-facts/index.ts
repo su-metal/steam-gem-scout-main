@@ -9,6 +9,14 @@ import { FACT_TAGS, type FactTag } from "../_shared/facts-v11.ts";
 const FACT_TAG_SET = new Set<string>(
   (FACT_TAGS as readonly string[]).map((t) => String(t).trim().toLowerCase())
 );
+const FACT_TAG_LIST = FACT_TAGS as readonly FactTag[];
+const YESNO_FACT_PROPERTIES = FACT_TAG_LIST.reduce<Record<string, { type: "boolean" }>>(
+  (acc, tag) => {
+    acc[tag] = { type: "boolean" };
+    return acc;
+  },
+  {}
+);
 function isFactTag(t: string) {
   return FACT_TAG_SET.has(String(t).trim().toLowerCase());
 }
@@ -43,11 +51,16 @@ const FACT_TAG_SOURCES: Record<FactTag, readonly FactSourceId[]> = FACT_TAGS.red
   {} as Record<FactTag, readonly FactSourceId[]>
 ) as Record<FactTag, readonly FactSourceId[]>;
 
+type GenerationMode = "tags" | "yesno";
+
+const DEFAULT_GENERATION_MODE: GenerationMode = "tags";
+
 type GenerateFactsRequest = {
   appId: number | string;
   force?: boolean;
   sources?: string[];
   debug?: boolean;
+  mode?: GenerationMode;
 };
 
 type EvidenceItem = {
@@ -160,21 +173,27 @@ function buildCorpusFromSteam(app: any) {
   return corpus.length > MAX_CHARS ? corpus.slice(0, MAX_CHARS) : corpus;
 }
 
-async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
+async function generateFactsViaLLM(args: {
+  appId: number;
+  corpus: string;
+  mode?: GenerationMode;
+}) {
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
   const model = Deno.env.get("OPENAI_FACTS_MODEL") ?? "gpt-4o-mini";
+  const mode = args.mode ?? DEFAULT_GENERATION_MODE;
+  const isYesNo = mode === "yesno";
 
   // カタログ（facts-v11.ts の FACT_TAGS）をプロンプトで“列挙”して幻覚を抑える
   const allowedTags = Array.from(FACT_TAG_SET).sort();
 
   // Structured Outputs: json_schema で固定（スキーマに必ず一致）
   // Docs: response_format = { type:"json_schema", json_schema:{...} } :contentReference[oaicite:1]{index=1}
-  const schema = {
-    name: "facts_output",
-    schema: {
-      type: "object",
+  const tagsSchema = {
+  name: "facts_output",
+  schema: {
+    type: "object",
       additionalProperties: false,
       required: ["tags", "evidence"],
       properties: {
@@ -204,6 +223,32 @@ async function generateFactsViaLLM(args: { appId: number; corpus: string }) {
       },
     },
   } as const;
+
+  const yesNoSchema = {
+    name: "facts_yesno",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["facts"],
+      properties: {
+        facts: {
+          type: "object",
+          additionalProperties: false,
+          required: FACT_TAG_LIST as string[],
+          properties: YESNO_FACT_PROPERTIES,
+        },
+        confidence: {
+          type: "string",
+          enum: ["high", "medium", "low"],
+        },
+        notes: {
+          type: "string",
+        },
+      },
+    },
+  } as const;
+
+  const schema = isYesNo ? yesNoSchema : tagsSchema;
 
   const system = [
     "You are a facts extractor for Steam games.",
@@ -405,8 +450,7 @@ logical_puzzle_core:
     args.corpus,
   ].join("\n");
 
-  // ここで必ず定義（messagesより上）
-  const fullSystem = [
+  const baseSystemParts = [
     system,
     productRules,
     negativeRules,
@@ -414,7 +458,28 @@ logical_puzzle_core:
     disambiguationRules,
     glossaryIntro,
     glossaryBody,
-  ].join("\n\n");
+  ];
+
+  const yesNoModeInstructions = [
+    "Yes/No mode instructions:",
+    "- Respond ONLY with JSON matching the schema.",
+    "- Return a facts object that lists every FACT_TAG with true or false. If uncertain, set false.",
+    "- Provide evidence arrays when possible; empty arrays are acceptable.",
+    "- Include a confidence level (high|medium|low) and optional notes.",
+    "- Decide each tag only from its allowed primary sources. If the source is missing or inconclusive, output false.",
+  ].join("\n");
+  const sourcePolicyLines = [
+    "Source policy:",
+    "- Use only the allowed primary sources listed below for each tag.",
+    ...FACT_TAG_LIST.map((tag) => {
+      const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
+      return `- ${tag}: ${Array.from(new Set(allowed)).join(", ")}`;
+    }),
+  ].join("\n");
+
+  const fullSystem = isYesNo
+    ? [...baseSystemParts, yesNoModeInstructions, sourcePolicyLines].join("\n\n")
+    : baseSystemParts.join("\n\n");
 
   const body = {
     model,
@@ -486,9 +551,49 @@ logical_puzzle_core:
     throw new Error(`Model output is not valid JSON: ${rawText.slice(0, 800)}`);
   }
 
+  if (isYesNo) {
+    const factsSource = parsed?.facts;
+    if (!factsSource || typeof factsSource !== "object") {
+      throw new Error("Yes/No response missing facts object");
+    }
+
+    const factsMap = FACT_TAG_LIST.reduce<Record<FactTag, boolean>>(
+      (acc, tag) => {
+        const val = factsSource[tag];
+        if (typeof val !== "boolean") {
+          throw new Error(`facts.${tag} must be boolean`);
+        }
+        acc[tag] = val;
+        return acc;
+      },
+      {} as Record<FactTag, boolean>
+    );
+
+    const trueTags = FACT_TAG_LIST.filter((tag) => factsMap[tag]);
+
+    const evidenceRaw = normalizeEvidenceMap(
+      parsed?.evidence && typeof parsed.evidence === "object"
+        ? (parsed.evidence as Record<string, EvidenceItem[]>)
+        : {}
+    );
+
+    return {
+      model,
+      mode,
+      yesnoFacts: factsMap,
+      yesnoConfidence:
+        typeof parsed?.confidence === "string" ? parsed.confidence : undefined,
+      yesnoNotes:
+        typeof parsed?.notes === "string" ? parsed.notes : undefined,
+      tags: trueTags,
+      evidence: evidenceRaw,
+    };
+  }
+
   return {
     model,
     ...(parsed ?? {}),
+    mode,
   };
 }
 
@@ -595,12 +700,15 @@ Deno.serve(async (req: Request) => {
   if (requestedSourcesNormalized.length === 0) {
     requestedSourcesNormalized.push("steam");
   }
+  const mode: GenerationMode =
+    body?.mode === "yesno" ? "yesno" : DEFAULT_GENERATION_MODE;
 
   console.log("[generate-facts] parsed", {
     appId,
     force,
     debug,
     requestedSources: requestedSourcesNormalized,
+    mode,
   });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -668,7 +776,7 @@ Deno.serve(async (req: Request) => {
 
   let raw: Awaited<ReturnType<typeof generateFactsViaLLM>> | null = null;
   try {
-    raw = await generateFactsViaLLM({ appId, corpus });
+    raw = await generateFactsViaLLM({ appId, corpus, mode });
   } catch (e) {
     console.error("[generate-facts] openai failed", {
       appId,
@@ -682,9 +790,19 @@ Deno.serve(async (req: Request) => {
   }
   console.log("[generate-facts] llm raw", {
     model: raw?.model,
+    mode,
     rawTagCount: Array.isArray(raw?.tags) ? raw.tags.length : null,
     rawTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : null,
   });
+
+  if (mode === "yesno") {
+    console.log("[generate-facts] yn_v1 preview", {
+      trueCount: Array.isArray(raw?.tags) ? raw.tags.length : 0,
+      trueTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : [],
+      confidence: raw?.yesnoConfidence ?? null,
+      missingAllowedSourceTags: tagsMissingAllowedSources.slice(0, 10),
+    });
+  }
 
   const guarded = guardFacts({
     tags: Array.isArray(raw?.tags) ? raw.tags : [],
@@ -714,6 +832,10 @@ Deno.serve(async (req: Request) => {
     const used = allowed.filter((src) => effectiveSources.has(src));
     sourcesUsedByTag[tag] = used.length > 0 ? used : [allowed[0]];
   }
+  const tagsMissingAllowedSources: FactTag[] = FACT_TAG_LIST.filter((tag) => {
+    const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
+    return !allowed.some((src) => effectiveSources.has(src));
+  });
 
   const nextData = {
     ...((existing as any)?.data ?? {}),
@@ -799,6 +921,15 @@ Deno.serve(async (req: Request) => {
         requestedSources: requestedSourcesNormalized,
         effectiveSources: effectiveSourcesList,
         sourcesUsedByTag,
+        missingAllowedSourceTags: tagsMissingAllowedSources,
+        ynRaw:
+          mode === "yesno"
+            ? {
+                facts: raw?.yesnoFacts,
+                confidence: raw?.yesnoConfidence,
+                notes: raw?.yesnoNotes,
+              }
+            : undefined,
       },
     });
   }

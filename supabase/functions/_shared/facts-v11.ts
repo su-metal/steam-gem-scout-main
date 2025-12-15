@@ -236,8 +236,9 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     vibe: "focus",
     must: ["planning_required", "resource_management"],
     boost: ["high_input_pressure", "high_stakes_failure", "automation_core"],
-    ban: ["non_hostile_environment"],
+    ban: ["non_hostile_environment"], // automation_core を削除
   },
+
   "focus-tactics-and-planning": {
     id: "focus-tactics-and-planning",
     vibe: "focus",
@@ -276,9 +277,9 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "focus-optimization-builder": {
     id: "focus-optimization-builder",
     vibe: "focus",
-    must: ["optimization_required"],
+    must: ["automation_core"],
     boost: [
-      "automation_core",
+      "optimization_required",
       "systems_interaction_depth",
       "resource_management",
       "planning_required",
