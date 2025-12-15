@@ -7,6 +7,7 @@ export type ExperienceFocusId =
   | "chill-relaxed-puzzle"
   | "chill-slow-creation"
   | "story-narrative-action"
+  | "story-journey-and-growth"
   | "story-reading-centered-story"
   | "story-mystery-investigation"
   | "story-choice-and-consequence"
@@ -104,6 +105,18 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     label: "Narrative Action",
     featureLabels: ["story_driven", "action_combat", "dialogue_heavy"],
     nearStrongLabels: ["character_drama", "emotional_journey"],
+    nearBridgeLabels: ["real_time_combat"],
+  },
+  {
+    id: "story-journey-and-growth",
+    vibe: "story",
+    label: "Journey & Growth",
+    featureLabels: [
+      "story_driven",
+      "character_progression",
+      "linear_story_progression",
+    ],
+    nearStrongLabels: ["high_intensity_challenge", "emotional_journey"],
     nearBridgeLabels: ["real_time_combat"],
   },
   {
