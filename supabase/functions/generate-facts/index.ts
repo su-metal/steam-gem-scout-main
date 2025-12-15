@@ -13,6 +13,20 @@ import {
 } from "../_shared/facts-v11.ts";
 
 const FACT_TAG_LIST = PERSISTED_FACT_TAGS as readonly PersistedFactTag[];
+const IMPORTANT_YN_TAGS: FactTag[] = [
+  "resource_management",
+  "power_scaling_over_time",
+  "automation_core",
+  "planning_required",
+  "optimization_required",
+  "high_input_pressure",
+  "time_pressure",
+  "high_stakes_failure",
+  "narrative_driven_progression",
+  "creative_manipulation",
+  "low_pressure_play",
+  "battle_loop_core",
+];
 const YESNO_FACT_PROPERTIES = FACT_TAG_LIST.reduce<
   Record<PersistedFactTag, { type: "boolean" }>
 >((acc, tag) => {
@@ -685,13 +699,38 @@ power_scaling_over_time:
   }
 
   if (isYesNo) {
-    const factsSource = parsed?.facts;
-    if (
-      !factsSource ||
-      typeof factsSource !== "object" ||
-      Array.isArray(factsSource)
-    ) {
+    const factsSourceRaw = parsed?.facts;
+    if (!factsSourceRaw || typeof factsSourceRaw !== "object") {
       throw new Error("Yes/No response missing facts object");
+    }
+
+    type YnInputShape = "object" | "string_list" | "unknown";
+    let ynInputShape: YnInputShape = "unknown";
+    let factsMapForNormalization: Record<string, unknown> = {};
+    let stringListTrueSet: Set<string> | null = null;
+
+    if (Array.isArray(factsSourceRaw)) {
+      const isStringList = factsSourceRaw.every(
+        (entry) => typeof entry === "string"
+      );
+      ynInputShape = isStringList ? "string_list" : "unknown";
+      if (isStringList) {
+        stringListTrueSet = new Set(
+          factsSourceRaw
+            .map((entry) => normalizeTagKey(entry))
+            .filter((entry) => entry.length > 0)
+        );
+        const stringListMap: Record<string, boolean> = {};
+        for (const tag of FACT_TAG_LIST) {
+          stringListMap[tag] = stringListTrueSet.has(tag);
+        }
+        factsMapForNormalization = stringListMap;
+      } else {
+        factsMapForNormalization = {};
+      }
+    } else {
+      ynInputShape = "object";
+      factsMapForNormalization = factsSourceRaw as Record<string, unknown>;
     }
 
     const normalizedFacts: Record<FactTag, boolean> = {} as Record<
@@ -703,11 +742,11 @@ power_scaling_over_time:
       valueType: string;
       rawValuePreview: string;
     }> = [];
-    const missingKeys: FactTag[] = [];
+    const missingKeys = new Set<FactTag>();
 
     const normalizeValue = (tag: FactTag, rawValue: unknown): boolean => {
       if (rawValue === undefined) {
-        missingKeys.push(tag);
+        missingKeys.add(tag);
         return false;
       }
       if (typeof rawValue === "boolean") return rawValue;
@@ -749,11 +788,24 @@ power_scaling_over_time:
     };
 
     for (const tag of FACT_TAG_LIST) {
-      const rawValue = factsSource[tag];
+      const rawValue = factsMapForNormalization[tag];
       normalizedFacts[tag] = normalizeValue(tag, rawValue);
     }
 
+    if (stringListTrueSet) {
+      for (const tag of IMPORTANT_YN_TAGS) {
+        if (!stringListTrueSet.has(tag)) {
+          missingKeys.add(tag);
+        }
+      }
+    }
+
+    const missingKeysArray = Array.from(missingKeys);
     const trueTags = FACT_TAG_LIST.filter((tag) => normalizedFacts[tag]);
+    const ynOmittedKeyCountApprox =
+      stringListTrueSet !== null
+        ? Math.max(FACT_TAG_LIST.length - stringListTrueSet.size, 0)
+        : undefined;
 
     const evidenceRaw = normalizeEvidenceMap(
       parsed?.evidence && typeof parsed.evidence === "object"
@@ -765,12 +817,16 @@ power_scaling_over_time:
       model,
       mode,
       yesnoFacts: normalizedFacts,
-      yesnoRawFacts: factsSource,
+      yesnoRawFacts: factsSourceRaw,
       yesnoConfidence:
         typeof parsed?.confidence === "string" ? parsed.confidence : undefined,
       yesnoNotes: typeof parsed?.notes === "string" ? parsed.notes : undefined,
       yesnoTypeErrors: typeErrors,
-      ynMissingKeys: missingKeys,
+      ynMissingKeys: missingKeysArray,
+      ynInputShape,
+      ynOmittedKeyCountApprox,
+      ynRaw: factsSourceRaw,
+      ynTrueCount: trueTags.length,
       tags: trueTags,
       evidence: evidenceRaw,
     };
@@ -1023,6 +1079,8 @@ Deno.serve(async (req: Request) => {
     mode,
     rawTagCount: sanitizedLLMRawTags.length,
     rawTagsPreview: sanitizedLLMRawTags.slice(0, 10),
+    ynInputShape: raw?.ynInputShape,
+    ynOmittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
   });
 
   if (mode === "yesno") {
@@ -1037,6 +1095,11 @@ Deno.serve(async (req: Request) => {
       ynMissingKeyCount: Array.isArray(raw?.ynMissingKeys)
         ? raw.ynMissingKeys.length
         : 0,
+      ynTrueCount: typeof raw?.ynTrueCount === "number"
+        ? raw.ynTrueCount
+        : sanitizedLLMRawTags.length,
+      ynInputShape: raw?.ynInputShape,
+      ynOmittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
     });
   }
 
@@ -1126,6 +1189,13 @@ Deno.serve(async (req: Request) => {
       notes: "facts-only",
       ynRawPreview: mode === "yesno" ? sanitizedLLMRawTags : undefined,
       narrativeForcedFalse,
+      ynInputShape:
+        mode === "yesno" && typeof raw?.ynInputShape === "string"
+          ? raw.ynInputShape
+          : undefined,
+      ynOmittedKeyCountApprox:
+        mode === "yesno" ? raw?.ynOmittedKeyCountApprox : undefined,
+      ynRaw: mode === "yesno" && debug ? raw?.ynRaw : undefined,
       ynMissingKeys:
         mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
           ? raw.ynMissingKeys
@@ -1133,10 +1203,6 @@ Deno.serve(async (req: Request) => {
       ynTypeErrors:
         mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
           ? raw.yesnoTypeErrors
-          : undefined,
-      ynMissingKeys:
-        mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
-          ? raw.ynMissingKeys
           : undefined,
     },
   };
@@ -1197,6 +1263,18 @@ Deno.serve(async (req: Request) => {
         missingAllowedSourceTags: tagsMissingAllowedSources,
         narrativeForcedFalse,
         conflictRejected,
+        ynMissingKeys:
+          mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
+            ? raw?.ynMissingKeys
+            : undefined,
+        ynMissingKeyCount:
+          mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
+            ? raw.ynMissingKeys.length
+            : undefined,
+        ynTrueCount: mode === "yesno" ? raw?.ynTrueCount : undefined,
+        ynInputShape: mode === "yesno" ? raw?.ynInputShape : undefined,
+        ynOmittedKeyCountApprox:
+          mode === "yesno" ? raw?.ynOmittedKeyCountApprox : undefined,
         ynTypeErrors:
           mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
             ? raw.yesnoTypeErrors
@@ -1208,6 +1286,10 @@ Deno.serve(async (req: Request) => {
                 confidence: raw?.yesnoConfidence,
                 notes: raw?.yesnoNotes,
                 forcedFalse: narrativeForcedFalse,
+                inputShape: raw?.ynInputShape,
+                missingKeys:
+                  Array.isArray(raw?.ynMissingKeys) ? raw.ynMissingKeys : undefined,
+                omittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
               }
             : undefined,
       },

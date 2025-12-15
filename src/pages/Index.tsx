@@ -145,6 +145,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
 
   Story: [
     { id: "story-narrative-action", label: "Story-Driven Play" },
+    { id: "story-journey-and-growth", label: "Journey & Growth" },
     { id: "story-reading-centered-story", label: "Reading-Centered Story" },
     { id: "story-mystery-investigation", label: "Mystery / Investigation" },
     { id: "story-choice-and-consequence", label: "Choice & Consequence" },

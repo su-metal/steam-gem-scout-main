@@ -22,6 +22,7 @@ export const PERSISTED_FACT_TAGS = [
   "automation_core",
   "optimization_required",
   "narrative_driven_progression",
+  "story-journey-and-growth",
   "reading_heavy_interaction",
   "branching_narrative",
   "choice_has_consequence",
@@ -213,6 +214,19 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     ],
     ban: ["reading_heavy_interaction"],
   },
+  "story-journey-and-growth": {
+    id: "story-journey-and-growth",
+    vibe: "story",
+    // 物語に沿って進み、戦闘を通じて成長する
+    must: ["narrative_driven_progression", "battle_loop_core"],
+
+    // 一本道でも探索があると体験が豊かになる
+    boost: ["free_movement_exploration"],
+
+    // ban は置かない（断定を避ける）
+    ban: [],
+  },
+
   "story-reading-centered-story": {
     id: "story-reading-centered-story",
     vibe: "story",
@@ -257,6 +271,7 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     ],
     ban: ["high_input_pressure"],
   },
+
   "focus-battle-and-growth": {
     id: "focus-battle-and-growth",
     vibe: "focus",
