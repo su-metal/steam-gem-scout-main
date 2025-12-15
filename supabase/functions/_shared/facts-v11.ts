@@ -55,7 +55,7 @@ export function isFactTag(x: string): x is FactTag {
 }
 
 export function computeBand(
-  facts: FactTag[],
+  facts: FactTag[] | Set<FactTag>,
   rule: FocusRule
 ): {
   band: MatchBand;
@@ -63,7 +63,7 @@ export function computeBand(
   matchedBoost: FactTag[];
   matchedBan: FactTag[];
 } {
-  const factSet = new Set(facts);
+  const factSet = facts instanceof Set ? facts : new Set(facts);
 
   const matchedMust = rule.must.filter((tag) => factSet.has(tag));
   const matchedBoost = rule.boost.filter((tag) => factSet.has(tag));

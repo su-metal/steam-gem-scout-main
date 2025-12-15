@@ -987,11 +987,42 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .map((x) => x.toLowerCase())
         .filter((x): x is FactTag => isFactTag(x));
 
+      const baseFactSet = new Set<FactTag>(facts);
+      const derivedFacts = new Set<FactTag>(baseFactSet);
+      if (!baseFactSet.has("systems_interaction_depth")) {
+        const hasResourceManagement = baseFactSet.has("resource_management");
+        const hasPlanningRequired = baseFactSet.has("planning_required");
+        const hasAutomationCore = baseFactSet.has("automation_core");
+        const hasOptimizationRequired = baseFactSet.has("optimization_required");
+        const hasHighStakesFailure = baseFactSet.has("high_stakes_failure");
+        const hasTimePressure = baseFactSet.has("time_pressure");
+
+        const conditionA =
+          hasResourceManagement &&
+          hasPlanningRequired &&
+          (hasAutomationCore || hasOptimizationRequired);
+        const conditionB =
+          hasResourceManagement &&
+          hasAutomationCore &&
+          (hasHighStakesFailure || hasTimePressure);
+
+        if (conditionA || conditionB) {
+          derivedFacts.add("systems_interaction_depth");
+        }
+      }
+      const derivedAdded = Array.from(derivedFacts).filter(
+        (tag) => !baseFactSet.has(tag)
+      );
+
       let factsMatch: Record<string, unknown> | null = null;
+      let derivedSatisfiedMust: FactTag[] = [];
       if (normalizedExperienceFocusId) {
         const rule = FACT_FOCUS_RULES[normalizedExperienceFocusId];
         if (rule) {
-          const res = computeBand(facts, rule);
+          const res = computeBand(derivedFacts, rule);
+          derivedSatisfiedMust = res.matchedMust.filter(
+            (tag) => !baseFactSet.has(tag)
+          );
           factsMatch = {
             experienceFocusId: normalizedExperienceFocusId,
             selectedFocusBand: res.band,
@@ -1011,7 +1042,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             for (const f of focusDefs) {
               const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
               if (!r) continue;
-              allFocusBands[f.id] = computeBand(facts, r).band;
+              allFocusBands[f.id] = computeBand(derivedFacts, r).band;
             }
             (factsMatch as any).allFocusBands = allFocusBands;
           }
@@ -1211,6 +1242,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
               nearStrong: focusResult.nearStrongLabelCount,
               nearBridge: focusResult.nearBridgeLabelCount,
             },
+            ...(derivedAdded.length > 0 ? { derivedAdded } : {}),
+            ...(derivedSatisfiedMust.length > 0
+              ? { derivedSatisfiedMust }
+              : {}),
           }
         : undefined;
       const labelsConsistency = debugMode

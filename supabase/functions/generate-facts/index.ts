@@ -522,6 +522,7 @@ logical_puzzle_core:
     "Yes/No mode instructions:",
     "- Respond ONLY with JSON matching the schema.",
     "- Return a facts object that lists every FACT_TAG with true or false. If uncertain, set false.",
+    "- Each facts key must be the literal boolean `true` or `false`. Do NOT return `null`, strings, numbers, yes/no words, or any other placeholder values.",
     "- Provide evidence arrays when possible; empty arrays are acceptable.",
     "- Include a confidence level (high|medium|low) and optional notes.",
     "- Decide each tag only from its allowed primary sources. If the source is missing or inconclusive, output false.",
@@ -586,14 +587,32 @@ logical_puzzle_core:
     );
   }
 
-  const content =
-    json?.choices?.[0]?.message?.content ??
-    json?.output?.[0]?.content?.find?.((c: any) => c?.type === "output_text")
-      ?.text ??
-    json?.output_text;
+  const choicesContent = json?.choices?.[0]?.message?.content;
+  const legacyOutputContent = json?.output?.[0]?.content;
+  const ensureArray = (value: unknown): any[] => {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") return [value];
+    return [];
+  };
+  const choiceEntries = ensureArray(choicesContent);
+  const legacyEntries = ensureArray(legacyOutputContent);
+  const combinedEntries = [...choiceEntries, ...legacyEntries];
 
-  const rawText = typeof content === "string" ? content : "";
-  if (!rawText) {
+  const firstTextEntry =
+    combinedEntries.find((entry) => typeof entry?.text === "string")?.text ??
+    "";
+  const fallbackRawText =
+    typeof json?.output_text === "string" ? json.output_text : "";
+  const rawText =
+    typeof choicesContent === "string"
+      ? choicesContent
+      : firstTextEntry || fallbackRawText;
+
+  const structuredYesNoEntry = combinedEntries.find(
+    (entry) => entry?.type === yesNoSchema.name
+  );
+
+  if (!rawText && !(isYesNo && structuredYesNoEntry?.content)) {
     console.error("[generate-facts] openai missing content", {
       status,
       jsonPreview: JSON.stringify(json).slice(0, 800),
@@ -602,18 +621,24 @@ logical_puzzle_core:
   }
 
   let parsed: any;
-  try {
-    parsed = JSON.parse(rawText);
-  } catch {
-    console.error("[generate-facts] model content not json", {
-      rawTextPreview: rawText.slice(0, 800),
-    });
-    throw new Error(`Model output is not valid JSON: ${rawText.slice(0, 800)}`);
+  if (isYesNo && structuredYesNoEntry?.content) {
+    parsed = structuredYesNoEntry.content;
+  } else {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      console.error("[generate-facts] model content not json", {
+        rawTextPreview: rawText.slice(0, 800),
+      });
+      throw new Error(
+        `Model output is not valid JSON: ${rawText.slice(0, 800)}`
+      );
+    }
   }
 
   if (isYesNo) {
     const factsSource = parsed?.facts;
-    if (!factsSource || typeof factsSource !== "object") {
+    if (!factsSource || typeof factsSource !== "object" || Array.isArray(factsSource)) {
       throw new Error("Yes/No response missing facts object");
     }
 
@@ -683,6 +708,7 @@ logical_puzzle_core:
       model,
       mode,
       yesnoFacts: normalizedFacts,
+      yesnoRawFacts: factsSource,
       yesnoConfidence:
         typeof parsed?.confidence === "string" ? parsed.confidence : undefined,
       yesnoNotes:
@@ -1081,7 +1107,7 @@ Deno.serve(async (req: Request) => {
         ynRaw:
           mode === "yesno"
             ? {
-                facts: raw?.yesnoFacts,
+                facts: raw?.yesnoRawFacts ?? raw?.yesnoFacts,
                 confidence: raw?.yesnoConfidence,
                 notes: raw?.yesnoNotes,
                 forcedFalse: narrativeForcedFalse,
