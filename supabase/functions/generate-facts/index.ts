@@ -173,6 +173,31 @@ function normalizeEvidenceMap(
   return normalized;
 }
 
+function normalizeConflicts(tags: string[]) {
+  const hasHighInput = tags.includes("high_input_pressure");
+  const hasTimePressure = tags.includes("time_pressure");
+  const conflictRejected: FactTag[] = [];
+  const filtered: string[] = [];
+
+  for (const tag of tags) {
+    if (
+      tag === "low_pressure_play" &&
+      (hasHighInput || hasTimePressure)
+    ) {
+      if (!conflictRejected.includes("low_pressure_play")) {
+        conflictRejected.push("low_pressure_play");
+      }
+      continue;
+    }
+    filtered.push(tag);
+  }
+
+  return {
+    tags: filtered,
+    conflictRejected,
+  };
+}
+
 function parseModeValue(value: unknown): GenerationMode | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().toLowerCase();
@@ -657,8 +682,13 @@ logical_puzzle_core:
       valueType: string;
       rawValuePreview: string;
     }> = [];
+    const missingKeys: FactTag[] = [];
 
     const normalizeValue = (tag: FactTag, rawValue: unknown): boolean => {
+      if (rawValue === undefined) {
+        missingKeys.push(tag);
+        return false;
+      }
       if (typeof rawValue === "boolean") return rawValue;
       if (typeof rawValue === "string") {
         const lowered = rawValue.trim().toLowerCase();
@@ -681,11 +711,11 @@ logical_puzzle_core:
         });
         return false;
       }
-      if (rawValue == null) {
+      if (rawValue === null) {
         typeErrors.push({
           tag,
-          valueType: rawValue === null ? "null" : "undefined",
-          rawValuePreview: String(rawValue),
+          valueType: "null",
+          rawValuePreview: "null",
         });
         return false;
       }
@@ -720,6 +750,7 @@ logical_puzzle_core:
       yesnoNotes:
         typeof parsed?.notes === "string" ? parsed.notes : undefined,
       yesnoTypeErrors: typeErrors,
+      ynMissingKeys: missingKeys,
       tags: trueTags,
       evidence: evidenceRaw,
     };
@@ -979,6 +1010,9 @@ Deno.serve(async (req: Request) => {
       ynTypeErrorCount: Array.isArray(raw?.yesnoTypeErrors)
         ? raw.yesnoTypeErrors.length
         : 0,
+      ynMissingKeyCount: Array.isArray(raw?.ynMissingKeys)
+        ? raw.ynMissingKeys.length
+        : 0,
     });
   }
 
@@ -993,6 +1027,18 @@ Deno.serve(async (req: Request) => {
       return false;
     });
   }
+
+  const conflictNormalizationBeforeCount = guardTags.length;
+  const conflictResult = normalizeConflicts(guardTags);
+  const conflictRejected = conflictResult.conflictRejected;
+  if (conflictRejected.length > 0) {
+    console.log("[generate-facts] conflict filtered", {
+      conflictRejected,
+      beforeCount: conflictNormalizationBeforeCount,
+      afterCount: conflictResult.tags.length,
+    });
+  }
+  guardTags = conflictResult.tags;
 
   const guarded = guardFacts({
     tags: guardTags,
@@ -1038,6 +1084,7 @@ Deno.serve(async (req: Request) => {
       acceptedTags: guarded.tags,
       rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
       keptWithoutEvidence: guarded.keptWithoutEvidence,
+      conflictRejected,
       evidenceCountsByTag: guarded.evidenceCountsByTag,
       evidence: guarded.evidence,
       requestedSources: requestedSourcesNormalized,
@@ -1054,10 +1101,18 @@ Deno.serve(async (req: Request) => {
       updatedAt: now,
       notes: "facts-only",
       ynRawPreview: mode === "yesno" ? sanitizedLLMRawTags : undefined,
-      narrativeForcedFalse,
-      ynTypeErrors:
-        mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
-          ? raw.yesnoTypeErrors
+        narrativeForcedFalse,
+        ynMissingKeys:
+          mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
+            ? raw.ynMissingKeys
+            : undefined,
+        ynTypeErrors:
+          mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
+            ? raw.yesnoTypeErrors
+            : undefined,
+      ynMissingKeys:
+        mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
+          ? raw.ynMissingKeys
           : undefined,
     },
   };
@@ -1117,6 +1172,7 @@ Deno.serve(async (req: Request) => {
         sourcesUsedByTag,
         missingAllowedSourceTags: tagsMissingAllowedSources,
         narrativeForcedFalse,
+        conflictRejected,
         ynTypeErrors:
           mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
             ? raw.yesnoTypeErrors

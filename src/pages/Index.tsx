@@ -136,7 +136,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
 
   ],
   Focus: [
-    { id: "focus-battle-and-growth", label: "Battle & Growth" },
+    { id: "focus-battle-and-growth", label: "Battle & Progression" },
     { id: "focus-tactics-and-planning", label: "Tactics & Planning" },
     { id: "focus-base-and-systems", label: "Base & Systems" },
     { id: "focus-operational-sim", label: "Operational Sim" }, // ★変更
@@ -144,7 +144,7 @@ const EXPERIENCE_CLASSES: Record<VibeType, ExperienceClassOption[]> = {
   ],
 
   Story: [
-    { id: "story-narrative-action", label: "Narrative Action" },
+    { id: "story-narrative-action", label: "Story-Driven Play" },
     { id: "story-reading-centered-story", label: "Reading-Centered Story" },
     { id: "story-mystery-investigation", label: "Mystery / Investigation" },
     { id: "story-choice-and-consequence", label: "Choice & Consequence" },
