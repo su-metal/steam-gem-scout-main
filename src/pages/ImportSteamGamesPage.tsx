@@ -146,10 +146,11 @@ export function ImportSteamGamesPage() {
   const runGenerateFactsForAppId = async (
     appId: number,
     force = false,
-    debug = false
+    debug = false,
+    mode: "tags" | "yesno" = "yesno"
   ): Promise<GenerateFactsResponse> => {
     const { data, error } = await supabase.functions.invoke<any>("generate-facts", {
-      body: { appId, force, debug },
+      body: { appId, force, debug, sources: ["steam"], mode },
     });
 
     if (error) {
@@ -182,6 +183,7 @@ export function ImportSteamGamesPage() {
       reason: "no-response",
     };
   };
+
 
 
   const handleSingleImport = async () => {

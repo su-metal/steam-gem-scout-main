@@ -69,6 +69,55 @@ type EvidenceItem = {
   confidence?: number;
 };
 
+const NARRATIVE_GUARD_TAGS: Set<FactTag> = new Set([
+  "narrative_driven_progression",
+  "branching_narrative",
+  "choice_has_consequence",
+  "reading_heavy_interaction",
+  "lore_optional_depth",
+]);
+
+const NARRATIVE_TRIGGER_PATTERNS: Partial<Record<FactTag, RegExp[]>> = {
+  narrative_driven_progression: [
+    /story[-\s]?driven/,
+    /plot/,
+    /narrative/,
+    /story[-\s]?rich/,
+    /campaign story/,
+    /character[-\s]?driven/,
+    /dialogue[-\s]?heavy/,
+    /visual novel/,
+  ],
+  branching_narrative: [
+    /branching/,
+    /multiple endings/,
+    /choices? matter/,
+    /decision[-\s]?driven/,
+  ],
+  choice_has_consequence: [
+    /choices? matter/,
+    /decision[-\s]?driven/,
+    /consequences?/,
+  ],
+  reading_heavy_interaction: [
+    /visual novel/,
+    /text[-\s]?based/,
+    /dialogue[-\s]?heavy/,
+    /lots of reading/,
+  ],
+  lore_optional_depth: [
+    /lore/,
+    /worldbuilding/,
+  ],
+};
+
+function isNarrativeAllowedByCorpus(corpus: string, tag: FactTag) {
+  const patterns = NARRATIVE_TRIGGER_PATTERNS[tag];
+  if (!patterns?.length) return true;
+  const normalized = corpus.toLowerCase();
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
@@ -117,6 +166,15 @@ function normalizeEvidenceMap(
     normalized[normalizedKey] = value;
   }
   return normalized;
+}
+
+function parseModeValue(value: unknown): GenerationMode | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "tags" || normalized === "yesno") {
+    return normalized;
+  }
+  return null;
 }
 
 function parseAppId(v: unknown): number | null {
@@ -467,6 +525,8 @@ logical_puzzle_core:
     "- Provide evidence arrays when possible; empty arrays are acceptable.",
     "- Include a confidence level (high|medium|low) and optional notes.",
     "- Decide each tag only from its allowed primary sources. If the source is missing or inconclusive, output false.",
+    "- Never guess narrative focus: only set narrative_driven_progression true when the corpus explicitly uses story-driven, narrative-driven, story campaign, story-rich, plot, character-driven, dialogue-heavy, visual novel, or equivalent language stating story/campaign is the progression core. If those exact cues are absent or ambiguous (e.g., lore/world/setting/sandbox/automation/simulation hints), set narrative_driven_progression false.",
+    "- The narrative cluster (narrative_driven_progression, branching_narrative, choice_has_consequence, reading_heavy_interaction, lore_optional_depth) must likewise be false unless the corpus explicitly confirms a story-driven or choice-driven progression in plain terms.",
   ].join("\n");
   const sourcePolicyLines = [
     "Source policy:",
@@ -557,19 +617,61 @@ logical_puzzle_core:
       throw new Error("Yes/No response missing facts object");
     }
 
-    const factsMap = FACT_TAG_LIST.reduce<Record<FactTag, boolean>>(
-      (acc, tag) => {
-        const val = factsSource[tag];
-        if (typeof val !== "boolean") {
-          throw new Error(`facts.${tag} must be boolean`);
-        }
-        acc[tag] = val;
-        return acc;
-      },
-      {} as Record<FactTag, boolean>
-    );
+    const normalizedFacts: Record<FactTag, boolean> = {} as Record<
+      FactTag,
+      boolean
+    >;
+    const typeErrors: Array<{
+      tag: FactTag;
+      valueType: string;
+      rawValuePreview: string;
+    }> = [];
 
-    const trueTags = FACT_TAG_LIST.filter((tag) => factsMap[tag]);
+    const normalizeValue = (tag: FactTag, rawValue: unknown): boolean => {
+      if (typeof rawValue === "boolean") return rawValue;
+      if (typeof rawValue === "string") {
+        const lowered = rawValue.trim().toLowerCase();
+        if (lowered === "true") return true;
+        if (lowered === "false") return false;
+        typeErrors.push({
+          tag,
+          valueType: "string",
+          rawValuePreview: rawValue.slice(0, 80),
+        });
+        return false;
+      }
+      if (typeof rawValue === "number") {
+        if (rawValue === 1) return true;
+        if (rawValue === 0) return false;
+        typeErrors.push({
+          tag,
+          valueType: "number",
+          rawValuePreview: String(rawValue),
+        });
+        return false;
+      }
+      if (rawValue == null) {
+        typeErrors.push({
+          tag,
+          valueType: rawValue === null ? "null" : "undefined",
+          rawValuePreview: String(rawValue),
+        });
+        return false;
+      }
+      typeErrors.push({
+        tag,
+        valueType: typeof rawValue,
+        rawValuePreview: JSON.stringify(rawValue)?.slice(0, 80) ?? "",
+      });
+      return false;
+    };
+
+    for (const tag of FACT_TAG_LIST) {
+      const rawValue = factsSource[tag];
+      normalizedFacts[tag] = normalizeValue(tag, rawValue);
+    }
+
+    const trueTags = FACT_TAG_LIST.filter((tag) => normalizedFacts[tag]);
 
     const evidenceRaw = normalizeEvidenceMap(
       parsed?.evidence && typeof parsed.evidence === "object"
@@ -580,11 +682,12 @@ logical_puzzle_core:
     return {
       model,
       mode,
-      yesnoFacts: factsMap,
+      yesnoFacts: normalizedFacts,
       yesnoConfidence:
         typeof parsed?.confidence === "string" ? parsed.confidence : undefined,
       yesnoNotes:
         typeof parsed?.notes === "string" ? parsed.notes : undefined,
+      yesnoTypeErrors: typeErrors,
       tags: trueTags,
       evidence: evidenceRaw,
     };
@@ -681,6 +784,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return json(200, { ok: true });
   if (req.method !== "POST") return json(405, { error: "Method Not Allowed" });
 
+  const url = new URL(req.url);
+
   let body: GenerateFactsRequest;
   try {
     body = await req.json();
@@ -700,16 +805,40 @@ Deno.serve(async (req: Request) => {
   if (requestedSourcesNormalized.length === 0) {
     requestedSourcesNormalized.push("steam");
   }
-  const mode: GenerationMode =
-    body?.mode === "yesno" ? "yesno" : DEFAULT_GENERATION_MODE;
 
-  console.log("[generate-facts] parsed", {
+  const hasModeInBody = Object.prototype.hasOwnProperty.call(body ?? {}, "mode");
+  const parsedBodyMode = parseModeValue(body?.mode);
+  if (hasModeInBody && parsedBodyMode === null) {
+    return badRequest("invalid_mode");
+  }
+
+  const queryModeRaw = url.searchParams.get("mode");
+  const hasModeInQuery = queryModeRaw !== null;
+  const parsedQueryMode = parseModeValue(queryModeRaw);
+  if (hasModeInQuery && parsedQueryMode === null) {
+    return badRequest("invalid_mode");
+  }
+
+  const mode: GenerationMode =
+    parsedBodyMode ?? parsedQueryMode ?? DEFAULT_GENERATION_MODE;
+  const modeSource = parsedBodyMode
+    ? "body"
+    : parsedQueryMode
+    ? "query"
+    : "default";
+
+  const parsedLog: Record<string, unknown> = {
     appId,
     force,
     debug,
     requestedSources: requestedSourcesNormalized,
     mode,
-  });
+    modeSource,
+  };
+  if (debug) {
+    parsedLog.requestBodyKeys = Object.keys(body ?? {});
+  }
+  console.log("[generate-facts] parsed", parsedLog);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -773,6 +902,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const corpus = corpusPieces.join("\n\n");
+  const tagsMissingAllowedSources: FactTag[] = FACT_TAG_LIST.filter((tag) => {
+    const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
+    return !allowed.some((src) => effectiveSources.has(src));
+  });
 
   let raw: Awaited<ReturnType<typeof generateFactsViaLLM>> | null = null;
   try {
@@ -801,11 +934,26 @@ Deno.serve(async (req: Request) => {
       trueTagsPreview: Array.isArray(raw?.tags) ? raw.tags.slice(0, 10) : [],
       confidence: raw?.yesnoConfidence ?? null,
       missingAllowedSourceTags: tagsMissingAllowedSources.slice(0, 10),
+      ynTypeErrorCount: Array.isArray(raw?.yesnoTypeErrors)
+        ? raw.yesnoTypeErrors.length
+        : 0,
+    });
+  }
+
+  let guardTags = Array.isArray(raw?.tags) ? [...raw.tags] : [];
+  const narrativeForcedFalse: FactTag[] = [];
+  if (mode === "yesno") {
+    guardTags = guardTags.filter((tag) => {
+      const factTag = tag as FactTag;
+      if (!NARRATIVE_GUARD_TAGS.has(factTag)) return true;
+      if (isNarrativeAllowedByCorpus(corpus, factTag)) return true;
+      narrativeForcedFalse.push(factTag);
+      return false;
     });
   }
 
   const guarded = guardFacts({
-    tags: Array.isArray(raw?.tags) ? raw.tags : [],
+    tags: guardTags,
     evidence:
       raw?.evidence && typeof raw.evidence === "object"
         ? (raw.evidence as Record<string, EvidenceItem[]>)
@@ -832,10 +980,6 @@ Deno.serve(async (req: Request) => {
     const used = allowed.filter((src) => effectiveSources.has(src));
     sourcesUsedByTag[tag] = used.length > 0 ? used : [allowed[0]];
   }
-  const tagsMissingAllowedSources: FactTag[] = FACT_TAG_LIST.filter((tag) => {
-    const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
-    return !allowed.some((src) => effectiveSources.has(src));
-  });
 
   const nextData = {
     ...((existing as any)?.data ?? {}),
@@ -865,6 +1009,13 @@ Deno.serve(async (req: Request) => {
       },
       updatedAt: now,
       notes: "facts-only",
+      ynRawPreview:
+        mode === "yesno" && Array.isArray(raw?.tags) ? raw.tags : undefined,
+      narrativeForcedFalse,
+      ynTypeErrors:
+        mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
+          ? raw.yesnoTypeErrors
+          : undefined,
     },
   };
 
@@ -922,12 +1073,18 @@ Deno.serve(async (req: Request) => {
         effectiveSources: effectiveSourcesList,
         sourcesUsedByTag,
         missingAllowedSourceTags: tagsMissingAllowedSources,
+        narrativeForcedFalse,
+        ynTypeErrors:
+          mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
+            ? raw.yesnoTypeErrors
+            : undefined,
         ynRaw:
           mode === "yesno"
             ? {
                 facts: raw?.yesnoFacts,
                 confidence: raw?.yesnoConfidence,
                 notes: raw?.yesnoNotes,
+                forcedFalse: narrativeForcedFalse,
               }
             : undefined,
       },
