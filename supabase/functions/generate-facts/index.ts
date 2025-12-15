@@ -16,16 +16,32 @@ function isFactTag(t: string) {
 const MAX_FACT_TAGS = 10;
 
 const EVIDENCE_REQUIRED_TAGS = new Set<FactTag>([
-  "automation_core",
   "branching_narrative",
   "choice_has_consequence",
-  "session_based_play",
-  "time_pressure",
-  "high_input_pressure",
-  "free_movement_exploration",
-  "open_ended_goal",
-  "resource_management",
+  "reading_heavy_interaction",
+  "lore_optional_depth",
 ]);
+
+const EVIDENCE_OPTIONAL_TAGS = new Set<FactTag>([
+  "automation_core",
+  "optimization_required",
+  "resource_management",
+  "systems_interaction_depth",
+  "free_movement_exploration",
+  "job_simulation_loop",
+]);
+
+type FactSourceId = "steam" | "igdb" | "wikipedia" | "pcgw" | "reddit";
+
+const FACT_SOURCE_POLICY_VERSION = "v1";
+
+const FACT_TAG_SOURCES: Record<FactTag, readonly FactSourceId[]> = FACT_TAGS.reduce(
+  (acc, tag) => {
+    acc[tag] = ["steam"];
+    return acc;
+  },
+  {} as Record<FactTag, readonly FactSourceId[]>
+) as Record<FactTag, readonly FactSourceId[]>;
 
 type GenerateFactsRequest = {
   appId: number | string;
@@ -59,6 +75,14 @@ function badRequest(message: string) {
 
 function normalizeBool(v: unknown, fallback = false) {
   return typeof v === "boolean" ? v : fallback;
+}
+
+const ALL_SOURCE_IDS: FactSourceId[] = ["steam", "igdb", "wikipedia", "pcgw", "reddit"];
+
+function normalizeSource(value: unknown): FactSourceId | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase() as FactSourceId;
+  return ALL_SOURCE_IDS.includes(normalized) ? normalized : null;
 }
 
 function normalizeTagKey(input: unknown): string {
@@ -496,6 +520,7 @@ function guardFacts(raw: {
   const withEvidence: string[] = [];
   const withoutEvidence: string[] = [];
   const rejectedNoEvidenceRequired: string[] = [];
+  const keptWithoutEvidence: string[] = [];
 
   for (const t of candidates) {
     const ev = Array.isArray(evidenceMap[t]) ? evidenceMap[t] : [];
@@ -519,6 +544,7 @@ function guardFacts(raw: {
       withEvidence.push(t);
     } else {
       withoutEvidence.push(t);
+      keptWithoutEvidence.push(t);
     }
   }
 
@@ -534,6 +560,7 @@ function guardFacts(raw: {
     rawTags: normalizedTags,
     rejectedNotInCatalog,
     rejectedNoEvidenceRequired,
+    keptWithoutEvidence,
     evidenceCountsByTag,
   };
 }
@@ -561,13 +588,20 @@ Deno.serve(async (req: Request) => {
 
   const force = normalizeBool(body?.force, false);
   const debug = normalizeBool(body?.debug, false);
-  const sources = Array.isArray(body?.sources) ? body.sources : ["steam"];
-
-  console.log("[generate-facts] parsed", { appId, force, debug, sources });
-
-  if (sources.length === 0 || sources.some((s) => s !== "steam")) {
-    return badRequest("sources must be ['steam'] for now");
+  const rawSources = Array.isArray(body?.sources) ? body.sources : ["steam"];
+  const requestedSourcesNormalized = rawSources
+    .map(normalizeSource)
+    .filter((v): v is FactSourceId => v !== null);
+  if (requestedSourcesNormalized.length === 0) {
+    requestedSourcesNormalized.push("steam");
   }
+
+  console.log("[generate-facts] parsed", {
+    appId,
+    force,
+    debug,
+    requestedSources: requestedSourcesNormalized,
+  });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -607,17 +641,30 @@ Deno.serve(async (req: Request) => {
     return json(200, { appId, saved: false, reason: "already-exists" });
   }
 
-  const steam = await fetchSteamAppDetails(appId);
-  if (!steam.ok) {
-    return json(404, {
-      error: "steam-appdetails-not-found",
-      appId,
-      status: steam.status,
-      url: steam.url,
+  const corpusPieces: string[] = [];
+  const effectiveSources = new Set<FactSourceId>();
+
+  let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null = null;
+  if (requestedSourcesNormalized.includes("steam")) {
+    const steam = await fetchSteamAppDetails(appId);
+    if (!steam.ok) {
+      return json(404, {
+        error: "steam-appdetails-not-found",
+        appId,
+        status: steam.status,
+        url: steam.url,
+      });
+    }
+    steamAppDetails = steam;
+    effectiveSources.add("steam");
+    corpusPieces.push(buildCorpusFromSteam(steam.data));
+  } else {
+    return json(400, {
+      error: "steam source is required for now",
     });
   }
 
-  const corpus = buildCorpusFromSteam(steam.data);
+  const corpus = corpusPieces.join("\n\n");
 
   let raw: Awaited<ReturnType<typeof generateFactsViaLLM>> | null = null;
   try {
@@ -656,9 +703,17 @@ Deno.serve(async (req: Request) => {
     guardedTags: guarded.tags,
     rejectedNotInCatalog: guarded.rejectedNotInCatalog,
     rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
+    keptWithoutEvidence: guarded.keptWithoutEvidence,
   });
 
   const now = new Date().toISOString();
+  const effectiveSourcesList = Array.from(effectiveSources);
+  const sourcesUsedByTag: Partial<Record<FactTag, FactSourceId[]>> = {};
+  for (const tag of guarded.tags) {
+    const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
+    const used = allowed.filter((src) => effectiveSources.has(src));
+    sourcesUsedByTag[tag] = used.length > 0 ? used : [allowed[0]];
+  }
 
   const nextData = {
     ...((existing as any)?.data ?? {}),
@@ -672,13 +727,18 @@ Deno.serve(async (req: Request) => {
       catalogMisses: guarded.rejectedNotInCatalog,
       acceptedTags: guarded.tags,
       rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
+      keptWithoutEvidence: guarded.keptWithoutEvidence,
       evidenceCountsByTag: guarded.evidenceCountsByTag,
       evidence: guarded.evidence,
+      requestedSources: requestedSourcesNormalized,
+      effectiveSources: effectiveSourcesList,
+      tagSourcePolicyVersion: FACT_SOURCE_POLICY_VERSION,
+      sourcesUsedByTag,
       sources: {
         steam: {
           fetchedAt: now,
           appDetailsOk: true,
-          storeApiUrl: steam.url,
+          storeApiUrl: steamAppDetails?.url ?? null,
         },
       },
       updatedAt: now,
@@ -734,7 +794,11 @@ Deno.serve(async (req: Request) => {
         guardedTags: guarded.tags,
         rejectedNotInCatalog: guarded.rejectedNotInCatalog,
         rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
+        keptWithoutEvidence: guarded.keptWithoutEvidence,
         evidenceCountsByTag: guarded.evidenceCountsByTag,
+        requestedSources: requestedSourcesNormalized,
+        effectiveSources: effectiveSourcesList,
+        sourcesUsedByTag,
       },
     });
   }
