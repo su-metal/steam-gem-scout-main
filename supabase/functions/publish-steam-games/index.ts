@@ -747,32 +747,14 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
       // steam_games の行から RankingGame を組み立てる
       let rankingGame = buildRankingGameFromSteamRow(row);
-
-      // ★ 追加: Steam からレビューを取得して RankingGame に埋め込む
-      try {
-        const reviewBundle = await fetchSteamReviewsForAnalysis(appId);
-        if (reviewBundle) {
-          rankingGame = {
-            ...rankingGame,
-            reviews: reviewBundle.reviews,
-            earlyReviews: reviewBundle.earlyReviews,
-            recentReviews: reviewBundle.recentReviews,
-            earlyWindowStats: reviewBundle.earlyWindowStats,
-            recentWindowStats: reviewBundle.recentWindowStats,
-          };
-        }
-      } catch (e) {
-        console.warn(
-          "[publish-steam-games] failed to fetch reviews for appId",
-          appId,
-          e
-        );
-      }
+      let rankingGameForUpdate = rankingGame;
+      let previousData: any | null = null;
+      let hasExistingAnalysis = false;
+      let shouldGenerateReviews = true;
 
       const appIdStr = String(appId);
 
       // 既存の analysis / gemLabel がある場合は保持するためのプレースホルダ
-      let rankingGameForUpdate = rankingGame;
 
       // 既に同じ appId の行があれば UPDATE、なければ INSERT
       const { data: existing, error: selectError } = await supabase
@@ -793,8 +775,11 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
 
       // 既存行がある場合は、analysis / gemLabel / headerImage を引き継ぐ
       if (existing && existing.data) {
-        const previousData = parseJsonMaybe<any>(existing.data);
+        previousData = parseJsonMaybe<any>(existing.data);
         if (previousData) {
+          hasExistingAnalysis =
+            hasOwn(previousData, "analysis") && previousData.analysis != null;
+          shouldGenerateReviews = !hasExistingAnalysis;
           const persistedFeatureLabels: string[] = Array.isArray(
             (existing as any).feature_labels
           )
@@ -855,6 +840,28 @@ async function upsertGamesToRankingsCache(appIds: number[]): Promise<{
               : (rankingGame as any).header_image ??
                 (rankingGame as any).headerImage,
           };
+        }
+      }
+
+      if (shouldGenerateReviews) {
+        try {
+          const reviewBundle = await fetchSteamReviewsForAnalysis(appId);
+          if (reviewBundle) {
+            rankingGameForUpdate = {
+              ...rankingGameForUpdate,
+              reviews: reviewBundle.reviews,
+              earlyReviews: reviewBundle.earlyReviews,
+              recentReviews: reviewBundle.recentReviews,
+              earlyWindowStats: reviewBundle.earlyWindowStats,
+              recentWindowStats: reviewBundle.recentWindowStats,
+            };
+          }
+        } catch (e) {
+          console.warn(
+            "[publish-steam-games] failed to fetch reviews for appId",
+            appId,
+            e
+          );
         }
       }
 
