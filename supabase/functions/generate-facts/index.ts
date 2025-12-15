@@ -41,13 +41,11 @@ type FactSourceId = "steam" | "igdb" | "wikipedia" | "pcgw" | "reddit";
 
 const FACT_SOURCE_POLICY_VERSION = "v1";
 
-const FACT_TAG_SOURCES: Record<PersistedFactTag, readonly FactSourceId[]> = FACT_TAGS.reduce(
-  (acc, tag) => {
+const FACT_TAG_SOURCES: Record<PersistedFactTag, readonly FactSourceId[]> =
+  FACT_TAGS.reduce((acc, tag) => {
     acc[tag] = ["steam"];
     return acc;
-  },
-  {} as Record<PersistedFactTag, readonly FactSourceId[]>
-);
+  }, {} as Record<PersistedFactTag, readonly FactSourceId[]>);
 
 type GenerationMode = "tags" | "yesno";
 
@@ -103,10 +101,7 @@ const NARRATIVE_TRIGGER_PATTERNS: Partial<Record<FactTag, RegExp[]>> = {
     /dialogue[-\s]?heavy/,
     /lots of reading/,
   ],
-  lore_optional_depth: [
-    /lore/,
-    /worldbuilding/,
-  ],
+  lore_optional_depth: [/lore/, /worldbuilding/],
 };
 
 function isNarrativeAllowedByCorpus(corpus: string, tag: FactTag) {
@@ -137,7 +132,13 @@ function normalizeBool(v: unknown, fallback = false) {
   return typeof v === "boolean" ? v : fallback;
 }
 
-const ALL_SOURCE_IDS: FactSourceId[] = ["steam", "igdb", "wikipedia", "pcgw", "reddit"];
+const ALL_SOURCE_IDS: FactSourceId[] = [
+  "steam",
+  "igdb",
+  "wikipedia",
+  "pcgw",
+  "reddit",
+];
 
 function normalizeSource(value: unknown): FactSourceId | null {
   if (typeof value !== "string") return null;
@@ -180,10 +181,7 @@ function normalizeConflicts(tags: string[]) {
   const filtered: string[] = [];
 
   for (const tag of tags) {
-    if (
-      tag === "low_pressure_play" &&
-      (hasHighInput || hasTimePressure)
-    ) {
+    if (tag === "low_pressure_play" && (hasHighInput || hasTimePressure)) {
       if (!conflictRejected.includes("low_pressure_play")) {
         conflictRejected.push("low_pressure_play");
       }
@@ -279,9 +277,9 @@ async function generateFactsViaLLM(args: {
   // Structured Outputs: json_schema で固定（スキーマに必ず一致）
   // Docs: response_format = { type:"json_schema", json_schema:{...} } :contentReference[oaicite:1]{index=1}
   const tagsSchema = {
-  name: "facts_output",
-  schema: {
-    type: "object",
+    name: "facts_output",
+    schema: {
+      type: "object",
       additionalProperties: false,
       required: ["tags", "evidence"],
       properties: {
@@ -424,9 +422,9 @@ high_stakes_failure:
   Mistakes cause major loss or irreversible setbacks.
   Keywords: permadeath, severe penalty, wipe, harsh punishment, ironman
 
-time_pressure:
-  Time limits or urgency force quick decisions.
-  Keywords: timer, countdown, deadline, race against time, urgency
+time_pressure
+  The game applies time limits, deadlines, timers, or urgency where delay is punished.
+  Keywords: time limit, timer, deadline, race against time, urgency, time pressure, countdown
 
 enemy_density_high:
   Many enemies are present simultaneously.
@@ -504,9 +502,10 @@ lore_optional_depth:
   Deep lore is optional but available.
   Keywords: lore-rich, codex, worldbuilding, logs
 
-low_pressure_play:
-  Low stress and forgiving pacing.
-  Keywords: chill, cozy, relaxing, casual-friendly
+low_pressure_play
+  Relaxed pace; mistakes are forgiving and the game does not demand constant attention.
+  Keywords: relaxing, chill, laid-back, cozy, casual pace, forgiving, no stress
+  Note: If high_input_pressure or time_pressure is true, low_pressure_play should be treated as false (conflict).
 
 session_based_play:
   Play is divided into short, repeatable sessions.
@@ -527,6 +526,22 @@ open_ended_goal:
 logical_puzzle_core:
   Core gameplay is logical problem solving.
   Keywords: logic puzzle, deduction, reasoning
+
+battle_loop_core:
+  Repeated combat encounters form the central gameplay loop, where players
+  regularly fight enemies as a primary means of progression or engagement.
+  Keywords: turn-based battles, random encounters, combat-focused loop,
+            frequent battles, core combat system
+
+
+power_scaling_over_time:
+  Player power increases steadily over time through leveling, stat growth,
+  equipment upgrades, or skill acquisition, making earlier challenges easier
+  and enabling progress to stronger enemies.
+  Keywords: level up, experience points, stat growth, character progression,
+            stronger over time, RPG growth, power scaling
+
+
 `.trim() + "\n";
 
   const user = [
@@ -570,7 +585,9 @@ logical_puzzle_core:
   ].join("\n");
 
   const fullSystem = isYesNo
-    ? [...baseSystemParts, yesNoModeInstructions, sourcePolicyLines].join("\n\n")
+    ? [...baseSystemParts, yesNoModeInstructions, sourcePolicyLines].join(
+        "\n\n"
+      )
     : baseSystemParts.join("\n\n");
 
   const body = {
@@ -669,7 +686,11 @@ logical_puzzle_core:
 
   if (isYesNo) {
     const factsSource = parsed?.facts;
-    if (!factsSource || typeof factsSource !== "object" || Array.isArray(factsSource)) {
+    if (
+      !factsSource ||
+      typeof factsSource !== "object" ||
+      Array.isArray(factsSource)
+    ) {
       throw new Error("Yes/No response missing facts object");
     }
 
@@ -747,8 +768,7 @@ logical_puzzle_core:
       yesnoRawFacts: factsSource,
       yesnoConfidence:
         typeof parsed?.confidence === "string" ? parsed.confidence : undefined,
-      yesnoNotes:
-        typeof parsed?.notes === "string" ? parsed.notes : undefined,
+      yesnoNotes: typeof parsed?.notes === "string" ? parsed.notes : undefined,
       yesnoTypeErrors: typeErrors,
       ynMissingKeys: missingKeys,
       tags: trueTags,
@@ -878,7 +898,10 @@ Deno.serve(async (req: Request) => {
     requestedSourcesNormalized.push("steam");
   }
 
-  const hasModeInBody = Object.prototype.hasOwnProperty.call(body ?? {}, "mode");
+  const hasModeInBody = Object.prototype.hasOwnProperty.call(
+    body ?? {},
+    "mode"
+  );
   const parsedBodyMode = parseModeValue(body?.mode);
   if (hasModeInBody && parsedBodyMode === null) {
     return badRequest("invalid_mode");
@@ -953,7 +976,8 @@ Deno.serve(async (req: Request) => {
   const corpusPieces: string[] = [];
   const effectiveSources = new Set<FactSourceId>();
 
-  let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null = null;
+  let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null =
+    null;
   if (requestedSourcesNormalized.includes("steam")) {
     const steam = await fetchSteamAppDetails(appId);
     if (!steam.ok) {
@@ -1101,15 +1125,15 @@ Deno.serve(async (req: Request) => {
       updatedAt: now,
       notes: "facts-only",
       ynRawPreview: mode === "yesno" ? sanitizedLLMRawTags : undefined,
-        narrativeForcedFalse,
-        ynMissingKeys:
-          mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
-            ? raw.ynMissingKeys
-            : undefined,
-        ynTypeErrors:
-          mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
-            ? raw.yesnoTypeErrors
-            : undefined,
+      narrativeForcedFalse,
+      ynMissingKeys:
+        mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
+          ? raw.ynMissingKeys
+          : undefined,
+      ynTypeErrors:
+        mode === "yesno" && Array.isArray(raw?.yesnoTypeErrors)
+          ? raw.yesnoTypeErrors
+          : undefined,
       ynMissingKeys:
         mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
           ? raw.ynMissingKeys
