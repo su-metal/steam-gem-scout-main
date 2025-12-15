@@ -525,7 +525,7 @@ export default function SearchPage() {
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
   const debugMode =
-    new URLSearchParams(location.search).get("debug") === "0";
+    new URLSearchParams(location.search).get("debug") === "1";
 
   // VIBE / Experience Focus の表示用ラベル
   const currentVibeLabel =
