@@ -1,8 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Terminal } from "lucide-react";
-import { EXPERIENCE_FOCUS_LIST } from "../../supabase/functions/search-games/experience-focus.ts";
-
 interface SearchResultDebugFocus {
   requestedId: string | null;
   normalizedId: string | null;
@@ -187,8 +185,6 @@ export const SearchResultCard = ({
     experienceFocusId,
     vibeAccentTextClass,
     debugMode = false,
-    debugFocus,
-    debugFocusMatch,
   }: SearchResultCardProps) => {
   const navigate = useNavigate();
   const appIdStr = String(appId);
@@ -249,88 +245,70 @@ export const SearchResultCard = ({
     );
   };
 
-  const focusDefinition =
-    experienceFocusId &&
-    EXPERIENCE_FOCUS_LIST.find((focus) => focus.id === experienceFocusId);
-  const canonicalFeatureLabelsV2 =
-    Array.isArray((analysisData as any)?.featureLabelsV2) &&
-    (analysisData as any).featureLabelsV2.length > 0
-      ? (analysisData as any).featureLabelsV2
-      : Array.isArray((gameData as any)?.analysis?.featureLabelsV2)
-        ? (gameData as any).analysis.featureLabelsV2
-        : [];
-  const gameLabelSet = new Set(canonicalFeatureLabelsV2);
-  const matchedFocusLabels = focusDefinition?.featureLabels
-    ? focusDefinition.featureLabels.filter((label) =>
-        gameLabelSet.has(label)
-      )
+  const formatFactList = (facts?: string[]): string =>
+    facts && facts.length > 0 ? facts.join(", ") : "none";
+
+  const matchedFacts = (factsMatch as any)?.matchedFacts as
+    | {
+        must?: string[];
+        mustMissing?: string[];
+        boost?: string[];
+        ban?: string[];
+      }
+    | undefined;
+  const derivedFocusInfo = (gameData as any)?.debugFocus ?? {};
+  const derivedAdded: string[] = Array.isArray(derivedFocusInfo.derivedAdded)
+    ? derivedFocusInfo.derivedAdded
     : [];
-  const focusScoreDisplay =
-    typeof experienceFocusScore === "number"
-      ? experienceFocusScore.toFixed(2)
-      : "n/a";
-  const focusRequestedId = debugFocus?.requestedId ?? null;
-  const normalizedFocusId = debugFocus?.normalizedId ?? experienceFocusId;
-  const focusFoundText =
-    debugFocus?.found === true
-      ? "yes"
-      : debugFocus?.found === false
-        ? "no"
-        : "n/a";
-  const focusLabelCount =
-    debugFocus?.focusLabelCount ?? focusDefinition?.featureLabels.length ?? 0;
-  const gameLabelCount =
-    debugFocusMatch?.gameLabelCount ?? canonicalFeatureLabelsV2.length;
-  const overlapCount =
-    debugFocusMatch?.overlap ?? matchedFocusLabels.length;
-  const matchedLabelsSource =
-    debugFocusMatch?.matchedLabels && debugFocusMatch.matchedLabels.length > 0
-      ? debugFocusMatch.matchedLabels
-      : matchedFocusLabels.slice(0, 6);
-  const matchedLabelsText =
-    matchedLabelsSource.length > 0
-      ? matchedLabelsSource.join(", ")
-      : "none";
-  const focusIdDisplay = normalizedFocusId ?? "none selected";
-  const requestedFocusDisplay = focusRequestedId ?? "none";
+  const derivedSatisfiedMust: string[] = Array.isArray(
+    derivedFocusInfo.derivedSatisfiedMust
+  )
+    ? derivedFocusInfo.derivedSatisfiedMust
+    : [];
+
   const debugOverlay =
-    debugMode ? (
-      <div className="pointer-events-none absolute top-2 left-2 z-50 max-w-[240px] rounded-md border border-white/20 bg-black/80 px-3 py-1 text-[10px] font-mono text-white shadow-lg">
+    debugMode && factsMatch ? (
+      <div className="pointer-events-none absolute top-2 left-2 z-50 max-w-[260px] rounded-md border border-white/20 bg-black/80 px-3 py-2 text-[10px] font-mono text-white shadow-lg">
         <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200">
           <span>DEBUG MODE</span>
         </div>
         <div className="flex flex-wrap gap-1 text-white/80">
           <span className="font-semibold text-white">Focus:</span>
-          <span>{focusIdDisplay}</span>
+          <span>{factsMatch.experienceFocusId ?? "none"}</span>
         </div>
         <div className="flex flex-wrap gap-1 text-white/80">
-          <span className="font-semibold text-white">Requested:</span>
-          <span>{requestedFocusDisplay}</span>
+          <span className="font-semibold text-white">Band:</span>
+          <span>{factsMatch.selectedFocusBand ?? "off"}</span>
         </div>
         <div className="flex flex-wrap gap-1 text-white/80">
-          <span className="font-semibold text-white">Score:</span>
-          <span className="text-emerald-200">{focusScoreDisplay}</span>
+          <span className="font-semibold text-white">Facts:</span>
+          <span>{factsMatch.factsCount ?? "n/a"}</span>
         </div>
-        <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="font-semibold text-white/90">Matched:</span>
-          <span className="text-cyan-300">{matchedLabelsText}</span>
+        <div className="mt-1 text-white/80">
+          <div className="text-[9px] text-slate-300">must: {formatFactList(matchedFacts?.must)}</div>
+          <div className="text-[9px] text-slate-300">
+            mustMissing: {formatFactList(matchedFacts?.mustMissing)}
+          </div>
+          <div className="text-[9px] text-slate-300">boost: {formatFactList(matchedFacts?.boost)}</div>
+          <div className="text-[9px] text-slate-300">ban: {formatFactList(matchedFacts?.ban)}</div>
         </div>
-        <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="font-semibold text-white/90">Found:</span>
-          <span>{focusFoundText}</span>
-        </div>
-        <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="font-semibold text-white/90">Focus labels:</span>
-          <span>{focusLabelCount}</span>
-        </div>
-        <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="font-semibold text-white/90">Game labels:</span>
-          <span>{gameLabelCount}</span>
-        </div>
-        <div className="flex flex-wrap gap-1 text-white/70">
-          <span className="font-semibold text-white/90">Overlap:</span>
-          <span>{overlapCount}</span>
-        </div>
+        {factsMatch.allFocusBands && (
+          <pre className="mt-2 max-h-28 w-full overflow-auto rounded border border-white/10 bg-black/60 p-2 text-[9px] leading-tight text-slate-200">
+            {Object.entries(factsMatch.allFocusBands)
+              .map(([key, band]) => `${key}: ${band}`)
+              .join("\n")}
+          </pre>
+        )}
+        {derivedAdded.length > 0 && (
+          <div className="mt-1 text-[9px] text-slate-300">
+            derivedAdded: {formatFactList(derivedAdded)}
+          </div>
+        )}
+        {derivedSatisfiedMust.length > 0 && (
+          <div className="text-[9px] text-slate-300">
+            derivedSatisfiedMust: {formatFactList(derivedSatisfiedMust)}
+          </div>
+        )}
       </div>
     ) : null;
 
