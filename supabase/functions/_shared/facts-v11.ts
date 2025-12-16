@@ -89,12 +89,14 @@ export function computeBand(
   matchedMust: FactTag[];
   matchedBoost: FactTag[];
   matchedBan: FactTag[];
+  missingMust: FactTag[];
 } {
   const factSet = facts instanceof Set ? facts : new Set(facts);
 
   const matchedMust = rule.must.filter((tag) => factSet.has(tag));
   const matchedBoost = rule.boost.filter((tag) => factSet.has(tag));
   const matchedBan = rule.ban.filter((tag) => factSet.has(tag));
+  const missingMust = rule.must.filter((tag) => !factSet.has(tag));
 
   if (matchedBan.length > 0) {
     return {
@@ -102,6 +104,7 @@ export function computeBand(
       matchedMust,
       matchedBoost,
       matchedBan,
+      missingMust,
     };
   }
 
@@ -114,15 +117,27 @@ export function computeBand(
     const onBoostNeed = mustNeed >= 2 ? 1 : 2;
 
     if (mustHits === mustNeed && boostHits >= onBoostNeed) {
-      return { band: "on", matchedMust, matchedBoost, matchedBan };
+      return { band: "on", matchedMust, matchedBoost, matchedBan, missingMust };
     }
     if (mustHits === mustNeed && boostHits >= 1) {
-      return { band: "near", matchedMust, matchedBoost, matchedBan };
+      return { band: "near", matchedMust, matchedBoost, matchedBan, missingMust };
     }
     if (boostHits >= 2) {
-      return { band: "discovery", matchedMust, matchedBoost, matchedBan };
+      return {
+        band: "discovery",
+        matchedMust,
+        matchedBoost,
+        matchedBan,
+        missingMust,
+      };
     }
-    return { band: "off", matchedMust, matchedBoost, matchedBan };
+    return {
+      band: "off",
+      matchedMust,
+      matchedBoost,
+      matchedBan,
+      missingMust,
+    };
   }
 
   if (boostHits >= 3) {
@@ -131,6 +146,7 @@ export function computeBand(
       matchedMust,
       matchedBoost,
       matchedBan,
+      missingMust,
     };
   }
   if (boostHits >= 2) {
@@ -139,6 +155,7 @@ export function computeBand(
       matchedMust,
       matchedBoost,
       matchedBan,
+      missingMust,
     };
   }
   if (boostHits >= 1) {
@@ -147,6 +164,7 @@ export function computeBand(
       matchedMust,
       matchedBoost,
       matchedBan,
+      missingMust,
     };
   }
 
@@ -155,6 +173,7 @@ export function computeBand(
     matchedMust,
     matchedBoost,
     matchedBan,
+    missingMust,
   };
 }
 
@@ -211,6 +230,7 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
       "high_input_pressure",
       "stealth_core",
       "high_stakes_failure",
+      "battle_loop_core",
     ],
     ban: ["reading_heavy_interaction"],
   },

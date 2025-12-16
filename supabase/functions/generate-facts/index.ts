@@ -118,11 +118,35 @@ const NARRATIVE_TRIGGER_PATTERNS: Partial<Record<FactTag, RegExp[]>> = {
   lore_optional_depth: [/lore/, /worldbuilding/],
 };
 
-function isNarrativeAllowedByCorpus(corpus: string, tag: FactTag) {
+const NARRATIVE_STORY_PHRASE_PATTERNS: RegExp[] = [
+  /\benjoy(?: the)? story\b/i,
+  /\btimeless story\b/i,
+  /\bstory told\b/i,
+  /\bstory of\b/i,
+];
+const STORY_WORD_PATTERN = /\bstory\b/i;
+
+function isNarrativeAllowedByCorpus(
+  corpus: string,
+  tag: FactTag,
+  yesnoFacts?: Record<FactTag, boolean>
+) {
   const patterns = NARRATIVE_TRIGGER_PATTERNS[tag];
-  if (!patterns?.length) return true;
   const normalized = corpus.toLowerCase();
-  return patterns.some((pattern) => pattern.test(normalized));
+  if (!patterns?.length) return true;
+  if (patterns.some((pattern) => pattern.test(normalized))) return true;
+  if (tag !== "narrative_driven_progression") return false;
+  const storyPhraseHit = NARRATIVE_STORY_PHRASE_PATTERNS.some((pattern) =>
+    pattern.test(normalized)
+  );
+  const storyWordHit = STORY_WORD_PATTERN.test(normalized);
+  if (!storyWordHit) return false;
+  const hasGenreSignal = /genres:\s*.*\b(rpg|adventure)\b/i.test(corpus);
+  const narrativeTrue = !!yesnoFacts?.narrative_driven_progression;
+  const allowStoryWord =
+    storyWordHit &&
+    (storyPhraseHit || hasGenreSignal || (narrativeTrue && storyWordHit));
+  return allowStoryWord;
 }
 
 function json(status: number, body: unknown) {
@@ -188,17 +212,72 @@ function normalizeEvidenceMap(
   return normalized;
 }
 
-function normalizeConflicts(tags: string[]) {
+const NARRATIVE_STRONG_PATTERNS: RegExp[] = [
+  /story[-\s]?driven/i,
+  /plot/i,
+  /narrative/i,
+  /story[-\s]?rich/i,
+  /campaign story/i,
+  /character[-\s]?driven/i,
+  /dialogue[-\s]?heavy/i,
+  /visual novel/i,
+  /(?:^|\W)story\s*:/i,
+  /\benjoy(?: the)? story\b/i,
+  /\btimeless story\b/i,
+  /\bstory told\b/i,
+  /\bstory of\b/i,
+];
+const NARRATIVE_WEAK_PATTERNS: RegExp[] = [
+  /adventure/i,
+  /journey/i,
+  /chapter/i,
+  /episode/i,
+  /reimagining/i,
+  /reimagination/i,
+  /reborn/i,
+  /legendary/i,
+  /classic/i,
+  /timeless/i,
+];
+
+const TIME_PRESSURE_HARD_PATTERN = /\b(time limit|timed|race against time|countdown|before time runs out|within \d+\s*minutes?|beat the clock)\b/i;
+const ATB_PATTERN = /\b(active time battle|atb|time gauge|battle gauge|gauge fills|active battle)\b/i;
+
+function findHits(patterns: RegExp[], text: string, cap = 6) {
+  const hits: string[] = [];
+  for (const re of patterns) {
+    if (re.test(text)) {
+      hits.push(re.source);
+      if (hits.length >= cap) break;
+    }
+  }
+  return hits;
+}
+
+function normalizeConflicts(tags: string[], corpus: string) {
+  const normalizedCorpus = corpus.toLowerCase();
   const hasHighInput = tags.includes("high_input_pressure");
   const hasTimePressure = tags.includes("time_pressure");
-  const conflictRejected: FactTag[] = [];
+  const hasPauseFriendly = tags.includes("pause_friendly");
+  const hasExplicitTimeEvidence = TIME_PRESSURE_HARD_PATTERN.test(
+    normalizedCorpus
+  );
+  const hasAtbSignal = ATB_PATTERN.test(normalizedCorpus);
+  const conflictRejected = new Set<FactTag>();
   const filtered: string[] = [];
 
   for (const tag of tags) {
     if (tag === "low_pressure_play" && (hasHighInput || hasTimePressure)) {
-      if (!conflictRejected.includes("low_pressure_play")) {
-        conflictRejected.push("low_pressure_play");
-      }
+      conflictRejected.add("low_pressure_play");
+      continue;
+    }
+    if (
+      tag === "time_pressure" &&
+      hasPauseFriendly &&
+      hasAtbSignal &&
+      !hasExplicitTimeEvidence
+    ) {
+      conflictRejected.add("time_pressure");
       continue;
     }
     filtered.push(tag);
@@ -206,7 +285,7 @@ function normalizeConflicts(tags: string[]) {
 
   return {
     tags: filtered,
-    conflictRejected,
+    conflictRejected: Array.from(conflictRejected),
   };
 }
 
@@ -842,7 +921,7 @@ power_scaling_over_time:
       }
     }
 
-    const missingKeysArray = Array.from(missingKeys);
+    const missingKeysArray = Array.from(missingKeys).filter(isFactTag);
     const trueTags = FACT_TAG_LIST.filter((tag) => normalizedFacts[tag]);
     const ynOmittedKeyCountApprox =
       stringListTrueSet !== null
@@ -1134,6 +1213,13 @@ Deno.serve(async (req: Request) => {
     narrativeTriggerHitCount,
     narrativeTriggerHits,
   });
+  const narrativeStrongHits = findHits(NARRATIVE_STRONG_PATTERNS, corpus);
+  const narrativeWeakHits = findHits(NARRATIVE_WEAK_PATTERNS, corpus);
+  const narrativeStrongHitCount = narrativeStrongHits.length;
+  const narrativeWeakHitCount = narrativeWeakHits.length;
+  let narrativeDecision: "strong" | "weak_combo" | "none" = "none";
+  let narrativeDecisionHasRpgSignal = false;
+  let narrativeCorpusOverride = false;
   const tagsMissingAllowedSources: FactTag[] = FACT_TAG_LIST.filter((tag) => {
     const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
     return !allowed.some((src) => effectiveSources.has(src));
@@ -1153,6 +1239,24 @@ Deno.serve(async (req: Request) => {
       details: (e as any)?.message ?? String(e),
     });
   }
+  if (mode === "yesno" && raw?.yesnoFacts) {
+    const yesnoFacts = raw.yesnoFacts;
+    const hasRpgSignal =
+      yesnoFacts.battle_loop_core === true ||
+      yesnoFacts.power_scaling_over_time === true ||
+      /genres:\s*.*\bRPG\b/i.test(corpus) ||
+      /\bRPG\b/i.test(corpus);
+    narrativeDecisionHasRpgSignal = hasRpgSignal;
+    const weakOk = narrativeWeakHitCount >= 2 && hasRpgSignal;
+    const strong = narrativeStrongHitCount >= 1;
+    narrativeDecision = strong ? "strong" : weakOk ? "weak_combo" : "none";
+    narrativeCorpusOverride = strong || weakOk;
+    if (narrativeCorpusOverride) {
+      yesnoFacts.narrative_driven_progression = true;
+    }
+    const updatedTags = FACT_TAG_LIST.filter((tag) => yesnoFacts[tag]);
+    raw.tags = updatedTags;
+  }
   const sanitizedLLMRawTags = filterNeverPersistTags(raw?.tags);
   console.log("[generate-facts] llm raw", {
     model: raw?.model,
@@ -1161,6 +1265,13 @@ Deno.serve(async (req: Request) => {
     rawTagsPreview: sanitizedLLMRawTags.slice(0, 10),
     ynInputShape: raw?.ynInputShape,
     ynOmittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
+  });
+
+  console.log("[generate-facts] narrative decision", {
+    strongHitCount: narrativeStrongHitCount,
+    weakHitCount: narrativeWeakHitCount,
+    hasRpgSignal: narrativeDecisionHasRpgSignal,
+    decision: narrativeDecision,
   });
 
   if (mode === "yesno") {
@@ -1189,15 +1300,19 @@ Deno.serve(async (req: Request) => {
   if (mode === "yesno") {
     guardTags = guardTags.filter((tag) => {
       const factTag = tag as FactTag;
+      if (factTag === "narrative_driven_progression" && narrativeCorpusOverride) {
+        return true;
+      }
       if (!NARRATIVE_GUARD_TAGS.has(factTag)) return true;
-      if (isNarrativeAllowedByCorpus(corpus, factTag)) return true;
+      if (isNarrativeAllowedByCorpus(corpus, factTag, raw?.yesnoFacts))
+        return true;
       narrativeForcedFalse.push(factTag);
       return false;
     });
   }
 
   const conflictNormalizationBeforeCount = guardTags.length;
-  const conflictResult = normalizeConflicts(guardTags);
+  const conflictResult = normalizeConflicts(guardTags, corpus);
   const conflictRejected = conflictResult.conflictRejected;
   if (conflictRejected.length > 0) {
     console.log("[generate-facts] conflict filtered", {
@@ -1276,6 +1391,12 @@ Deno.serve(async (req: Request) => {
       steamCorpusPreview,
       narrativeTriggerHitCount,
       narrativeTriggerHits: debug ? narrativeTriggerHits : undefined,
+      narrativeStrongHitCount,
+      narrativeWeakHitCount,
+      narrativeStrongHitsPreview: narrativeStrongHits,
+      narrativeWeakHitsPreview: narrativeWeakHits,
+      narrativeDecision,
+      narrativeDecisionHasRpgSignal,
       ynInputShape:
         mode === "yesno" && typeof raw?.ynInputShape === "string"
           ? raw.ynInputShape
@@ -1356,6 +1477,10 @@ Deno.serve(async (req: Request) => {
         steamCorpusPreview,
         narrativeTriggerHitCount,
         narrativeTriggerHits,
+        narrativeStrongHitCount,
+        narrativeWeakHitCount,
+        narrativeDecision,
+        narrativeDecisionHasRpgSignal,
         ynMissingKeys:
           mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
             ? raw?.ynMissingKeys

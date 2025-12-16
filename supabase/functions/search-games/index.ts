@@ -1029,6 +1029,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             selectedFocusBand: res.band,
             matchedFacts: {
               must: res.matchedMust,
+              ...(debugMode ? { mustMissing: res.missingMust } : {}),
               boost: res.matchedBoost,
               ban: res.matchedBan,
             },
