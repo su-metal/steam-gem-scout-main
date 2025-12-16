@@ -250,11 +250,19 @@ function stripHtml(input: string) {
     .trim();
 }
 
-function buildCorpusFromSteam(app: any) {
+type SteamCorpusInfo = {
+  corpus: string;
+  fieldsUsed: string[];
+  charCounts: Record<string, number>;
+  totalChars: number;
+  preview: Record<string, string>;
+};
+
+function buildCorpusFromSteam(app: any): SteamCorpusInfo {
   const short =
-    typeof app?.short_description === "string" ? app.short_description : "";
+    typeof app?.short_description === "string" ? stripHtml(app.short_description) : "";
   const about =
-    typeof app?.about_the_game === "string" ? app.about_the_game : "";
+    typeof app?.about_the_game === "string" ? stripHtml(app.about_the_game) : "";
   const genres = Array.isArray(app?.genres)
     ? app.genres.map((g: any) => g?.description).filter(Boolean)
     : [];
@@ -262,15 +270,41 @@ function buildCorpusFromSteam(app: any) {
     ? app.categories.map((c: any) => c?.description).filter(Boolean)
     : [];
 
-  const corpus = [
-    `steam.short:\n${stripHtml(short)}`,
-    `steam.about:\n${stripHtml(about)}`,
+  const corpusParts = [
+    `steam.short:\n${short}`,
+    `steam.about:\n${about}`,
     `steam.genres:\n${genres.join(", ")}`,
     `steam.categories:\n${categories.join(", ")}`,
-  ].join("\n\n");
+  ];
 
+  const fieldEntries: [string, string][] = [];
+  if (short.length > 0) fieldEntries.push(["short_description", short]);
+  if (about.length > 0) fieldEntries.push(["about_the_game", about]);
+  const genreText = genres.join(", ");
+  if (genreText.length > 0) fieldEntries.push(["genres", genreText]);
+  const categoryText = categories.join(", ");
+  if (categoryText.length > 0) fieldEntries.push(["categories", categoryText]);
+
+  const corpus = corpusParts.join("\n\n");
   const MAX_CHARS = 16000;
-  return corpus.length > MAX_CHARS ? corpus.slice(0, MAX_CHARS) : corpus;
+  const finalCorpus = corpus.length > MAX_CHARS ? corpus.slice(0, MAX_CHARS) : corpus;
+
+  const charCounts: Record<string, number> = {};
+  const preview: Record<string, string> = {};
+  let totalChars = 0;
+  for (const [key, value] of fieldEntries) {
+    charCounts[key] = value.length;
+    preview[key] = value.slice(0, 300);
+    totalChars += value.length;
+  }
+
+  return {
+    corpus: finalCorpus,
+    fieldsUsed: fieldEntries.map(([key]) => key),
+    charCounts,
+    totalChars,
+    preview,
+  };
 }
 
 async function generateFactsViaLLM(args: {
@@ -549,11 +583,8 @@ battle_loop_core:
 
 
 power_scaling_over_time:
-  Player power increases steadily over time through leveling, stat growth,
-  equipment upgrades, or skill acquisition, making earlier challenges easier
-  and enabling progress to stronger enemies.
-  Keywords: level up, experience points, stat growth, character progression,
-            stronger over time, RPG growth, power scaling
+  Player power increases meaningfully over time via leveling/XP, stat growth, skill acquisition, perks/skill trees, or gear/equipment upgrades (i.e., you become stronger as you progress).
+  Keywords: level up, leveling, XP, experience points, stat growth, skill tree, perk, progression system, gear upgrade, equipment upgrade, stronger over time, character growth
 
 
 `.trim() + "\n";
@@ -1031,6 +1062,10 @@ Deno.serve(async (req: Request) => {
 
   const corpusPieces: string[] = [];
   const effectiveSources = new Set<FactSourceId>();
+  let steamCorpusFieldsUsed: string[] = [];
+  let steamCorpusCharCounts: Record<string, number> = {};
+  let steamCorpusTotalChars = 0;
+  let steamCorpusPreview: Record<string, string> = {};
 
   let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null =
     null;
@@ -1046,7 +1081,12 @@ Deno.serve(async (req: Request) => {
     }
     steamAppDetails = steam;
     effectiveSources.add("steam");
-    corpusPieces.push(buildCorpusFromSteam(steam.data));
+    const steamCorpusInfo = buildCorpusFromSteam(steam.data);
+    steamCorpusFieldsUsed = steamCorpusInfo.fieldsUsed;
+    steamCorpusCharCounts = steamCorpusInfo.charCounts;
+    steamCorpusTotalChars = steamCorpusInfo.totalChars;
+    steamCorpusPreview = steamCorpusInfo.preview;
+    corpusPieces.push(steamCorpusInfo.corpus);
   } else {
     return json(400, {
       error: "steam source is required for now",
@@ -1054,6 +1094,32 @@ Deno.serve(async (req: Request) => {
   }
 
   const corpus = corpusPieces.join("\n\n");
+  const narrativeTriggerHitSet = new Set<string>();
+  const narrativeTriggerHits: string[] = [];
+  for (const [tag, patterns] of Object.entries(NARRATIVE_TRIGGER_PATTERNS)) {
+    for (const pattern of patterns ?? []) {
+      if (pattern.test(corpus)) {
+        const key = `${tag}:${pattern.source}`;
+        if (!narrativeTriggerHitSet.has(key)) {
+          narrativeTriggerHitSet.add(key);
+          if (narrativeTriggerHits.length < 10) {
+            narrativeTriggerHits.push(key);
+          }
+        }
+      }
+    }
+  }
+  const narrativeTriggerHitCount = narrativeTriggerHitSet.size;
+  console.log("[generate-facts] steam corpus", {
+    fieldsUsed: steamCorpusFieldsUsed,
+    charCounts: steamCorpusCharCounts,
+    totalChars: steamCorpusTotalChars,
+    preview: debug ? steamCorpusPreview : undefined,
+  });
+  console.log("[generate-facts] narrative triggers", {
+    narrativeTriggerHitCount,
+    narrativeTriggerHits,
+  });
   const tagsMissingAllowedSources: FactTag[] = FACT_TAG_LIST.filter((tag) => {
     const allowed = FACT_TAG_SOURCES[tag] ?? ["steam"];
     return !allowed.some((src) => effectiveSources.has(src));
@@ -1189,6 +1255,12 @@ Deno.serve(async (req: Request) => {
       notes: "facts-only",
       ynRawPreview: mode === "yesno" ? sanitizedLLMRawTags : undefined,
       narrativeForcedFalse,
+      steamCorpusFieldsUsed,
+      steamCorpusCharCounts,
+      steamCorpusTotalChars,
+      steamCorpusPreview: debug ? steamCorpusPreview : undefined,
+      narrativeTriggerHitCount,
+      narrativeTriggerHits: debug ? narrativeTriggerHits : undefined,
       ynInputShape:
         mode === "yesno" && typeof raw?.ynInputShape === "string"
           ? raw.ynInputShape
@@ -1263,6 +1335,12 @@ Deno.serve(async (req: Request) => {
         missingAllowedSourceTags: tagsMissingAllowedSources,
         narrativeForcedFalse,
         conflictRejected,
+        steamCorpusFieldsUsed,
+        steamCorpusCharCounts,
+        steamCorpusTotalChars,
+        steamCorpusPreview,
+        narrativeTriggerHitCount,
+        narrativeTriggerHits,
         ynMissingKeys:
           mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
             ? raw?.ynMissingKeys

@@ -217,16 +217,21 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "story-journey-and-growth": {
     id: "story-journey-and-growth",
     vibe: "story",
-    // 物語に沿って進み、戦闘を通じて成長する
-    must: ["narrative_driven_progression", "battle_loop_core"],
-
-    // 一本道でも探索があると体験が豊かになる
-    boost: ["free_movement_exploration"],
-
-    // ban は置かない（断定を避ける）
-    ban: [],
+    must: ["battle_loop_core", "power_scaling_over_time"],
+    boost: [
+      "narrative_driven_progression",
+      "free_movement_exploration",
+      "map_reveal_progression",
+      "resource_management",
+      "planning_required",
+    ],
+    ban: [
+      "automation_core",
+      "systems_interaction_depth",
+      "optimization_required",
+      "time_pressure",
+    ],
   },
-
   "story-reading-centered-story": {
     id: "story-reading-centered-story",
     vibe: "story",
