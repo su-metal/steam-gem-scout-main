@@ -1,19 +1,10 @@
 import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Terminal } from "lucide-react";
-interface SearchResultDebugFocus {
-  requestedId: string | null;
-  normalizedId: string | null;
-  found: boolean;
-  focusLabelCount: number;
-}
-
-interface SearchResultDebugFocusMatch {
-  gameLabelCount: number;
-  overlap: number;
-  matchedLabels: string[];
-}
-
+import {
+  EXPERIENCE_FOCUS_LIST,
+  type ExperienceFocus,
+} from "../../supabase/functions/search-games/experience-focus.ts";
 // Returns the tags that should be displayed on the card
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
   const baseTags =
@@ -34,6 +25,8 @@ interface FactsMatchPayload {
   selectedFocusBand?: MatchBand;
   factsCount?: number;
   allFocusBands?: Record<string, MatchBand>;
+  primaryFocus?: string | null;
+  alsoFits?: string[];
 }
 
 const FOCUS_BAND_BADGE_BASE =
@@ -53,19 +46,24 @@ const FOCUS_BAND_BADGE_CONFIG: Record<MatchBand, { label: string; tone: "high" |
 };
 
 const FocusBandBadge = ({ band }: { band: MatchBand }) => {
-  if (band === "off") return null;
+  if (!band || band === "off") return null;
   const { label, tone } = FOCUS_BAND_BADGE_CONFIG[band];
   return (
-    <div className="absolute top-0 right-0 p-3">
-      <div className={`${FOCUS_BAND_BADGE_BASE} ${FOCUS_BAND_BADGE_TONE_CLASSES[tone]}`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-        <span className="text-xs font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
-          {label}
-        </span>
-      </div>
+    <div className={`${FOCUS_BAND_BADGE_BASE} ${FOCUS_BAND_BADGE_TONE_CLASSES[tone]}`}>
+      <span className="w-1.5 h-1.5 rounded-full bg-current" />
+      <span className="text-xs font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
+        {label}
+      </span>
     </div>
   );
 };
+
+const FOCUS_META_MAP = new Map<string, ExperienceFocus & { order: number }>();
+EXPERIENCE_FOCUS_LIST.forEach((focus, index) => {
+  FOCUS_META_MAP.set(focus.id, { ...focus, order: index });
+});
+
+const getFocusMeta = (id: string) => FOCUS_META_MAP.get(id) ?? null;
 
 interface SearchResultCardProps {
   title: string;
@@ -95,8 +93,6 @@ interface SearchResultCardProps {
   experienceFocusId?: string | null;
   vibeAccentTextClass?: string;
   debugMode?: boolean;
-  debugFocus?: SearchResultDebugFocus;
-  debugFocusMatch?: SearchResultDebugFocusMatch;
 }
 
 // スコア軸のキー
@@ -181,7 +177,6 @@ export const SearchResultCard = ({
     onSelect,
     vibeLabel,
     experienceFocusLabel,
-    experienceFocusScore,
     experienceFocusId,
     vibeAccentTextClass,
     debugMode = false,
@@ -311,6 +306,62 @@ export const SearchResultCard = ({
         )}
       </div>
     ) : null;
+
+  const focusLabelForId = (id?: string) => {
+    if (!id) return "Unknown";
+    const meta = getFocusMeta(id);
+    return meta?.label ?? id;
+  };
+
+  const primaryFocusId = factsMatch?.primaryFocus ?? null;
+  const alsoFitsIds: string[] =
+    (factsMatch as any)?.alsoFits?.filter((id: unknown) => typeof id === "string") ??
+    [];
+
+  const renderFocusSummary = () => {
+    if (!primaryFocusId) return null;
+    return (
+      <div className="mt-3 space-y-1 rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200">
+        <div>
+          <span className="font-semibold text-white">Primary:</span>{" "}
+          {focusLabelForId(primaryFocusId)}
+        </div>
+        {alsoFitsIds.length > 0 && (
+          <div>
+            <span className="font-semibold text-white">Also fits:</span>{" "}
+            {focusLabelForId(alsoFitsIds[0])}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderStatusText = () => {
+    if (debugMode || !primaryFocusId) return null;
+    return (
+      <div className="text-[11px] text-slate-300 leading-tight text-right max-w-[160px]">
+        <span className="font-semibold text-slate-200">
+          {focusLabelForId(primaryFocusId)}
+        </span>
+        {alsoFitsIds.length > 0 && (
+          <>
+            <span className="opacity-60"> · also fits </span>
+            <span className="opacity-80">{focusLabelForId(alsoFitsIds[0])}</span>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderStatusArea = () => {
+    if (!factsMatch) return null;
+    return (
+      <div className="absolute top-3 right-3 flex flex-col items-end gap-1 text-right">
+        <FocusBandBadge band={focusBand} />
+        {renderStatusText()}
+      </div>
+    );
+  };
 
   // --- 統計ベースのサマリ生成 ---
   const hasAISummary =
@@ -653,8 +704,7 @@ export const SearchResultCard = ({
               {/* Flash overlay */}
               <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
 
-              {/* Experience Focus band badge (top-right) */}
-              <FocusBandBadge band={focusBand} />
+              {renderStatusArea()}
 
               {/* Discount Badge (bottom-right) */}
               {hasDiscount && (
@@ -729,8 +779,9 @@ export const SearchResultCard = ({
                     >
                       {tag.toUpperCase()}
                     </span>
-                  ))}
+                  ))} 
                 </div>
+                {renderFocusSummary()}
 
                 {/* Bottom: price + CTA */}
                 <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
@@ -750,11 +801,11 @@ export const SearchResultCard = ({
                     </div>
                   </div>
 
-                <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
-                  <ArrowUpRight size={16} />
-                </span>
-              </div>
-              {renderFactsDebugInfo()}
+                  <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                    <ArrowUpRight size={16} />
+                  </span>
+                </div>
+                {renderFactsDebugInfo()}
             </div>
           </div>
         </div>
@@ -849,8 +900,7 @@ export const SearchResultCard = ({
 
             {/* Flash overlay */}
             <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
-            {/* Experience Focus band badge */}
-            <FocusBandBadge band={focusBand} />
+            {renderStatusArea()}
 
             {/* Discount Badge (bottom-right) */}
             {hasDiscount && (
@@ -924,6 +974,7 @@ export const SearchResultCard = ({
                   </span>
                 ))}
               </div>
+              {renderFocusSummary()}
               {/* Bottom: price + CTA */}
               <div className="mt-auto flex items-center justify-between border-t border-white/20 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
                 <div className="flex flex-col">

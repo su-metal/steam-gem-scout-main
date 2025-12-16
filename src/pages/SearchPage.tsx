@@ -525,7 +525,7 @@ export default function SearchPage() {
   const location = useLocation() as Location<SearchPageNavigationState>;
   const navigationState = location.state ?? null;
   const debugMode =
-    new URLSearchParams(location.search).get("debug") === "1";
+    new URLSearchParams(location.search).get("debug") === "0";
 
   // VIBE / Experience Focus の表示用ラベル
   const currentVibeLabel =
@@ -1322,21 +1322,19 @@ export default function SearchPage() {
                     price={game.price}
                     averagePlaytime={game.averagePlaytime}
                     gameData={game}
-                    analysisData={game.analysis}
-                    screenshots={game.screenshots}
-                    variant={cardVariant}
-                    vibeLabel={currentVibeLabel}
-                    experienceFocusLabel={currentExperienceFocusLabel}
-                    vibeAccentTextClass={vibeHeaderTextClass}
-                    experienceFocusId={experienceFocusParam}
-                    experienceFocusScore={
-                      typeof game.experienceFocusScore === "number"
-                        ? game.experienceFocusScore
-                        : null
-                    }
+                  analysisData={game.analysis}
+                  screenshots={game.screenshots}
+                  variant={cardVariant}
+                  vibeLabel={currentVibeLabel}
+                  experienceFocusLabel={currentExperienceFocusLabel}
+                  vibeAccentTextClass={vibeHeaderTextClass}
+                  experienceFocusId={experienceFocusParam}
+                  experienceFocusScore={
+                    typeof game.experienceFocusScore === "number"
+                      ? game.experienceFocusScore
+                      : null
+                  }
                     debugMode={debugMode}
-                    debugFocus={game.debugFocus}
-                    debugFocusMatch={game.debugFocusMatch}
                     onSelect={handleCardSelect}
                   />
                 </motion.div>

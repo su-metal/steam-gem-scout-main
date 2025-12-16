@@ -1024,9 +1024,47 @@ Deno.serve(async (req: Request): Promise<Response> => {
           derivedSatisfiedMust = res.matchedMust.filter(
             (tag) => !baseFactSet.has(tag)
           );
-          factsMatch = {
+
+          const focusDefs = EXPERIENCE_FOCUS_LIST.filter(
+            (f) => f.vibe === rule.vibe
+          );
+          const focusBands: Record<string, MatchBand> = {};
+          const focusEntries: {
+            id: string;
+            band: MatchBand;
+            order: number;
+          }[] = [];
+
+          for (let i = 0; i < focusDefs.length; i += 1) {
+            const f = focusDefs[i];
+            const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
+            if (!r) continue;
+            const band = computeBand(derivedFacts, r).band;
+            focusBands[f.id] = band;
+            focusEntries.push({ id: f.id, band, order: i });
+          }
+
+          const sortedFocusEntries = focusEntries
+            .filter((entry) => entry.band && entry.band !== "off")
+            .sort((a, b) => {
+              const priorityA =
+                MATCH_BAND_ORDER[a.band as MatchBand] ?? 0;
+              const priorityB =
+                MATCH_BAND_ORDER[b.band as MatchBand] ?? 0;
+              if (priorityA !== priorityB) {
+                return priorityB - priorityA;
+              }
+              return a.order - b.order;
+            });
+
+          const primaryFocusId = sortedFocusEntries[0]?.id ?? null;
+          const alsoFits = sortedFocusEntries.slice(1, 3).map((entry) => entry.id);
+
+          const factsMatchBase = {
             experienceFocusId: normalizedExperienceFocusId,
             selectedFocusBand: res.band,
+            primaryFocus: primaryFocusId,
+            alsoFits,
             matchedFacts: {
               must: res.matchedMust,
               ...(debugMode ? { mustMissing: res.missingMust } : {}),
@@ -1036,18 +1074,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
             ...(debugMode ? { factsCount: facts.length } : {}),
           };
 
-          if (debugMode) {
-            const focusDefs = EXPERIENCE_FOCUS_LIST.filter(
-              (f) => f.vibe === rule.vibe
-            );
-            const allFocusBands: Record<string, MatchBand> = {};
-            for (const f of focusDefs) {
-              const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
-              if (!r) continue;
-              allFocusBands[f.id] = computeBand(derivedFacts, r).band;
-            }
-            (factsMatch as any).allFocusBands = allFocusBands;
-          }
+          factsMatch = debugMode
+            ? {
+                ...factsMatchBase,
+                allFocusBands: focusBands,
+              }
+            : factsMatchBase;
         }
       }
 
