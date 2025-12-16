@@ -98,31 +98,14 @@ export function computeBand(
   const matchedBan = rule.ban.filter((tag) => factSet.has(tag));
   const missingMust = rule.must.filter((tag) => !factSet.has(tag));
 
-  if (matchedBan.length > 0) {
-    return {
-      band: "off",
-      matchedMust,
-      matchedBoost,
-      matchedBan,
-      missingMust,
-    };
-  }
-
-  const mustHits = matchedMust.length;
   const mustNeed = rule.must.length;
+  const mustHits = matchedMust.length;
   const boostHits = matchedBoost.length;
+  const banHits = matchedBan.length;
+  const mustOk = mustNeed === mustHits;
 
-  if (mustNeed > 0) {
-    // mustが重いFocus（must>=2）は、must全達成時点で十分強いのでONを緩める
-    const onBoostNeed = mustNeed >= 2 ? 1 : 2;
-
-    if (mustHits === mustNeed && boostHits >= onBoostNeed) {
-      return { band: "on", matchedMust, matchedBoost, matchedBan, missingMust };
-    }
-    if (mustHits === mustNeed && boostHits >= 1) {
-      return { band: "near", matchedMust, matchedBoost, matchedBan, missingMust };
-    }
-    if (boostHits >= 2) {
+  if (!mustOk) {
+    if (boostHits > 0) {
       return {
         band: "discovery",
         matchedMust,
@@ -140,16 +123,7 @@ export function computeBand(
     };
   }
 
-  if (boostHits >= 3) {
-    return {
-      band: "on",
-      matchedMust,
-      matchedBoost,
-      matchedBan,
-      missingMust,
-    };
-  }
-  if (boostHits >= 2) {
+  if (banHits > 0) {
     return {
       band: "near",
       matchedMust,
@@ -158,9 +132,10 @@ export function computeBand(
       missingMust,
     };
   }
-  if (boostHits >= 1) {
+
+  if (boostHits > 0) {
     return {
-      band: "discovery",
+      band: "on",
       matchedMust,
       matchedBoost,
       matchedBan,
@@ -169,13 +144,15 @@ export function computeBand(
   }
 
   return {
-    band: "off",
+    band: "near",
     matchedMust,
     matchedBoost,
     matchedBan,
     missingMust,
   };
 }
+
+
 
 const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "chill-cozy-living": {
