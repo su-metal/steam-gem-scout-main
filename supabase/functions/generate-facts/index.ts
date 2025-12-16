@@ -212,6 +212,79 @@ function normalizeEvidenceMap(
   return normalized;
 }
 
+type EvidenceSnapshot = {
+  evidenceKeys: string[];
+  readingLen: number;
+  choiceLen: number;
+  readingSample: string[];
+  choiceSample: string[];
+};
+
+function captureEvidenceSnapshot(
+  evidence: Record<string, EvidenceItem[]> | undefined
+): EvidenceSnapshot {
+  const safeEvidence = evidence ?? {};
+  const readingEvidence = safeEvidence["reading_heavy_interaction"] ?? [];
+  const choiceEvidence = safeEvidence["choice_has_consequence"] ?? [];
+  const sampleValues = (items: EvidenceItem[]) =>
+    items.slice(0, 2).map((item) => item?.quote ?? item?.source ?? "");
+  return {
+    evidenceKeys: Object.keys(safeEvidence),
+    readingLen: readingEvidence.length,
+    choiceLen: choiceEvidence.length,
+    readingSample: sampleValues(readingEvidence),
+    choiceSample: sampleValues(choiceEvidence),
+  };
+}
+
+function mergeEvidenceMaps(
+  ...maps: Array<Record<string, EvidenceItem[]> | undefined>
+): Record<string, EvidenceItem[]> {
+  const merged: Record<string, EvidenceItem[]> = {};
+  for (const map of maps) {
+    if (!map || typeof map !== "object") continue;
+    for (const [key, value] of Object.entries(map)) {
+      const normalizedKey = normalizeTagKey(key);
+      if (!normalizedKey || !Array.isArray(value)) continue;
+      if (!merged[normalizedKey]) merged[normalizedKey] = [];
+      merged[normalizedKey]!.push(...value);
+    }
+  }
+  return merged;
+}
+
+function buildYesNoEvidence(
+  raw: Awaited<ReturnType<typeof generateFactsViaLLM>> | null
+): Record<string, EvidenceItem[]> {
+  const evidence: Record<string, EvidenceItem[]> = {};
+  if (!raw) return evidence;
+  const candidates: FactTag[] = [
+    "reading_heavy_interaction",
+    "choice_has_consequence",
+  ];
+  const yesnoFacts = raw.yesnoFacts;
+  const normalizedTags = new Set<string>();
+  if (yesnoFacts) {
+    for (const tag of candidates) {
+      if (yesnoFacts[tag]) normalizedTags.add(tag);
+    }
+  }
+  if (Array.isArray(raw.tags)) {
+    for (const tag of raw.tags) {
+      if (candidates.includes(tag as FactTag)) normalizedTags.add(tag);
+    }
+  }
+  for (const tag of normalizedTags) {
+    if (!isFactTag(tag)) continue;
+    evidence[tag] = evidence[tag] ?? [];
+    evidence[tag]!.push({
+      source: "yn",
+      quote: "yn:yes",
+    });
+  }
+  return evidence;
+}
+
 const NARRATIVE_STRONG_PATTERNS: RegExp[] = [
   /story[-\s]?driven/i,
   /plot/i,
@@ -393,6 +466,57 @@ function buildCorpusFromSteam(app: any): SteamCorpusInfo {
     fieldPreview: preview,
     preview: previewSnippet,
   };
+}
+
+type ReadingChoiceTrigger = {
+  tag: "reading_heavy_interaction" | "choice_has_consequence";
+  regex: RegExp;
+  label: string;
+};
+
+function buildSteamReadingChoiceEvidence(info: SteamCorpusInfo) {
+  const evidence: Partial<Record<"reading_heavy_interaction" | "choice_has_consequence", EvidenceItem[]>> =
+    {};
+  const fields: [string, string][] = [
+    ["short_description", info.fieldPreview.short_description ?? ""],
+    ["about_the_game", info.fieldPreview.about_the_game ?? ""],
+    ["genres", info.fieldPreview.genres ?? ""],
+    ["categories", info.fieldPreview.categories ?? ""],
+  ].filter(([, text]) => typeof text === "string" && text.length > 0);
+
+  const readingTriggers: ReadingChoiceTrigger[] = [
+    { tag: "reading_heavy_interaction", regex: /\bdialogue\b/i, label: "dialogue" },
+    { tag: "reading_heavy_interaction", regex: /\bnarrative\b/i, label: "narrative" },
+    { tag: "reading_heavy_interaction", regex: /story rich/i, label: "story rich" },
+    { tag: "reading_heavy_interaction", regex: /visual novel/i, label: "visual novel" },
+    { tag: "reading_heavy_interaction", regex: /interactive fiction/i, label: "interactive fiction" },
+    { tag: "reading_heavy_interaction", regex: /\btext[- ]?based\b/i, label: "text-based" },
+    { tag: "choice_has_consequence", regex: /choices matter/i, label: "choices matter" },
+    { tag: "choice_has_consequence", regex: /branching/i, label: "branching" },
+    { tag: "choice_has_consequence", regex: /multiple endings/i, label: "multiple endings" },
+    { tag: "choice_has_consequence", regex: /consequence(s)?/i, label: "consequence" },
+    { tag: "choice_has_consequence", regex: /decision(s)?/i, label: "decision" },
+  ];
+
+  const addEvidence = (tag: "reading_heavy_interaction" | "choice_has_consequence", field: string, label: string) => {
+    const item: EvidenceItem = {
+      source: `steam:${field}`,
+      quote: `steam:${field}:${label}`,
+    };
+    if (!evidence[tag]) evidence[tag] = [];
+    evidence[tag]!.push(item);
+  };
+
+  for (const [fieldKey, text] of fields) {
+    const normalized = text.toLowerCase();
+    for (const trigger of readingTriggers) {
+      if (trigger.regex.test(normalized)) {
+        addEvidence(trigger.tag, fieldKey, trigger.label);
+      }
+    }
+  }
+
+  return evidence;
 }
 
 async function generateFactsViaLLM(args: {
@@ -1157,6 +1281,7 @@ Deno.serve(async (req: Request) => {
   let steamCorpusTotalChars = 0;
   let steamCorpusPreview = "";
   let steamCorpusFieldPreview: Record<string, string> = {};
+  let steamReadingChoiceEvidence: Record<string, EvidenceItem[]> = {};
 
   let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null =
     null;
@@ -1178,6 +1303,7 @@ Deno.serve(async (req: Request) => {
     steamCorpusTotalChars = steamCorpusInfo.totalChars;
     steamCorpusFieldPreview = steamCorpusInfo.fieldPreview;
     steamCorpusPreview = steamCorpusInfo.preview;
+    steamReadingChoiceEvidence = buildSteamReadingChoiceEvidence(steamCorpusInfo);
     corpusPieces.push(steamCorpusInfo.corpus);
   } else {
     return json(400, {
@@ -1295,11 +1421,31 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const mergedEvidence = mergeEvidenceMaps(
+    normalizeEvidenceMap(raw?.evidence),
+    steamReadingChoiceEvidence,
+    buildYesNoEvidence(raw)
+  );
+  const normalizedMergedEvidence = normalizeEvidenceMap(mergedEvidence);
+  raw.evidence = normalizedMergedEvidence;
+  const evidenceAfterInjectSnapshot = debug
+    ? captureEvidenceSnapshot(normalizedMergedEvidence)
+    : undefined;
+  const evidenceBeforeRejectSnapshot = debug
+    ? captureEvidenceSnapshot(normalizeEvidenceMap(raw.evidence))
+    : undefined;
+
   let guardTags = Array.isArray(raw?.tags) ? [...raw.tags] : [];
   const narrativeForcedFalse: FactTag[] = [];
   if (mode === "yesno") {
     guardTags = guardTags.filter((tag) => {
       const factTag = tag as FactTag;
+      if (
+        factTag === "reading_heavy_interaction" ||
+        factTag === "choice_has_consequence"
+      ) {
+        return true;
+      }
       if (factTag === "narrative_driven_progression" && narrativeCorpusOverride) {
         return true;
       }
@@ -1343,6 +1489,17 @@ Deno.serve(async (req: Request) => {
     rejectedNoEvidenceRequired: guarded.rejectedNoEvidenceRequired,
     keptWithoutEvidence: guarded.keptWithoutEvidence,
   });
+
+  const evidenceBeforeReturnSnapshot = debug
+    ? captureEvidenceSnapshot(guarded.evidence)
+    : undefined;
+  const debugEvidenceSnap = debug
+    ? {
+        afterInject: evidenceAfterInjectSnapshot,
+        beforeReject: evidenceBeforeRejectSnapshot,
+        beforeReturn: evidenceBeforeReturnSnapshot,
+      }
+    : undefined;
 
   const now = new Date().toISOString();
   const effectiveSourcesList = Array.from(effectiveSources);
@@ -1397,6 +1554,7 @@ Deno.serve(async (req: Request) => {
       narrativeWeakHitsPreview: narrativeWeakHits,
       narrativeDecision,
       narrativeDecisionHasRpgSignal,
+      debugEvidenceSnap,
       ynInputShape:
         mode === "yesno" && typeof raw?.ynInputShape === "string"
           ? raw.ynInputShape
@@ -1471,6 +1629,7 @@ Deno.serve(async (req: Request) => {
         missingAllowedSourceTags: tagsMissingAllowedSources,
         narrativeForcedFalse,
         conflictRejected,
+        debugEvidenceSnap,
         steamCorpusFieldsUsed,
         steamCorpusCharCounts,
         steamCorpusTotalChars,

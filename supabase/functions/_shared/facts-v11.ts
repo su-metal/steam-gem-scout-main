@@ -77,6 +77,7 @@ export interface FocusRule {
   id: ExperienceFocusId;
   vibe: Vibe;
   must: FactTag[];
+  mustAny?: FactTag[];
   boost: FactTag[];
   ban: FactTag[];
 }
@@ -94,6 +95,8 @@ export function computeBand(
   const factSet = facts instanceof Set ? facts : new Set(facts);
 
   const matchedMust = rule.must.filter((tag) => factSet.has(tag));
+  const mustAny = rule.mustAny ?? [];
+  const matchedMustAny = mustAny.filter((tag) => factSet.has(tag));
   const matchedBoost = rule.boost.filter((tag) => factSet.has(tag));
   const matchedBan = rule.ban.filter((tag) => factSet.has(tag));
   const missingMust = rule.must.filter((tag) => !factSet.has(tag));
@@ -103,8 +106,10 @@ export function computeBand(
   const boostHits = matchedBoost.length;
   const banHits = matchedBan.length;
   const mustOk = mustNeed === mustHits;
+  const mustAnyNeed = mustAny.length;
+  const mustAnyOk = mustAnyNeed === 0 || matchedMustAny.length > 0;
 
-  if (!mustOk) {
+  if (!mustOk || !mustAnyOk) {
     if (boostHits > 0) {
       return {
         band: "discovery",
@@ -232,13 +237,19 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "story-reading-centered-story": {
     id: "story-reading-centered-story",
     vibe: "story",
-    must: ["narrative_driven_progression", "reading_heavy_interaction"],
-    boost: [
+    must: [],
+    mustAny: [
+      "reading_heavy_interaction",
       "choice_has_consequence",
       "branching_narrative",
-      "lore_optional_depth",
     ],
-    ban: ["high_input_pressure"],
+    boost: ["narrative_driven_progression", "lore_optional_depth"],
+    ban: [
+      "battle_loop_core",
+      "high_input_pressure",
+      "precision_timing_required",
+      "time_pressure",
+    ],
   },
   "story-mystery-investigation": {
     id: "story-mystery-investigation",
