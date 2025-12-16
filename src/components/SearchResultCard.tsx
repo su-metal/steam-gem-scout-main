@@ -6,6 +6,19 @@ import {
   type ExperienceFocus,
 } from "../../supabase/functions/search-games/experience-focus.ts";
 // Returns the tags that should be displayed on the card
+const focusLabel = (id: string) => {
+  return (
+    {
+      "story-journey-and-growth": "Journey & Growth",
+      "story-narrative-action": "Narrative Action",
+      "story-reading-centered-story": "Reading-Centered Story",
+      "story-mystery-investigation": "Mystery Investigation",
+      "story-choice-and-consequence": "Choice & Consequence",
+      "story-lore-worldbuilding": "Lore & Worldbuilding",
+    }[id] ?? id
+  );
+};
+
 const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[] }, limit?: number): string[] => {
   const baseTags =
     (game.analysis?.labels && game.analysis.labels.length > 0 ? game.analysis.labels : (game.tags ?? [])) || [];
@@ -307,47 +320,30 @@ export const SearchResultCard = ({
       </div>
     ) : null;
 
-  const focusLabelForId = (id?: string) => {
-    if (!id) return "Unknown";
-    const meta = getFocusMeta(id);
-    return meta?.label ?? id;
-  };
-
   const primaryFocusId = factsMatch?.primaryFocus ?? null;
   const alsoFitsIds: string[] =
     (factsMatch as any)?.alsoFits?.filter((id: unknown) => typeof id === "string") ??
     [];
 
-  const renderFocusSummary = () => {
-    if (!primaryFocusId) return null;
-    return (
-      <div className="mt-3 space-y-1 rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-slate-200">
-        <div>
-          <span className="font-semibold text-white">Primary:</span>{" "}
-          {focusLabelForId(primaryFocusId)}
-        </div>
-        {alsoFitsIds.length > 0 && (
-          <div>
-            <span className="font-semibold text-white">Also fits:</span>{" "}
-            {focusLabelForId(alsoFitsIds[0])}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   const renderStatusText = () => {
     if (debugMode || !primaryFocusId) return null;
     return (
-      <div className="text-[11px] text-slate-300 leading-tight text-right max-w-[160px]">
-        <span className="font-semibold text-slate-200">
-          {focusLabelForId(primaryFocusId)}
-        </span>
+      <div className="text-[11px] leading-tight text-right max-w-[220px] text-slate-300 space-y-0.5">
+        <div>
+          <span className="opacity-70">Primary</span>
+          <span className="opacity-60">: </span>
+          <span className="font-semibold text-slate-100">
+            {focusLabel(primaryFocusId)}
+          </span>
+        </div>
         {alsoFitsIds.length > 0 && (
-          <>
-            <span className="opacity-60"> · also fits </span>
-            <span className="opacity-80">{focusLabelForId(alsoFitsIds[0])}</span>
-          </>
+          <div>
+            <span className="opacity-70">Also fits</span>
+            <span className="opacity-60">: </span>
+            <span className="opacity-85">
+              {focusLabel(alsoFitsIds[0])}
+            </span>
+          </div>
         )}
       </div>
     );
@@ -781,8 +777,6 @@ export const SearchResultCard = ({
                     </span>
                   ))} 
                 </div>
-                {renderFocusSummary()}
-
                 {/* Bottom: price + CTA */}
                 <div className="mt-auto flex items-center justify-between border-t border-white/10 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
                   <div className="flex flex-col">
@@ -974,7 +968,7 @@ export const SearchResultCard = ({
                   </span>
                 ))}
               </div>
-              {renderFocusSummary()}
+ 
               {/* Bottom: price + CTA */}
               <div className="mt-auto flex items-center justify-between border-t border-white/20 md:border-white/5 pt-3 md:group-hover:border-white/10 transition-colors">
                 <div className="flex flex-col">
