@@ -1380,6 +1380,10 @@ Deno.serve(async (req: Request) => {
     if (narrativeCorpusOverride) {
       yesnoFacts.narrative_driven_progression = true;
     }
+    if (narrativeDecisionHasRpgSignal) {
+      yesnoFacts.battle_loop_core = true;
+      yesnoFacts.power_scaling_over_time = true;
+    }
     const updatedTags = FACT_TAG_LIST.filter((tag) => yesnoFacts[tag]);
     raw.tags = updatedTags;
   }
@@ -1418,6 +1422,7 @@ Deno.serve(async (req: Request) => {
           : sanitizedLLMRawTags.length,
       ynInputShape: raw?.ynInputShape,
       ynOmittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
+      ynAskedTags: FACT_TAG_LIST,
     });
   }
 
@@ -1670,6 +1675,7 @@ Deno.serve(async (req: Request) => {
                 omittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
               }
             : undefined,
+        ynAskedTags: mode === "yesno" ? FACT_TAG_LIST : undefined,
       },
     });
   }
