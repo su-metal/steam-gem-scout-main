@@ -89,14 +89,14 @@ const NARRATIVE_GUARD_TAGS: Set<FactTag> = new Set([
 
 const NARRATIVE_TRIGGER_PATTERNS: Partial<Record<FactTag, RegExp[]>> = {
   narrative_driven_progression: [
-    /story[-\s]?driven/,
-    /plot/,
-    /narrative/,
-    /story[-\s]?rich/,
-    /campaign story/,
-    /character[-\s]?driven/,
-    /dialogue[-\s]?heavy/,
-    /visual novel/,
+    /(?:^|\W)story\s*:/i, // ★これで "Story:" 見出しを確実に拾う
+    /\bstory[-\s]?driven\b/i,
+    /\bplot\b/i,
+    /\bnarrative\b/i,
+    /\bstory[-\s]?rich\b/i,
+    /\bcharacter[-\s]?driven\b/i,
+    /\bdialogue[-\s]?heavy\b/i,
+    /\bvisual\s+novel\b/i,
   ],
   branching_narrative: [
     /branching/,
@@ -255,14 +255,19 @@ type SteamCorpusInfo = {
   fieldsUsed: string[];
   charCounts: Record<string, number>;
   totalChars: number;
-  preview: Record<string, string>;
+  fieldPreview: Record<string, string>;
+  preview: string;
 };
 
 function buildCorpusFromSteam(app: any): SteamCorpusInfo {
   const short =
-    typeof app?.short_description === "string" ? stripHtml(app.short_description) : "";
+    typeof app?.short_description === "string"
+      ? stripHtml(app.short_description)
+      : "";
   const about =
-    typeof app?.about_the_game === "string" ? stripHtml(app.about_the_game) : "";
+    typeof app?.about_the_game === "string"
+      ? stripHtml(app.about_the_game)
+      : "";
   const genres = Array.isArray(app?.genres)
     ? app.genres.map((g: any) => g?.description).filter(Boolean)
     : [];
@@ -287,7 +292,8 @@ function buildCorpusFromSteam(app: any): SteamCorpusInfo {
 
   const corpus = corpusParts.join("\n\n");
   const MAX_CHARS = 16000;
-  const finalCorpus = corpus.length > MAX_CHARS ? corpus.slice(0, MAX_CHARS) : corpus;
+  const finalCorpus =
+    corpus.length > MAX_CHARS ? corpus.slice(0, MAX_CHARS) : corpus;
 
   const charCounts: Record<string, number> = {};
   const preview: Record<string, string> = {};
@@ -298,12 +304,15 @@ function buildCorpusFromSteam(app: any): SteamCorpusInfo {
     totalChars += value.length;
   }
 
+  const previewSnippet = finalCorpus.slice(0, 600).replace(/\s+/g, " ").trim();
+
   return {
     corpus: finalCorpus,
     fieldsUsed: fieldEntries.map(([key]) => key),
     charCounts,
     totalChars,
-    preview,
+    fieldPreview: preview,
+    preview: previewSnippet,
   };
 }
 
@@ -618,6 +627,8 @@ power_scaling_over_time:
     "- Include a confidence level (high|medium|low) and optional notes.",
     "- Decide each tag only from its allowed primary sources. If the source is missing or inconclusive, output false.",
     "- Never guess narrative focus: only set narrative_driven_progression true when the corpus explicitly uses story-driven, narrative-driven, story campaign, story-rich, plot, character-driven, dialogue-heavy, visual novel, or equivalent language stating story/campaign is the progression core. If those exact cues are absent or ambiguous (e.g., lore/world/setting/sandbox/automation/simulation hints), set narrative_driven_progression false.",
+    "- If the corpus contains a clear story header like \"Story:\" or \"Plot:\", set narrative_driven_progression true.",
+    "- power_scaling_over_time: Set true only if the Steam corpus explicitly indicates progression that increases player power over time (e.g., leveling/XP, stat growth, skill acquisition, perks/skill trees, or gear/equipment upgrades, becoming stronger over time). Do NOT assume it just because it is an RPG.",
     "- The narrative cluster (narrative_driven_progression, branching_narrative, choice_has_consequence, reading_heavy_interaction, lore_optional_depth) must likewise be false unless the corpus explicitly confirms a story-driven or choice-driven progression in plain terms.",
   ].join("\n");
   const sourcePolicyLines = [
@@ -1065,7 +1076,8 @@ Deno.serve(async (req: Request) => {
   let steamCorpusFieldsUsed: string[] = [];
   let steamCorpusCharCounts: Record<string, number> = {};
   let steamCorpusTotalChars = 0;
-  let steamCorpusPreview: Record<string, string> = {};
+  let steamCorpusPreview = "";
+  let steamCorpusFieldPreview: Record<string, string> = {};
 
   let steamAppDetails: Awaited<ReturnType<typeof fetchSteamAppDetails>> | null =
     null;
@@ -1085,6 +1097,7 @@ Deno.serve(async (req: Request) => {
     steamCorpusFieldsUsed = steamCorpusInfo.fieldsUsed;
     steamCorpusCharCounts = steamCorpusInfo.charCounts;
     steamCorpusTotalChars = steamCorpusInfo.totalChars;
+    steamCorpusFieldPreview = steamCorpusInfo.fieldPreview;
     steamCorpusPreview = steamCorpusInfo.preview;
     corpusPieces.push(steamCorpusInfo.corpus);
   } else {
@@ -1114,7 +1127,8 @@ Deno.serve(async (req: Request) => {
     fieldsUsed: steamCorpusFieldsUsed,
     charCounts: steamCorpusCharCounts,
     totalChars: steamCorpusTotalChars,
-    preview: debug ? steamCorpusPreview : undefined,
+    preview: steamCorpusPreview,
+    previewFields: steamCorpusFieldPreview,
   });
   console.log("[generate-facts] narrative triggers", {
     narrativeTriggerHitCount,
@@ -1161,9 +1175,10 @@ Deno.serve(async (req: Request) => {
       ynMissingKeyCount: Array.isArray(raw?.ynMissingKeys)
         ? raw.ynMissingKeys.length
         : 0,
-      ynTrueCount: typeof raw?.ynTrueCount === "number"
-        ? raw.ynTrueCount
-        : sanitizedLLMRawTags.length,
+      ynTrueCount:
+        typeof raw?.ynTrueCount === "number"
+          ? raw.ynTrueCount
+          : sanitizedLLMRawTags.length,
       ynInputShape: raw?.ynInputShape,
       ynOmittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
     });
@@ -1258,7 +1273,7 @@ Deno.serve(async (req: Request) => {
       steamCorpusFieldsUsed,
       steamCorpusCharCounts,
       steamCorpusTotalChars,
-      steamCorpusPreview: debug ? steamCorpusPreview : undefined,
+      steamCorpusPreview,
       narrativeTriggerHitCount,
       narrativeTriggerHits: debug ? narrativeTriggerHits : undefined,
       ynInputShape:
@@ -1365,8 +1380,9 @@ Deno.serve(async (req: Request) => {
                 notes: raw?.yesnoNotes,
                 forcedFalse: narrativeForcedFalse,
                 inputShape: raw?.ynInputShape,
-                missingKeys:
-                  Array.isArray(raw?.ynMissingKeys) ? raw.ynMissingKeys : undefined,
+                missingKeys: Array.isArray(raw?.ynMissingKeys)
+                  ? raw.ynMissingKeys
+                  : undefined,
                 omittedKeyCountApprox: raw?.ynOmittedKeyCountApprox,
               }
             : undefined,

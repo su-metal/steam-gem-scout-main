@@ -217,9 +217,9 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
   "story-journey-and-growth": {
     id: "story-journey-and-growth",
     vibe: "story",
-    must: ["battle_loop_core", "power_scaling_over_time"],
+    must: ["narrative_driven_progression", "battle_loop_core"],
     boost: [
-      "narrative_driven_progression",
+      "power_scaling_over_time",
       "free_movement_exploration",
       "map_reveal_progression",
       "resource_management",
