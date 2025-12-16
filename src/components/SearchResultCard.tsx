@@ -28,10 +28,46 @@ const getDisplayTags = (game: { analysis?: { labels?: string[] }; tags?: string[
   return baseTags.slice(0, limit);
 };
 
-console.log(window.location.href, window.location.search, window.location.hash)
-
-
 // gemLabel のバリエーション
+type MatchBand = "on" | "near" | "discovery" | "off";
+
+interface FactsMatchPayload {
+  experienceFocusId?: string | null;
+  selectedFocusBand?: MatchBand;
+  factsCount?: number;
+  allFocusBands?: Record<string, MatchBand>;
+}
+
+const FOCUS_BAND_BADGE_BASE =
+  "bg-black/70 backdrop-blur flex items-center gap-2.5 px-3 py-1.5 transform skew-x-[-10deg] rounded-md border transition-colors";
+
+const FOCUS_BAND_BADGE_TONE_CLASSES: Record<"high" | "mid" | "low", string> = {
+  high: "border-emerald-400 text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.6)]",
+  mid: "border-sky-400 text-sky-200 shadow-[0_0_16px_rgba(56,189,248,0.5)]",
+  low: "border-amber-300 text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.5)]",
+};
+
+const FOCUS_BAND_BADGE_CONFIG: Record<MatchBand, { label: string; tone: "high" | "mid" | "low" }> = {
+  on: { label: "ON", tone: "high" },
+  near: { label: "NEAR", tone: "mid" },
+  discovery: { label: "DISCOVERY", tone: "low" },
+  off: { label: "", tone: "low" },
+};
+
+const FocusBandBadge = ({ band }: { band: MatchBand }) => {
+  if (band === "off") return null;
+  const { label, tone } = FOCUS_BAND_BADGE_CONFIG[band];
+  return (
+    <div className="absolute top-0 right-0 p-3">
+      <div className={`${FOCUS_BAND_BADGE_BASE} ${FOCUS_BAND_BADGE_TONE_CLASSES[tone]}`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+        <span className="text-xs font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
+          {label}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 interface SearchResultCardProps {
   title: string;
@@ -50,7 +86,6 @@ interface SearchResultCardProps {
     thumbnail?: string;
   }[];
   headerImage?: string | null;
-  moodScore?: number;
   finalScore?: number;
   priceOriginal?: number | null;
   discountPercent?: number | null;
@@ -143,7 +178,6 @@ export const SearchResultCard = ({
   tags,
   screenshots,
   headerImage,
-  moodScore,
   // ★ 追加（デフォルトは既存デザイン）
   variant = "hud",
     onSelect,
@@ -192,19 +226,28 @@ export const SearchResultCard = ({
 
 
 
-  const rawMoodScore =
-    typeof moodScore === "number"
-      ? moodScore
-      : typeof (gameData as any)?.moodScore === "number"
-        ? (gameData as any).moodScore
-        : typeof (analysisData as any)?.moodScore === "number"
-          ? (analysisData as any).moodScore
-          : null;
+  const factsMatch = (gameData as any)?.factsMatch as FactsMatchPayload | null;
+  const focusBand = (factsMatch?.selectedFocusBand ?? "off") as MatchBand;
 
-  const normalizedMoodScore =
-    typeof rawMoodScore === "number" && Number.isFinite(rawMoodScore)
-      ? Math.max(0, Math.min(1, rawMoodScore))
-      : null;
+  const renderFactsDebugInfo = () => {
+    if (!debugMode || !factsMatch) return null;
+    const focusId = factsMatch.experienceFocusId ?? "none";
+    const bandLabel = factsMatch.selectedFocusBand ?? "off";
+    return (
+      <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-2 text-[10px] text-slate-200">
+        <div className="flex flex-wrap gap-3">
+          <span>factsCount: {factsMatch.factsCount ?? "n/a"}</span>
+          <span>experienceFocusId: {focusId}</span>
+          <span>selectedFocusBand: {bandLabel}</span>
+        </div>
+        {factsMatch.allFocusBands && (
+          <pre className="mt-2 max-h-32 overflow-auto text-[9px] leading-snug text-slate-200">
+            {JSON.stringify(factsMatch.allFocusBands, null, 2)}
+          </pre>
+        )}
+      </div>
+    );
+  };
 
   const focusDefinition =
     experienceFocusId &&
@@ -544,18 +587,6 @@ export const SearchResultCard = ({
     }
   }
 
-
-  // マッチ度を 3 段階バッジに変換
-  const vibeMatch =
-    normalizedMoodScore != null
-      ? normalizedMoodScore >= 0.7
-        ? { label: "ON VIBE", tone: "high" as const }
-        : normalizedMoodScore >= 0.4
-          ? { label: "NEAR VIBE", tone: "mid" as const }
-          : { label: "DISCOVERY", tone: "low" as const }
-      : null;
-
-
   // ヘッダーに表示する「VIBE × Experience Focus」ラベル
   const headerPresetLabel =
     vibeLabel && experienceFocusLabel
@@ -644,31 +675,8 @@ export const SearchResultCard = ({
               {/* Flash overlay */}
               <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
 
-              {/* Vibe Match Badge (top-right) */}
-              {vibeMatch && (
-                <div className="absolute top-0 right-0 p-3">
-                  <div
-                    className={`
-        bg-black/70 backdrop-blur
-        flex items-center gap-2.5 px-3 py-1.5
-        transform skew-x-[-10deg]
-        rounded-md
-        border
-        ${vibeMatch.tone === "high"
-                        ? "border-emerald-400 text-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.6)]"
-                        : vibeMatch.tone === "mid"
-                          ? "border-sky-400 text-sky-200 shadow-[0_0_16px_rgba(56,189,248,0.5)]"
-                          : "border-amber-300 text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.5)]"
-                      }
-      `}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    <span className="text-xs font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
-                      {vibeMatch.label}
-                    </span>
-                  </div>
-                </div>
-              )}
+              {/* Experience Focus band badge (top-right) */}
+              <FocusBandBadge band={focusBand} />
 
               {/* Discount Badge (bottom-right) */}
               {hasDiscount && (
@@ -764,13 +772,14 @@ export const SearchResultCard = ({
                     </div>
                   </div>
 
-                  <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
-                    <ArrowUpRight size={16} />
-                  </span>
-                </div>
+                <span className="inline-flex h-11 w-11 items-center justify-center border border-cyan-400 bg-cyan-500 text-black md:border-white/10 md:bg-white/5 md:text-inherit md:group-hover:bg-cyan-500 md:group-hover:border-cyan-400 md:group-hover:text-black transition-all shadow-[0_10px_30px_rgba(59,130,246,0.3)]">
+                  <ArrowUpRight size={16} />
+                </span>
               </div>
+              {renderFactsDebugInfo()}
             </div>
           </div>
+        </div>
 
           {/* Corner Brackets */}
           <div className="absolute top-6 left-0 w-1 h-3 bg-cyan-500 md:bg-cyan-500/0 md:group-hover:bg-cyan-500 transition-colors duration-300" />
@@ -862,31 +871,8 @@ export const SearchResultCard = ({
 
             {/* Flash overlay */}
             <div className="absolute inset-0 bg-white opacity-0 group-hover:animate-flash pointer-events-none" />
-            {/* Vibe Match Badge (top-right) */}
-            {vibeMatch && (
-              <div className="absolute top-1 right-1 p-2">
-                <div
-                  className={`
-        bg-black/80 backdrop-blur-md
-        flex items-center gap-2.5 px-3 py-1.5
-        transform skew-x-[-10deg]
-        rounded-md scale-100
-        border
-        ${vibeMatch.tone === "high"
-                      ? "border-emerald-400 text-emerald-200 shadow-[0_0_22px_rgba(16,185,129,0.7)]"
-                      : vibeMatch.tone === "mid"
-                        ? "border-sky-400 text-sky-200 shadow-[0_0_20px_rgba(56,189,248,0.6)]"
-                        : "border-amber-300 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]"
-                    }
-      `}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                  <span className="text-sm font-black transform skew-x-[10deg] tracking-[0.18em] uppercase">
-                    {vibeMatch.label}
-                  </span>
-                </div>
-              </div>
-            )}
+            {/* Experience Focus band badge */}
+            <FocusBandBadge band={focusBand} />
 
             {/* Discount Badge (bottom-right) */}
             {hasDiscount && (
@@ -982,6 +968,7 @@ export const SearchResultCard = ({
                   <ArrowUpRight size={16} />
                 </span>
               </div>
+              
             </div>
           </div>
         </div>
