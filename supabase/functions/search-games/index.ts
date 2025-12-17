@@ -1180,19 +1180,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
             });
           }
 
+          const matchedFactsPayload = {
+            must: res.matchedMust,
+            ...(debugMode ? { mustMissing: res.missingMust } : {}),
+            boost: res.matchedBoost,
+            ban: res.matchedBan,
+            ...(debugMode
+              ? {
+                  mustAnyHits,
+                  mustAnyMissing,
+                }
+              : {}),
+          };
+
           const factsMatchBase = {
             experienceFocusId: normalizedExperienceFocusId,
             selectedFocusBand: normalizedSelectedFocusBand,
             primaryFocus: primaryFocusId,
             alsoFits,
-            matchedFacts: {
-              must: res.matchedMust,
-              ...(debugMode ? { mustMissing: res.missingMust } : {}),
-              boost: res.matchedBoost,
-              ban: res.matchedBan,
-              mustAny: mustAnyHits,
-              mustAnyMissing: mustAnyMissing,
-            },
+            matchedFacts: matchedFactsPayload,
             ...(debugMode ? { factsCount: facts.length } : {}),
           };
 
