@@ -46,6 +46,21 @@ const MATCH_BAND_ORDER: Record<MatchBand, number> = {
   off: 0,
 };
 
+const parseJsonMaybe = (value: unknown): Record<string, unknown> | null => {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value === "object") {
+    return value as Record<string, unknown>;
+  }
+  return null;
+};
+
 type SortOption =
   | "recommended"
   | "gem-score"
@@ -990,6 +1005,58 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const baseFactSet = new Set<FactTag>(facts);
       const derivedFacts = new Set<FactTag>(baseFactSet);
+      const parsedDataRow = parseJsonMaybe((g as any).data);
+      const parsedFactsMeta =
+        parseJsonMaybe((g as any).facts_meta) ??
+        parseJsonMaybe(parsedDataRow?.facts_meta) ??
+        parseJsonMaybe(analysisRaw?.facts_meta) ??
+        null;
+      const factsMeta: Record<string, unknown> = parsedFactsMeta ?? {};
+      const narrativeDecisionMeta =
+        typeof factsMeta?.narrativeDecision === "string"
+          ? (factsMeta.narrativeDecision as string)
+          : undefined;
+      const narrativeRpgAssistAppliedMeta =
+        factsMeta?.narrativeRpgAssistApplied === true;
+      const evidenceObj =
+        typeof factsMeta?.evidence === "object" && factsMeta?.evidence !== null
+          ? (factsMeta.evidence as Record<string, unknown>)
+          : {};
+      const narrativeEvidenceItems = Array.isArray(
+        evidenceObj["narrative_driven_progression"]
+      )
+        ? (evidenceObj["narrative_driven_progression"] as Record<
+            string,
+            unknown
+          >[])
+        : [];
+      const assistEvidenceQuote =
+        typeof narrativeEvidenceItems[0] === "object" &&
+        narrativeEvidenceItems[0] !== null
+          ? (narrativeEvidenceItems[0]["quote"] as string | undefined)
+          : undefined;
+      const steamCorpusFieldsUsed =
+        Array.isArray(factsMeta?.steamCorpusFieldsUsed) &&
+        factsMeta?.steamCorpusFieldsUsed.every(
+          (item: unknown) => typeof item === "string"
+        )
+          ? (factsMeta.steamCorpusFieldsUsed as string[])
+          : [];
+      const steamCorpusTotalChars =
+        typeof factsMeta?.steamCorpusTotalChars === "number"
+          ? factsMeta?.steamCorpusTotalChars
+          : undefined;
+      const steamCorpusFieldsUsedClean = steamCorpusFieldsUsed;
+      const corpusMissingAbout = !steamCorpusFieldsUsedClean.includes(
+        "about_the_game"
+      );
+      const corpusCharThin =
+        typeof steamCorpusTotalChars === "number" &&
+        steamCorpusTotalChars < 800;
+      const isCorpusThin = corpusMissingAbout || corpusCharThin;
+      const hasAssistEvidence =
+        typeof assistEvidenceQuote === "string" &&
+        assistEvidenceQuote.includes("yn:assist:rpg-story-structure");
       if (!baseFactSet.has("systems_interaction_depth")) {
         const hasResourceManagement = baseFactSet.has("resource_management");
         const hasPlanningRequired = baseFactSet.has("planning_required");
@@ -1015,6 +1082,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
         (tag) => !baseFactSet.has(tag)
       );
 
+      if (debugMode && g.appId === 292030) {
+        console.log("[search-games] facts_meta snapshot", {
+          appId: g.appId,
+          factsMetaType: parsedFactsMeta ? typeof parsedFactsMeta : typeof null,
+          keys: parsedFactsMeta ? Object.keys(parsedFactsMeta) : [],
+          narrativeDecision: narrativeDecisionMeta,
+          narrativeRpgAssistApplied: narrativeRpgAssistAppliedMeta,
+          assistEvidenceQuote,
+        });
+      }
+
       let factsMatch: Record<string, unknown> | null = null;
       let derivedSatisfiedMust: FactTag[] = [];
       if (normalizedExperienceFocusId) {
@@ -1035,16 +1113,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
             order: number;
           }[] = [];
 
-          for (let i = 0; i < focusDefs.length; i += 1) {
-            const f = focusDefs[i];
-            const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
-            if (!r) continue;
-            const band = computeBand(derivedFacts, r).band;
-            focusBands[f.id] = band;
-            focusEntries.push({ id: f.id, band, order: i });
+        for (let i = 0; i < focusDefs.length; i += 1) {
+          const f = focusDefs[i];
+          const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
+          if (!r) continue;
+          let band = computeBand(derivedFacts, r).band;
+          const shouldCap =
+            f.id === "story-journey-and-growth" &&
+            band === "on" &&
+            narrativeRpgAssistAppliedMeta &&
+            narrativeDecisionMeta === "none" &&
+            hasAssistEvidence &&
+            isCorpusThin;
+          if (shouldCap) {
+            const reason = corpusMissingAbout
+              ? "missing_about"
+              : corpusCharThin
+              ? "short_corpus"
+              : "thin_corpus";
+            if (debugMode) {
+              console.warn("[search-games] cap near applied", {
+                appId: g.appId,
+                title: g.title,
+                focusId: f.id,
+                reason,
+              });
+            }
+            band = "near";
           }
+          focusBands[f.id] = band;
+          focusEntries.push({ id: f.id, band, order: i });
+        }
 
-          const sortedFocusEntries = focusEntries
+         const sortedFocusEntries = focusEntries
             .filter((entry) => entry.band && entry.band !== "off")
             .sort((a, b) => {
               const priorityA =
@@ -1059,10 +1160,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
           const primaryFocusId = sortedFocusEntries[0]?.id ?? null;
           const alsoFits = sortedFocusEntries.slice(1, 3).map((entry) => entry.id);
+          const ruleMustAny = rule.mustAny ?? [];
+          const mustAnyHits = ruleMustAny.filter((tag) => derivedFacts.has(tag));
+          const mustAnyMissing = ruleMustAny.filter(
+            (tag) => !derivedFacts.has(tag)
+          );
+          const normalizedSelectedFocusBand =
+            focusBands[normalizedExperienceFocusId] ?? res.band;
+          if (
+            debugMode &&
+            normalizedExperienceFocusId &&
+            normalizedSelectedFocusBand !== res.band
+          ) {
+            console.warn("[search-games] selectedFocusBand mismatch", {
+              appId: g.appId,
+              experienceFocusId: normalizedExperienceFocusId,
+              original: res.band,
+              recalculated: normalizedSelectedFocusBand,
+            });
+          }
 
           const factsMatchBase = {
             experienceFocusId: normalizedExperienceFocusId,
-            selectedFocusBand: res.band,
+            selectedFocusBand: normalizedSelectedFocusBand,
             primaryFocus: primaryFocusId,
             alsoFits,
             matchedFacts: {
@@ -1070,6 +1190,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
               ...(debugMode ? { mustMissing: res.missingMust } : {}),
               boost: res.matchedBoost,
               ban: res.matchedBan,
+              mustAny: mustAnyHits,
+              mustAnyMissing: mustAnyMissing,
             },
             ...(debugMode ? { factsCount: facts.length } : {}),
           };

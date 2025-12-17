@@ -313,6 +313,14 @@ const NARRATIVE_WEAK_PATTERNS: RegExp[] = [
   /timeless/i,
 ];
 
+const COMBAT_SIGNAL_PATTERNS: RegExp[] = [
+  /battle/i,
+  /combat/i,
+  /turn[-\s]?based/i,
+  /real[-\s]?time/i,
+  /fight/i,
+];
+
 const TIME_PRESSURE_HARD_PATTERN = /\b(time limit|timed|race against time|countdown|before time runs out|within \d+\s*minutes?|beat the clock)\b/i;
 const ATB_PATTERN = /\b(active time battle|atb|time gauge|battle gauge|gauge fills|active battle)\b/i;
 
@@ -1369,6 +1377,10 @@ Deno.serve(async (req: Request) => {
   let narrativeRpgAssistReason: string | null = null;
   if (mode === "yesno" && raw?.yesnoFacts) {
     const yesnoFacts = raw.yesnoFacts;
+    const normalizedCorpus = corpus.toLowerCase();
+    const hasCombatSignal = COMBAT_SIGNAL_PATTERNS.some((pattern) =>
+      pattern.test(normalizedCorpus)
+    );
     const hasRpgSignal =
       yesnoFacts.battle_loop_core === true ||
       yesnoFacts.power_scaling_over_time === true ||
@@ -1382,9 +1394,17 @@ Deno.serve(async (req: Request) => {
     if (narrativeCorpusOverride) {
       yesnoFacts.narrative_driven_progression = true;
     }
-    if (narrativeDecisionHasRpgSignal) {
+    const injectedAutoTags: string[] = [];
+    if (narrativeDecisionHasRpgSignal && hasCombatSignal) {
       yesnoFacts.battle_loop_core = true;
       yesnoFacts.power_scaling_over_time = true;
+      injectedAutoTags.push("battle_loop_core", "power_scaling_over_time");
+    }
+    if (debug && injectedAutoTags.length > 0) {
+      console.warn("[generate-facts] auto tags injected", {
+        appId,
+        autoInjected: injectedAutoTags,
+      });
     }
 
     const hasRpgStoryStructure =
@@ -1410,6 +1430,7 @@ Deno.serve(async (req: Request) => {
     }
     const updatedTags = FACT_TAG_LIST.filter((tag) => yesnoFacts[tag]);
     raw.tags = updatedTags;
+    (raw as any)._autoInjectedTags = injectedAutoTags;
   }
   const sanitizedLLMRawTags = filterNeverPersistTags(raw?.tags);
   console.log("[generate-facts] llm raw", {
@@ -1669,6 +1690,10 @@ Deno.serve(async (req: Request) => {
         narrativeForcedFalse,
         conflictRejected,
         debugEvidenceSnap,
+        autoInjectedYesNoTags:
+          debug && Array.isArray((raw as any)?._autoInjectedTags)
+            ? (raw as any)?._autoInjectedTags
+            : undefined,
         steamCorpusFieldsUsed,
         steamCorpusCharCounts,
         steamCorpusTotalChars,
