@@ -1365,6 +1365,8 @@ Deno.serve(async (req: Request) => {
       details: (e as any)?.message ?? String(e),
     });
   }
+  let narrativeRpgAssistApplied = false;
+  let narrativeRpgAssistReason: string | null = null;
   if (mode === "yesno" && raw?.yesnoFacts) {
     const yesnoFacts = raw.yesnoFacts;
     const hasRpgSignal =
@@ -1384,6 +1386,28 @@ Deno.serve(async (req: Request) => {
       yesnoFacts.battle_loop_core = true;
       yesnoFacts.power_scaling_over_time = true;
     }
+
+    const hasRpgStoryStructure =
+      narrativeDecisionHasRpgSignal &&
+      yesnoFacts.battle_loop_core === true &&
+      !yesnoFacts.automation_core &&
+      !yesnoFacts.optimization_required &&
+      !yesnoFacts.systems_interaction_depth &&
+      !yesnoFacts.job_simulation_loop;
+
+    if (hasRpgStoryStructure) {
+      narrativeRpgAssistApplied = true;
+      narrativeRpgAssistReason = "rpg-signal-battle-loop-clean";
+      yesnoFacts.narrative_driven_progression = true;
+      raw.evidence ??= {};
+      const assistEvidence: EvidenceItem = {
+        source: "yn",
+        quote: "yn:assist:rpg-story-structure",
+      };
+      raw.evidence.narrative_driven_progression =
+        raw.evidence.narrative_driven_progression ?? [];
+      raw.evidence.narrative_driven_progression.push(assistEvidence);
+    }
     const updatedTags = FACT_TAG_LIST.filter((tag) => yesnoFacts[tag]);
     raw.tags = updatedTags;
   }
@@ -1402,6 +1426,8 @@ Deno.serve(async (req: Request) => {
     weakHitCount: narrativeWeakHitCount,
     hasRpgSignal: narrativeDecisionHasRpgSignal,
     decision: narrativeDecision,
+    narrativeRpgAssistApplied,
+    narrativeRpgAssistReason,
   });
 
   if (mode === "yesno") {
@@ -1453,6 +1479,12 @@ Deno.serve(async (req: Request) => {
       }
       if (factTag === "narrative_driven_progression" && narrativeCorpusOverride) {
         return true;
+      }
+      if (
+        narrativeRpgAssistApplied &&
+        factTag === "narrative_driven_progression"
+      ) {
+        return true; // skip forcing false for assisted narrative tag
       }
       if (!NARRATIVE_GUARD_TAGS.has(factTag)) return true;
       if (isNarrativeAllowedByCorpus(corpus, factTag, raw?.yesnoFacts))
@@ -1558,6 +1590,8 @@ Deno.serve(async (req: Request) => {
       narrativeStrongHitsPreview: narrativeStrongHits,
       narrativeWeakHitsPreview: narrativeWeakHits,
       narrativeDecision,
+      narrativeRpgAssistApplied,
+      narrativeRpgAssistReason,
       narrativeDecisionHasRpgSignal,
       debugEvidenceSnap,
       ynInputShape:
@@ -1645,6 +1679,8 @@ Deno.serve(async (req: Request) => {
         narrativeWeakHitCount,
         narrativeDecision,
         narrativeDecisionHasRpgSignal,
+        narrativeRpgAssistApplied,
+        narrativeRpgAssistReason,
         ynMissingKeys:
           mode === "yesno" && Array.isArray(raw?.ynMissingKeys)
             ? raw?.ynMissingKeys
