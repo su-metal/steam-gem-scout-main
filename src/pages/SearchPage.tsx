@@ -31,6 +31,7 @@ import {
   Wind,
 } from "lucide-react";
 import type { FeatureLabelV2 } from "../../supabase/functions/_shared/feature-labels.ts";
+import { normalizeExperienceFocusId } from "@/lib/experienceFocus";
 
 
 interface HiddenGemAnalysis {
@@ -543,10 +544,12 @@ export default function SearchPage() {
   const primaryVibeId =
     (navigationState?.primaryVibePreset as PrimaryVibeId | undefined) ?? null;
 
-  const experienceFocusId =
+  const rawExperienceFocusId =
     (navigationState?.experienceClass as string | undefined) ?? null;
   const experienceFocusParam =
-    experienceFocusId === "any" ? null : experienceFocusId;
+    rawExperienceFocusId === "any"
+      ? null
+      : normalizeExperienceFocusId(rawExperienceFocusId) ?? null;
 
   // ▼ ヘッダー用テキストカラー（Vibe に応じて）
   const vibeHeaderTextClass =

@@ -5,17 +5,16 @@ import {
   EXPERIENCE_FOCUS_LIST,
   type ExperienceFocus,
 } from "../../supabase/functions/search-games/experience-focus.ts";
+import {
+  normalizeExperienceFocusId,
+  EXPERIENCE_FOCUS_LABEL_MAP,
+} from "@/lib/experienceFocus";
 // Returns the tags that should be displayed on the card
-const focusLabel = (id: string) => {
+const focusLabel = (id: string | null | undefined) => {
+  const normalized =
+    normalizeExperienceFocusId(id) ?? (id && id.trim().length > 0 ? id.trim() : "none");
   return (
-    {
-      "story-journey-and-growth": "Journey & Growth",
-      "story-narrative-action": "Narrative Action",
-      "story-reading-centered-story": "Reading-Centered Story",
-      "story-mystery-investigation": "Mystery Investigation",
-      "story-choice-and-consequence": "Choice & Consequence",
-      "story-lore-worldbuilding": "Lore & Worldbuilding",
-    }[id] ?? id
+    EXPERIENCE_FOCUS_LABEL_MAP.get(normalized) ?? normalized ?? "none"
   );
 };
 
@@ -76,7 +75,11 @@ EXPERIENCE_FOCUS_LIST.forEach((focus, index) => {
   FOCUS_META_MAP.set(focus.id, { ...focus, order: index });
 });
 
-const getFocusMeta = (id: string) => FOCUS_META_MAP.get(id) ?? null;
+const getFocusMeta = (id: string) => {
+  const normalized = normalizeExperienceFocusId(id);
+  if (!normalized) return null;
+  return FOCUS_META_MAP.get(normalized) ?? null;
+};
 
 interface SearchResultCardProps {
   title: string;

@@ -6,8 +6,8 @@ export type ExperienceFocusId =
   | "chill-ambient-immersion"
   | "chill-relaxed-puzzle"
   | "chill-slow-creation"
-  | "story-narrative-action"
   | "story-journey-and-growth"
+  | "story-driven-play"
   | "story-reading-centered-story"
   | "story-mystery-investigation"
   | "story-choice-and-consequence"
@@ -100,9 +100,9 @@ export const EXPERIENCE_FOCUS_LIST: ExperienceFocus[] = [
     nearBridgeLabels: ["automation_processes"],
   },
   {
-    id: "story-narrative-action",
+    id: "story-driven-play",
     vibe: "story",
-    label: "Narrative Action",
+    label: "Story-Driven Play",
     featureLabels: ["story_driven", "action_combat", "dialogue_heavy"],
     nearStrongLabels: ["character_drama", "emotional_journey"],
     nearBridgeLabels: ["real_time_combat"],

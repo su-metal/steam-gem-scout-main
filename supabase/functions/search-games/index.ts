@@ -23,6 +23,7 @@ import {
   evaluateJrpgPromotionGate,
   normalizeAnalysisFeatureLabelsV2Raw,
 } from "../analyze-game/feature-labels.ts";
+import { normalizeFocusId } from "../_shared/focus-ids.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -199,51 +200,7 @@ const normalizeStringArray = (value: unknown): string[] => {
   return normalized;
 };
 
-const EXPERIENCE_FOCUS_ID_SET = new Set(
-  EXPERIENCE_FOCUS_LIST.map((focus) => focus.id)
-);
 
-const LEGACY_EXPERIENCE_FOCUS_ID_MAP: Record<string, ExperienceFocusId> = {
-  "cozy-living": "chill-cozy-living",
-  "gentle-exploration": "chill-gentle-exploration",
-  "ambient-immersion": "chill-ambient-immersion",
-  "relaxed-puzzle": "chill-relaxed-puzzle",
-  "slow-creation": "chill-slow-creation",
-  "battle-and-growth": "focus-battle-and-growth",
-  "tactics-and-planning": "focus-tactics-and-planning",
-  "base-and-systems": "focus-base-and-systems",
-  "simulation": "focus-operational-sim",      // ★変更
-  "focus-simulation": "focus-operational-sim",// ★追加（念のため）
-  "optimization-builder": "focus-optimization-builder",
-  "narrative-action": "story-narrative-action",
-  "reading-centered-story": "story-reading-centered-story",
-  "mystery-investigation": "story-mystery-investigation",
-  "choice-and-consequence": "story-choice-and-consequence",
-  "lore-worldbuilding": "story-lore-worldbuilding",
-  "exploration": "action-exploration",
-  "combat": "action-combat",
-  "competitive": "action-pressure",
-  "tactical-stealth": "action-positioning",
-  "crowd-smash": "action-crowd-smash",
-  "arcade-action": "short-arcade-action",
-  "tactical-decisions": "short-tactical-decisions",
-  "puzzle-moments": "short-puzzle-moments",
-  "flow-mastery": "short-flow-mastery",
-  "competitive-rounds": "short-competitive-rounds",
-};
-
-const normalizeExperienceFocusId = (
-  value: string | null | undefined
-): ExperienceFocusId | null => {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const normalized = trimmed.toLowerCase();
-  if (EXPERIENCE_FOCUS_ID_SET.has(normalized as ExperienceFocusId)) {
-    return normalized as ExperienceFocusId;
-  }
-  return LEGACY_EXPERIENCE_FOCUS_ID_MAP[normalized] ?? null;
-};
 
 function findExperienceFocusById(
   id: ExperienceFocusId | null | undefined
@@ -971,10 +928,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .filter((g) => g && g.appId != null);
 
     const primaryVibeId = body.primaryVibeId ?? null;
-    const requestedExperienceFocusId = body.experienceFocusId ?? null;
-    const normalizedExperienceFocusId = normalizeExperienceFocusId(
-      requestedExperienceFocusId
-    );
+    const requestedFocusIdRaw = body.experienceFocusId ?? null;
+    const normalizedRequestedFocusId = normalizeFocusId(requestedFocusIdRaw, {
+      debugMode,
+      context: {
+        appId: null,
+        title: null,
+        source: "request",
+      },
+    });
+    const requestedFocusDef = normalizedRequestedFocusId
+      ? FACT_FOCUS_RULES[normalizedRequestedFocusId]
+      : null;
+    const availableFocusDefIds = EXPERIENCE_FOCUS_LIST.map((focus) => focus.id);
+    const didFindRequestedFocusDef = Boolean(requestedFocusDef);
+    if (debugMode && requestedFocusIdRaw && !didFindRequestedFocusDef) {
+      console.warn("[search-games] requested focus unavailable", {
+        requestedFocusIdRaw,
+        requestedFocusIdNormalized: normalizedRequestedFocusId,
+        availableFocusDefIds,
+      });
+    }
 
     const mapped = rawGames.map((g) => {
       const analysisRaw =
@@ -1095,120 +1069,138 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       let factsMatch: Record<string, unknown> | null = null;
       let derivedSatisfiedMust: FactTag[] = [];
-      if (normalizedExperienceFocusId) {
-        const rule = FACT_FOCUS_RULES[normalizedExperienceFocusId];
-        if (rule) {
-          const res = computeBand(derivedFacts, rule);
-          derivedSatisfiedMust = res.matchedMust.filter(
-            (tag) => !baseFactSet.has(tag)
-          );
+      const focusDefs =
+        requestedFocusDef && requestedFocusDef.vibe
+          ? EXPERIENCE_FOCUS_LIST.filter(
+              (f) => f.vibe === requestedFocusDef.vibe
+            )
+          : EXPERIENCE_FOCUS_LIST;
+      const focusBands: Record<string, MatchBand> = {};
+      const focusEntries: {
+        id: string;
+        band: MatchBand;
+        order: number;
+      }[] = [];
 
-          const focusDefs = EXPERIENCE_FOCUS_LIST.filter(
-            (f) => f.vibe === rule.vibe
-          );
-          const focusBands: Record<string, MatchBand> = {};
-          const focusEntries: {
-            id: string;
-            band: MatchBand;
-            order: number;
-          }[] = [];
-
-        for (let i = 0; i < focusDefs.length; i += 1) {
-          const f = focusDefs[i];
-          const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
-          if (!r) continue;
-          let band = computeBand(derivedFacts, r).band;
-          const shouldCap =
-            f.id === "story-journey-and-growth" &&
-            band === "on" &&
-            narrativeRpgAssistAppliedMeta &&
-            narrativeDecisionMeta === "none" &&
-            hasAssistEvidence &&
-            isCorpusThin;
-          if (shouldCap) {
-            const reason = corpusMissingAbout
-              ? "missing_about"
-              : corpusCharThin
-              ? "short_corpus"
-              : "thin_corpus";
-            if (debugMode) {
-              console.warn("[search-games] cap near applied", {
-                appId: g.appId,
-                title: g.title,
-                focusId: f.id,
-                reason,
-              });
-            }
-            band = "near";
-          }
-          focusBands[f.id] = band;
-          focusEntries.push({ id: f.id, band, order: i });
-        }
-
-         const sortedFocusEntries = focusEntries
-            .filter((entry) => entry.band && entry.band !== "off")
-            .sort((a, b) => {
-              const priorityA =
-                MATCH_BAND_ORDER[a.band as MatchBand] ?? 0;
-              const priorityB =
-                MATCH_BAND_ORDER[b.band as MatchBand] ?? 0;
-              if (priorityA !== priorityB) {
-                return priorityB - priorityA;
-              }
-              return a.order - b.order;
-            });
-
-          const primaryFocusId = sortedFocusEntries[0]?.id ?? null;
-          const alsoFits = sortedFocusEntries.slice(1, 3).map((entry) => entry.id);
-          const ruleMustAny = rule.mustAny ?? [];
-          const mustAnyHits = ruleMustAny.filter((tag) => derivedFacts.has(tag));
-          const mustAnyMissing = ruleMustAny.filter(
-            (tag) => !derivedFacts.has(tag)
-          );
-          const normalizedSelectedFocusBand =
-            focusBands[normalizedExperienceFocusId] ?? res.band;
-          if (
-            debugMode &&
-            normalizedExperienceFocusId &&
-            normalizedSelectedFocusBand !== res.band
-          ) {
-            console.warn("[search-games] selectedFocusBand mismatch", {
+      for (let i = 0; i < focusDefs.length; i += 1) {
+        const f = focusDefs[i];
+        const r = FACT_FOCUS_RULES[f.id as ExperienceFocusId];
+        if (!r) continue;
+        let band = computeBand(derivedFacts, r).band;
+        const shouldCap =
+          f.id === "story-journey-and-growth" &&
+          band === "on" &&
+          narrativeRpgAssistAppliedMeta &&
+          narrativeDecisionMeta === "none" &&
+          hasAssistEvidence &&
+          isCorpusThin;
+        if (shouldCap) {
+          const reason = corpusMissingAbout
+            ? "missing_about"
+            : corpusCharThin
+            ? "short_corpus"
+            : "thin_corpus";
+          if (debugMode) {
+            console.warn("[search-games] cap near applied", {
               appId: g.appId,
-              experienceFocusId: normalizedExperienceFocusId,
-              original: res.band,
-              recalculated: normalizedSelectedFocusBand,
+              title: g.title,
+              focusId: f.id,
+              reason,
             });
           }
-
-          const matchedFactsPayload = {
-            must: res.matchedMust,
-            ...(debugMode ? { mustMissing: res.missingMust } : {}),
-            boost: res.matchedBoost,
-            ban: res.matchedBan,
-            ...(debugMode
-              ? {
-                  mustAnyHits,
-                  mustAnyMissing,
-                }
-              : {}),
-          };
-
-          const factsMatchBase = {
-            experienceFocusId: normalizedExperienceFocusId,
-            selectedFocusBand: normalizedSelectedFocusBand,
-            primaryFocus: primaryFocusId,
-            alsoFits,
-            matchedFacts: matchedFactsPayload,
-            ...(debugMode ? { factsCount: facts.length } : {}),
-          };
-
-          factsMatch = debugMode
-            ? {
-                ...factsMatchBase,
-                allFocusBands: focusBands,
-              }
-            : factsMatchBase;
+          band = "near";
         }
+        const normalizedFocusId = normalizeFocusId(f.id) ?? f.id;
+        focusBands[normalizedFocusId] = band;
+        focusEntries.push({ id: normalizedFocusId, band, order: i });
+      }
+
+      const sortedFocusEntries = focusEntries
+        .filter((entry) => entry.band && entry.band !== "off")
+        .sort((a, b) => {
+          const priorityA = MATCH_BAND_ORDER[a.band as MatchBand] ?? 0;
+          const priorityB = MATCH_BAND_ORDER[b.band as MatchBand] ?? 0;
+          if (priorityA !== priorityB) {
+            return priorityB - priorityA;
+          }
+          return a.order - b.order;
+        });
+
+      const primaryFocusId = sortedFocusEntries[0]?.id ?? null;
+      const alsoFits = sortedFocusEntries.slice(1, 3).map((entry) => entry.id);
+      const fallbackFocusId = primaryFocusId;
+      const fallbackRule = fallbackFocusId
+        ? FACT_FOCUS_RULES[fallbackFocusId as ExperienceFocusId]
+        : null;
+      const candidateRule = requestedFocusDef ?? fallbackRule;
+      const candidateFocusId = requestedFocusDef
+        ? normalizedRequestedFocusId
+        : fallbackFocusId;
+      const factsMatchFallbackUsed = !requestedFocusDef && !!fallbackFocusId;
+      const matchedFactsRes = candidateRule
+        ? computeBand(derivedFacts, candidateRule)
+        : null;
+      derivedSatisfiedMust = (matchedFactsRes?.matchedMust ?? []).filter(
+        (tag) => !baseFactSet.has(tag)
+      );
+      const ruleMustAny = candidateRule?.mustAny ?? [];
+      const mustAnyHits = ruleMustAny.filter((tag) => derivedFacts.has(tag));
+      const mustAnyMissing = ruleMustAny.filter(
+        (tag) => !derivedFacts.has(tag)
+      );
+      const normalizedSelectedFocusBand =
+        candidateFocusId && focusBands[candidateFocusId]
+          ? focusBands[candidateFocusId]
+          : matchedFactsRes?.band ?? "off";
+      if (
+        debugMode &&
+        normalizedRequestedFocusId &&
+        matchedFactsRes &&
+        normalizedSelectedFocusBand !== matchedFactsRes.band
+      ) {
+        console.warn("[search-games] selectedFocusBand mismatch", {
+          appId: g.appId,
+          experienceFocusId: normalizedRequestedFocusId,
+          original: matchedFactsRes.band,
+          recalculated: normalizedSelectedFocusBand,
+        });
+      }
+
+      const matchedFactsPayload = {
+        must: matchedFactsRes?.matchedMust ?? [],
+        ...(debugMode ? { mustMissing: matchedFactsRes?.missingMust ?? [] } : {}),
+        boost: matchedFactsRes?.matchedBoost ?? [],
+        ban: matchedFactsRes?.matchedBan ?? [],
+        ...(debugMode
+          ? {
+              mustAnyHits,
+              mustAnyMissing,
+            }
+          : {}),
+      };
+
+      const factsMatchBase =
+        candidateFocusId || fallbackFocusId
+          ? {
+              experienceFocusId: candidateFocusId ?? fallbackFocusId,
+              selectedFocusBand: normalizedSelectedFocusBand,
+              primaryFocus: primaryFocusId,
+              alsoFits,
+              matchedFacts: matchedFactsPayload,
+              ...(debugMode ? { factsCount: facts.length } : {}),
+              ...(debugMode && factsMatchFallbackUsed
+                ? { factsMatchFallbackUsed: true }
+                : {}),
+            }
+          : null;
+
+      if (factsMatchBase) {
+        factsMatch = debugMode
+          ? {
+              ...factsMatchBase,
+              allFocusBands: focusBands,
+            }
+          : factsMatchBase;
       }
 
       // ★ BaseScore 用に事前に数値化
@@ -1359,18 +1351,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const normalizedGameLabels =
         normalizedAnalysisFeatureLabelsV2 ?? [];
       const gameLabelCount = normalizedGameLabels.length;
-      const focus = findExperienceFocusById(normalizedExperienceFocusId);
+      const focus = findExperienceFocusById(normalizedRequestedFocusId);
       const focusLabelCount = focus?.featureLabels.length ?? 0;
       const focusResult = computeExperienceFocusScore(
         normalizedAnalysisFeatureLabelsV2,
-        normalizedExperienceFocusId
+        normalizedRequestedFocusId
       );
       const focusScore = focusResult.focusScore;
       const matchedLabelsResponse = focusResult.matchedLabels.slice(0, 6);
       const debugFocusData = debugMode
         ? {
-            requestedId: requestedExperienceFocusId,
-            normalizedId: normalizedExperienceFocusId,
+            requestedId: requestedFocusIdRaw,
+            normalizedId: normalizedRequestedFocusId,
             found: !!focus,
             focusLabelCount,
           }
@@ -1442,7 +1434,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       const vibeFocusMatchScore = computeVibeFocusMatchScore({
         primaryVibe: body.primaryVibeId ?? null,
-        experienceFocusId: normalizedExperienceFocusId,
+        experienceFocusId: normalizedRequestedFocusId,
         featureLabels,
         featureLabelsV2: normalizedAnalysisFeatureLabelsV2,
       });

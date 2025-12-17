@@ -1,4 +1,5 @@
 import type { ExperienceFocusId } from "../search-games/experience-focus.ts";
+import { FOCUS_ID_ALIAS_MAP } from "./focus-ids.ts";
 import type { Vibe } from "./feature-labels.ts";
 
 export type MatchBand = "on" | "near" | "discovery" | "off";
@@ -203,8 +204,8 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
     boost: ["resource_management", "automation_core", "open_ended_goal"],
     ban: ["high_input_pressure", "real_time_control"],
   },
-  "story-narrative-action": {
-    id: "story-narrative-action",
+  "story-driven-play": {
+    id: "story-driven-play",
     vibe: "story",
     must: ["narrative_driven_progression"],
     boost: [
@@ -438,3 +439,5 @@ const BASE_RULES: Record<ExperienceFocusId, FocusRule> = {
 };
 
 export const FACT_FOCUS_RULES = BASE_RULES;
+
+export { FOCUS_ID_ALIAS_MAP };
